@@ -5,11 +5,14 @@ COMPOSE_FILE = docker/compose.sidecar.yml
 
 .PHONY: up down restart logs ps rebuild web-rebuild api-rebuild piper-rebuild health
 
-up:
-	docker compose -f $(COMPOSE_FILE) up --build
+up-d:
+	docker compose -f $(COMPOSE_FILE) up -d --build
 
 down:
 	docker compose -f $(COMPOSE_FILE) down
+
+open:
+	open http://localhost:8080
 
 restart:
 	docker compose -f $(COMPOSE_FILE) down
@@ -41,3 +44,8 @@ health:
 	curl -i http://localhost:8000/health || true
 	curl -i http://localhost:8080/api/health || true
 	curl -i http://localhost:5002/health || true
+
+ollama-check:
+	@echo "Checking host Ollama on http://localhost:11434 ..."
+	@curl -sS http://localhost:11434/api/tags | head -c 400 || true
+	@echo ""
