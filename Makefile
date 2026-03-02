@@ -2,6 +2,7 @@
 
 COMPOSE_FILE = docker/compose.sidecar.yml
 
+
 .PHONY: up down restart logs ps rebuild web-rebuild api-rebuild piper-rebuild health
 
 up:
