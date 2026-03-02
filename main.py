@@ -1,12 +1,11 @@
 import os
 import time
-import json
 import queue
 import numpy as np
 import sounddevice as sd
 import requests
 from faster_whisper import WhisperModel
-import subprocess
+
 from tts.piper.piper_cli import speak
 
 # ----------------------------
@@ -14,19 +13,29 @@ from tts.piper.piper_cli import speak
 # ----------------------------
 SAMPLE_RATE = 16000
 CHANNELS = 1
-RECORD_MAX_SECONDS = 12          # harte Obergrenze pro Aufnahme
-SILENCE_TIMEOUT_SEC = 1.2        # wie lange Stille, bis Aufnahme stoppt
-SILENCE_RMS_THRESHOLD = 0.012    # ggf. anpassen (Mikro/Umgebung)
-WHISPER_MODEL = "small"          # "base", "small", "medium" ...
-WHISPER_DEVICE = "cpu"           # "cpu" oder "cuda" (bei Nvidia)
-WHISPER_COMPUTE = "int8"         # cpu: "int8" ist schnell
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+# Recording / VAD-ish
+RECORD_MAX_SECONDS = int(os.getenv("RECORD_MAX_SECONDS", "20"))
+SILENCE_TIMEOUT_SEC = float(os.getenv("SILENCE_TIMEOUT_SEC", "1.4"))
+SILENCE_RMS_THRESHOLD = float(os.getenv("SILENCE_RMS_THRESHOLD", "0.010"))
+START_GRACE_SEC = float(os.getenv("START_GRACE_SEC", "0.8"))   # give user time to start speaking
+MIN_RECORD_SEC = float(os.getenv("MIN_RECORD_SEC", "1.5"))     # prevent too-early stop
+
+# Whisper
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")  # base/small/medium
+WHISPER_DEVICE = "cpu"
+WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE", "int8")
+
+# Ollama
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.4"))
+OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "280"))  # limits response length (speed)
 
 SYSTEM_PROMPT = (
     "Du bist ein hilfreicher, präziser Assistent. Antworte kurz, klar und korrekt. "
-    "Wenn du unsicher bist, frage nach. Du kannst Deutsch und Englisch."
+    "Wenn du unsicher bist, frage nach. "
+    "Du kannst Deutsch, Englisch, Schwedisch, Norwegisch und Finnisch."
 )
 
 # ----------------------------
@@ -44,15 +53,27 @@ def record_until_silence():
     frames = []
     silence_start = None
     start = time.time()
+    grace_until = start + START_GRACE_SEC
 
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype="float32", callback=callback):
         while True:
             chunk = audio_q.get()
             frames.append(chunk)
 
-            # RMS für Stille-Erkennung
             rms = float(np.sqrt(np.mean(np.square(chunk))))
             now = time.time()
+
+            # Allow a short grace period at the beginning
+            if now < grace_until:
+                if (now - start) >= RECORD_MAX_SECONDS:
+                    break
+                continue
+
+            # Enforce minimum recording time before silence can stop it
+            if (now - start) < MIN_RECORD_SEC:
+                if (now - start) >= RECORD_MAX_SECONDS:
+                    break
+                continue
 
             if rms < SILENCE_RMS_THRESHOLD:
                 if silence_start is None:
@@ -65,66 +86,41 @@ def record_until_silence():
             if (now - start) >= RECORD_MAX_SECONDS:
                 break
 
-    audio = np.concatenate(frames, axis=0).reshape(-1)
-    # normalize a bit (optional)
-    peak = np.max(np.abs(audio)) if audio.size else 1.0
-    if peak > 0:
-        audio = audio / max(1.0, peak)
+    audio = np.concatenate(frames, axis=0).reshape(-1).astype(np.float32)
     print("⏹️ Aufnahme beendet.")
-    return audio.astype(np.float32)
+    return audio
 
 # ----------------------------
 # STT: faster-whisper
 # ----------------------------
-#def transcribe(model, audio: np.ndarray):
-#    # faster-whisper erwartet float32 array
-#    segments, info = model.transcribe(audio, language=None, vad_filter=True)
-#    text = "".join(seg.text for seg in segments).strip()
-#    return text, info
-
-def transcribe(model, audio):
+def transcribe(model, audio: np.ndarray):
     segments, info = model.transcribe(audio, language=None, vad_filter=True)
     text = "".join(seg.text for seg in segments).strip()
-    lang = getattr(info, "language", None)  # "de", "en", "sv", ...
+    lang = getattr(info, "language", None)  # e.g. "de", "en", "sv", "no"/"nb", "fi"
     return text, lang
 
 # ----------------------------
 # LLM: Ollama
 # ----------------------------
-def ask_ollama(user_text: str):
+def ask_ollama(user_text: str) -> str:
     prompt = f"{SYSTEM_PROMPT}\n\nUser:\n{user_text}\n\nAssistant:"
     payload = {
         "model": OLLAMA_MODEL,
         "prompt": prompt,
         "stream": False,
         "options": {
-            "temperature": 0.4
-        }
+            "temperature": OLLAMA_TEMPERATURE,
+            "num_predict": OLLAMA_NUM_PREDICT,
+        },
     }
-    r = requests.post(OLLAMA_URL, json=payload, timeout=120)
+    r = requests.post(OLLAMA_URL, json=payload, timeout=180)
     r.raise_for_status()
-    data = r.json()
-    return data.get("response", "").strip()
-
-# ----------------------------
-# TTS: macOS "say" (DE/EN fallback)
-# ----------------------------
-#def speak(text: str):
-#    if not text:
-#       return
-    # Stimme wählen: "Anna" (DE), "Samantha" (EN) sind oft vorhanden.
-    # Wir wählen simpel: wenn viele ASCII? -> EN, sonst DE (grob).
-    # Du kannst das später smarter machen.
-#    voice = "Anna" if any(ch in text for ch in "äöüÄÖÜß") else "Samantha"
-#    try:
-#        subprocess.run(["say", "-v", voice, text], check=False)
-#    except Exception as e:
-#        print(f"(TTS Fehler: {e})")
+    return r.json().get("response", "").strip()
 
 def main():
-    print("✅ Voice Agent (macOS) – STT (Whisper) → LLM (Ollama) → TTS (say)")
+    print("✅ Voice Agent (macOS) – STT (Whisper) → LLM (Ollama) → TTS (Piper)")
     print(f"🧠 Ollama Modell: {OLLAMA_MODEL}")
-    print("Tipp: Setze OLLAMA_MODEL env var, z.B. OLLAMA_MODEL=llama3.1:8b")
+    print(f"🎧 Whisper Modell: {WHISPER_MODEL}")
 
     model = WhisperModel(WHISPER_MODEL, device=WHISPER_DEVICE, compute_type=WHISPER_COMPUTE)
 
@@ -134,17 +130,18 @@ def main():
             break
 
         audio = record_until_silence()
-        #text, info = transcribe(model, audio)
         text, lang = transcribe(model, audio)
 
         if not text:
             print("🤷 Ich habe nichts verstanden. Versuch’s nochmal (Mikro/Threshold).")
             continue
 
-        print(f"\n📝 Transkript: {text}")
+        print(f"\n📝 Transkript ({lang}): {text}")
 
         answer = ask_ollama(text)
         print(f"\n🤖 Antwort:\n{answer}")
+
+        # Piper TTS (uses your mapping de/en/sv/no/nb/nn/fi in piper_cli.py)
         speak(answer, lang=lang)
 
 if __name__ == "__main__":

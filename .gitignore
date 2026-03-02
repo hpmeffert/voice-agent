@@ -1,11 +1,24 @@
+# local env
+.env
+*.env
+
+# python venv
+.venv/
+venv/
+env/
+
+# caches
+__pycache__/
+*.pyc
+
 # macOS
 .DS_Store
 
-# Python
-__pycache__/
-*.pyc
-.venv/
-.env
+# voices / models should never be committed
+voices/
+*.onnx
+*.onnx.json
 
-# Audio output (optional)
-tts/piper/output/
+# audio outputs
+*.wav
+/tmp/

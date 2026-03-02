@@ -1,0 +1,54 @@
+ollama with qwen2.5:7b (local install)
+IMPORTANT - separate the piper installation from the voice-agent install to pevent licensing issues (MIT versus GPL)
+
+faster-whisper for STT 
+sounddevice, 
+requests, 
+numpy, 
+python-dotenv (optional)
+
+
+Treestructure:
+voice-agent/
+  README.md
+  LICENSE.md                  # eure Lizenz (proprietär oder intern)
+  .gitignore
+  requirements.txt            # ohne piper-tts
+  main.py
+  mic_test.py
+  devices.py
+  tts_test.py                 # smoke test (benutzt externes Piper via adapter)
+
+  app/
+    __init__.py
+    stt/
+      whisper_stt.py
+    llm/
+      ollama_client.py
+      openai_client.py        # optional (Cloud)
+      router.py               # Backend-Auswahl
+    tts/
+      piper_cli_adapter.py    # ruft externes piper auf (lokal)
+      piper_http_client.py    # ruft piper-sidecar per HTTP auf (docker)
+    config.py
+
+  scripts/
+    check_repo_clean.sh
+    setup_local_dev.sh        # installiert repo deps, aber nicht piper
+    setup_piper_local.md      # Anleitung: Piper separat installieren (BYO)
+    setup_voices.md           # Stimme(n) herunterladen & ablegen
+
+  docker/
+    compose.sidecar.yml       # voice-agent api + ollama + piper sidecar
+    api/
+      Dockerfile
+    piper/
+      Dockerfile
+      app.py
+      requirements.txt
+    nginx/
+      nginx.conf              # optional, falls web frontend
+
+  docs/
+    TEAM_POLICY_LICENSE_SEPARATION.md
+    ARCHITECTURE.md

@@ -8,8 +8,16 @@ from pathlib import Path
 # lädt .env aus dem Projektroot (voice-agent/.env)
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env", override=False)
 
-PIPER_BIN = os.getenv("PIPER_BIN", "piper")
-VOICES_DIR = Path(os.getenv("PIPER_VOICES_DIR", str(Path.home() / "models" / "piper-voices")))
+from pathlib import Path
+import os
+
+def expand(p: str) -> str:
+    # expands $HOME and ~
+    return os.path.expandvars(os.path.expanduser(p))
+
+PIPER_BIN = expand(os.getenv("PIPER_BIN", "piper"))
+VOICES_DIR = Path(expand(os.getenv("PIPER_VOICES_DIR", str(Path.home() / "models" / "piper-voices"))))
+
 
 VOICE_DE = os.getenv("PIPER_VOICE_DE", "de_DE-thorsten-medium.onnx")
 VOICE_EN = os.getenv("PIPER_VOICE_EN", "en_US-lessac-medium.onnx")
@@ -42,7 +50,10 @@ def speak(text: str, lang: Optional[str] = None, out_wav: Optional[Path] = None)
     voice_path = VOICES_DIR / voice_name
     
     # to print and see what language is used:
-    print(f"[PIPER] lang={lang} -> voice={voice_path}")
+    PIPER_DEBUG = os.getenv("PIPER_DEBUG", "0") == "1"
+    if PIPER_DEBUG:
+        print(f"[PIPER] lang={lang} -> voice={voice_path}")
+        
     subprocess.run([PIPER_BIN, "-m", str(voice_path), "-f", str(out_wav)],
                    input=text.encode("utf-8"),
                    check=True)
