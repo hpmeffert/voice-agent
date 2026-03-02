@@ -7,6 +7,7 @@ import sounddevice as sd
 import requests
 from faster_whisper import WhisperModel
 import subprocess
+from tts.piper.piper_cli import speak
 
 # ----------------------------
 # Config
@@ -75,11 +76,17 @@ def record_until_silence():
 # ----------------------------
 # STT: faster-whisper
 # ----------------------------
-def transcribe(model, audio: np.ndarray):
-    # faster-whisper erwartet float32 array
+#def transcribe(model, audio: np.ndarray):
+#    # faster-whisper erwartet float32 array
+#    segments, info = model.transcribe(audio, language=None, vad_filter=True)
+#    text = "".join(seg.text for seg in segments).strip()
+#    return text, info
+
+def transcribe(model, audio):
     segments, info = model.transcribe(audio, language=None, vad_filter=True)
     text = "".join(seg.text for seg in segments).strip()
-    return text, info
+    lang = getattr(info, "language", None)  # "de", "en", "sv", ...
+    return text, lang
 
 # ----------------------------
 # LLM: Ollama
@@ -102,17 +109,17 @@ def ask_ollama(user_text: str):
 # ----------------------------
 # TTS: macOS "say" (DE/EN fallback)
 # ----------------------------
-def speak(text: str):
-    if not text:
-        return
+#def speak(text: str):
+#    if not text:
+#       return
     # Stimme wählen: "Anna" (DE), "Samantha" (EN) sind oft vorhanden.
     # Wir wählen simpel: wenn viele ASCII? -> EN, sonst DE (grob).
     # Du kannst das später smarter machen.
-    voice = "Anna" if any(ch in text for ch in "äöüÄÖÜß") else "Samantha"
-    try:
-        subprocess.run(["say", "-v", voice, text], check=False)
-    except Exception as e:
-        print(f"(TTS Fehler: {e})")
+#    voice = "Anna" if any(ch in text for ch in "äöüÄÖÜß") else "Samantha"
+#    try:
+#        subprocess.run(["say", "-v", voice, text], check=False)
+#    except Exception as e:
+#        print(f"(TTS Fehler: {e})")
 
 def main():
     print("✅ Voice Agent (macOS) – STT (Whisper) → LLM (Ollama) → TTS (say)")
@@ -127,7 +134,8 @@ def main():
             break
 
         audio = record_until_silence()
-        text, info = transcribe(model, audio)
+        #text, info = transcribe(model, audio)
+        text, lang = transcribe(model, audio)
 
         if not text:
             print("🤷 Ich habe nichts verstanden. Versuch’s nochmal (Mikro/Threshold).")
@@ -137,7 +145,7 @@ def main():
 
         answer = ask_ollama(text)
         print(f"\n🤖 Antwort:\n{answer}")
-        speak(answer)
+        speak(answer, lang=lang)
 
 if __name__ == "__main__":
     main()
