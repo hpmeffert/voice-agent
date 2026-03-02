@@ -49,7 +49,8 @@ services:
       - ${PIPER_VOICES_HOST_PATH:-$HOME/models/piper-voices}:/voices:ro
     environment:
       VOICE_DE: "/voices/de_DE-thorsten-medium.onnx"
-      VOICE_EN: "/voices/en_US-lessac-medium.onnx"
+      VOICE_EN: "/voices/en_GB-northern_english_male-medium.onnx"
+      # VOICE_EN: "/voices/en_US-lessac-medium.onnx"
       VOICE_SV: "/voices/sv_SE-nst-medium.onnx"
       VOICE_NO: "/voices/no_NO-talesyntese-medium.onnx"
       VOICE_FI: "/voices/fi_FI-harri-medium.onnx"

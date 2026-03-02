@@ -7,7 +7,8 @@ from fastapi.responses import FileResponse
 app = FastAPI(title="Piper TTS Sidecar")
 
 VOICE_DE = os.getenv("VOICE_DE", "/voices/de_DE-thorsten-medium.onnx")
-VOICE_EN = os.getenv("VOICE_EN", "/voices/en_US-lessac-medium.onnx")
+VOICE_EN = os.getenv("VOICE_EN", "/voices/en_GB-northern_english_male-medium.onnx")
+#VOICE_EN = os.getenv("VOICE_EN", "/voices/en_US-lessac-medium.onnx")
 VOICE_SV = os.getenv("VOICE_SV", "/voices/sv_SE-nst-medium.onnx")
 VOICE_NO = os.getenv("VOICE_NO", "/voices/no_NO-talesyntese-medium.onnx")
 VOICE_FI = os.getenv("VOICE_FI", "/voices/fi_FI-harri-medium.onnx")
