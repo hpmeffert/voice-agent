@@ -20,7 +20,8 @@ VOICES_DIR = Path(expand(os.getenv("PIPER_VOICES_DIR", str(Path.home() / "models
 
 
 VOICE_DE = os.getenv("PIPER_VOICE_DE", "de_DE-thorsten-medium.onnx")
-VOICE_EN = os.getenv("PIPER_VOICE_EN", "en_US-lessac-medium.onnx")
+# VOICE_EN = os.getenv("PIPER_VOICE_EN", "en_US-lessac-medium.onnx")
+VOICE_EN = os.getenv("PIPER_VOICE_EN", "en_GB-northern_english_male-medium.onnx")
 VOICE_SV = os.getenv("PIPER_VOICE_SV", "sv_SE-nst-medium.onnx")
 VOICE_FI = os.getenv("PIPER_VOICE_FI", "fi_FI-harri-medium.onnx")
 VOICE_NO = os.getenv("PIPER_VOICE_NO", "no_NO-talesyntese-medium.onnx")
