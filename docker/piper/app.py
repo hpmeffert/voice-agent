@@ -4,6 +4,7 @@ import subprocess
 from fastapi import FastAPI, Body, HTTPException
 from fastapi.responses import FileResponse
 
+
 app = FastAPI(title="Piper TTS Sidecar")
 
 VOICE_DE = os.getenv("VOICE_DE", "/voices/de_DE-thorsten-medium.onnx")
