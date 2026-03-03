@@ -47,6 +47,14 @@ const resultEl = el("result");
 const previewAudio = el("audioPreview");
 const replyAudio = el("audioReply");
 
+const SESSION_KEY = "voice_agent_session_id";
+let sessionId = localStorage.getItem(SESSION_KEY) || "";
+
+function setSessionId(id) {
+  sessionId = id || "";
+  if (sessionId) localStorage.setItem(SESSION_KEY, sessionId);
+}
+
 function setStatus(msg) { statusEl.textContent = msg; }
 
 el("btnClear").onclick = () => {
@@ -56,7 +64,11 @@ el("btnClear").onclick = () => {
   replyAudio.src = "";
   resultEl.textContent = "";
   el("btnSend").disabled = true;
-  setStatus("Idle");
+
+  localStorage.removeItem(SESSION_KEY);
+  sessionId = "";
+
+  setStatus("Idle (session reset)");
 };
 
 el("btnRecord").onclick = async () => {
@@ -98,19 +110,24 @@ el("btnSend").onclick = async () => {
   setStatus("Uploading to API...");
 
   try {
-    // 1) Send audio to API (JSON result)
     const fd = new FormData();
     const filename = recordedBlob.type.includes("ogg") ? "audio.ogg" : "audio.webm";
     fd.append("file", recordedBlob, filename);
     fd.append("return_audio", "0");
 
+    // ✅ send session id for conversation memory
+    fd.append("session_id", sessionId);
+
     const r = await fetch(`/api/voice`, { method: "POST", body: fd });
     if (!r.ok) throw new Error(`API /voice failed: ${r.status} ${await r.text()}`);
     const data = await r.json();
+
+    // ✅ store session id returned by API
+    if (data.session_id) setSessionId(data.session_id);
+
     resultEl.textContent = JSON.stringify(data, null, 2);
 
-    // 2) TTS via nginx proxy -> /tts/tts maps to piper:5002/tts
-    setStatus("Generating speech via Piper...");
+    setStatus(`Generating speech via Piper... (session ${sessionId ? sessionId.slice(0,8) : "new"})`);
     const tts = await fetch(`/tts/tts`, {
       method: "POST",
       headers: {"Content-Type":"application/json"},
@@ -120,7 +137,7 @@ el("btnSend").onclick = async () => {
     const wavBlob = await tts.blob();
     replyAudio.src = URL.createObjectURL(wavBlob);
 
-    setStatus("Done ✅");
+    setStatus(`Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`);
   } catch (err) {
     console.error(err);
     setStatus(String(err));
