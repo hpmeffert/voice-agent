@@ -16,6 +16,9 @@ app = FastAPI(title="Voice Agent API")
 # ----------------------------
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5")
+
 PIPER_BASE_URL = os.getenv("PIPER_BASE_URL", "http://piper:5002").rstrip("/")
 
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "small")
@@ -73,10 +76,40 @@ whisper = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type=WHISPER_CO
 def health():
     return {"status": "ok"}
 
+@app.get("/models")
+def models():
+    # Ollama models from /api/tags
+    ollama_models: list[str] = []
+    try:
+        r = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        ollama_models = [m.get("name") for m in data.get("models", []) if m.get("name")]
+        ollama_models.sort()
+    except Exception:
+        # keep empty list; UI can still work
+        ollama_models = []
 
-def ollama_generate(prompt: str) -> str:
+    # OpenAI availability (optional)
+    openai_available = bool(OPENAI_API_KEY)
+    return {
+        "ollama": {
+            "available": True,
+            "base_url": OLLAMA_BASE_URL,
+            "default_model": OLLAMA_MODEL,
+            "models": ollama_models,
+        },
+        "openai": {
+            "available": openai_available,
+            "default_model": OPENAI_MODEL,
+            # don't return the key (obviously)
+        },
+    }
+
+def ollama_generate(prompt: str, model_override: str | None = None) -> str:
+    use_model = (model_override or OLLAMA_MODEL).strip()
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": use_model,
         "prompt": prompt,
         "stream": False,
         "options": {
@@ -89,12 +122,43 @@ def ollama_generate(prompt: str) -> str:
     r.raise_for_status()
     return r.json().get("response", "").strip()
 
+def openai_generate(prompt: str, model_override: str | None = None) -> str:
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY not set")
+
+    use_model = (model_override or OPENAI_MODEL).strip()
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": use_model,
+        "input": [{"role": "user", "content": prompt}],
+        "store": False,
+    }
+
+    r = requests.post("https://api.openai.com/v1/responses", headers=headers, json=payload, timeout=120)
+    r.raise_for_status()
+    data = r.json()
+
+    parts = []
+    for item in data.get("output", []):
+        if item.get("type") == "message":
+            for c in item.get("content", []):
+                if c.get("type") == "output_text":
+                    parts.append(c.get("text", ""))
+    return "".join(parts).strip()
+
 
 @app.post("/voice")
+
 async def voice(
     file: UploadFile = File(...),
-    return_audio: str = Form("1"),  # "1" -> return wav, "0" -> json only
-    session_id: str = Form(""),     # V2 Memory: session id from UI
+    return_audio: str = Form("1"),
+    session_id: str = Form(""),
+    backend: str = Form("ollama"),  # NEW: "ollama" or "openai"
+    model: str = Form(""),          # NEW: optional model override
 ):
     # Save upload to temp file (keep correct extension for ffmpeg decode)
     filename = file.filename or "audio.webm"
@@ -121,12 +185,28 @@ async def voice(
     prompt = build_prompt_with_history(sid, text, SYSTEM_PROMPT)
 
     # LLM
-    try:
-        answer = ollama_generate(prompt)
-    except Exception as e:
-        return JSONResponse({"error": f"Ollama failed: {str(e)}", "session_id": sid}, status_code=502)
+    model_override = model.strip() or None
+    backend = (backend or "ollama").strip().lower()
 
-    append_history(sid, "assistant", answer)
+    try:
+        if backend == "openai":
+            answer = openai_generate(prompt, model_override=model_override)
+        else:
+            answer = ollama_generate(prompt, model_override=model_override)
+    except requests.HTTPError as e:
+        # If OpenAI fails with quota/billing etc., forward readable error details
+        status = getattr(e.response, "status_code", 502) or 502
+        detail = ""
+        try:
+        detail = e.response.text if e.response is not None else ""
+        except Exception:
+        detail = ""
+    r   eturn JSONResponse(
+        {"error": f"LLM failed (HTTP {status})", "detail": detail[:2000], "session_id": sid},
+        status_code=status if status in (400, 401, 403, 429) else 502,
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"LLM failed: {str(e)}", "session_id": sid}, status_code=502)
 
     # TTS
     tts_r = requests.post(f"{PIPER_BASE_URL}/tts", json={"text": answer, "lang": lang}, timeout=180)

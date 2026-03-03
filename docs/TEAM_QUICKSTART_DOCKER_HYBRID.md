@@ -2,6 +2,7 @@ TEAM QUICKSTART — Docker Hybrid (Host Ollama + Docker API/Piper/Web)
 
 This setup keeps Piper (GPL) separated from the core application while providing a simple web UI for testing.
 
+
 Key Features (V2/V3)
 	•	Conversation Memory (V2): session_id is stored in browser localStorage. Clear resets the session.
 	•	Model Switch (V3): Choose backend + model at runtime:
@@ -71,6 +72,11 @@ ls -la ~/models/piper-voices
 ⸻
 
 3) Configure optional OpenAI (V3)
+
+**Important (OpenAI Billing/Quota):**
+If you see `HTTP 429 insufficient_quota`, your OpenAI project/account has no active billing or has reached its usage limits.
+Enable billing / add credits in the OpenAI dashboard, or switch the UI backend to **Ollama (local)**.
+
 
 If you want to enable OpenAI backend:
 

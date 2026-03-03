@@ -17,6 +17,17 @@
   <h1>Voice Agent Test UI</h1>
 
   <div class="row">
+    <label><b>Backend:</b></label>
+    <select id="backend">
+      <option value="ollama" selected>Ollama (local)</option>
+      <option value="openai">OpenAI (cloud)</option>
+    </select>
+
+    <label><b>Model:</b></label>
+      <select id="model"> </select>
+  </div>
+
+  <div class="row">
     <button id="btnRecord">🎙️ Record</button>
     <button id="btnStop" disabled>⏹ Stop</button>
     <span class="status" id="status">Idle</span>
@@ -49,6 +60,67 @@ const replyAudio = el("audioReply");
 
 const SESSION_KEY = "voice_agent_session_id";
 let sessionId = localStorage.getItem(SESSION_KEY) || "";
+
+const backendSel = el("backend");
+const modelSel = el("model");
+
+let modelCatalog = null;
+
+function setModelOptions(options, preferred) {
+  modelSel.innerHTML = "";
+  for (const name of options) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    modelSel.appendChild(opt);
+  }
+  if (preferred && options.includes(preferred)) modelSel.value = preferred;
+}
+
+async function loadModels() {
+  setStatus("Loading models...");
+  const r = await fetchWithRetry("/api/models", 15, 1000);
+  if (!r.ok) throw new Error(`/api/models failed: ${r.status}`);
+  modelCatalog = await r.json();
+
+  // default: ollama models
+  const ollamaModels = modelCatalog?.ollama?.models || [];
+  const defaultOllama = modelCatalog?.ollama?.default_model || "";
+  if (ollamaModels.length > 0) {
+    setModelOptions(ollamaModels, defaultOllama);
+  } else {
+    setModelOptions([defaultOllama || "qwen2.5:7b"], defaultOllama);
+  }
+
+
+  // If OpenAI not available, disable option in UI
+  if (!modelCatalog?.openai?.available) {
+    const opt = Array.from(backendSel.options).find(o => o.value === "openai");
+    if (opt) opt.disabled = true;
+  }
+
+  setStatus("Idle");
+}
+
+backendSel.onchange = () => {
+  if (!modelCatalog) return;
+
+  if (backendSel.value === "openai") {
+    const defaultOpenAI = modelCatalog?.openai?.default_model || "gpt-5";
+    // keep a small curated list; you can expand later
+    setModelOptions([defaultOpenAI], defaultOpenAI);
+  } else {
+    const ollamaModels = modelCatalog?.ollama?.models || [];
+    const defaultOllama = modelCatalog?.ollama?.default_model || "";
+    setModelOptions(ollamaModels.length ? ollamaModels : [defaultOllama], defaultOllama);
+  }
+};
+
+// call on page load
+loadModels().catch(err => {
+  console.error(err);
+  setStatus("Model load failed (see console).");
+});
 
 function setSessionId(id) {
   sessionId = id || "";
@@ -117,10 +189,18 @@ el("btnSend").onclick = async () => {
 
     // ✅ send session id for conversation memory
     fd.append("session_id", sessionId);
+    // V3 Select Model
+    fd.append("backend", backendSel.value);
+    fd.append("model", modelSel.value);
 
     const r = await fetch(`/api/voice`, { method: "POST", body: fd });
-    if (!r.ok) throw new Error(`API /voice failed: ${r.status} ${await r.text()}`);
-    const data = await r.json();
+    if (!r.ok) {
+      const txt = await r.text();
+      if (r.status === 429) {
+        throw new Error("OpenAI quota/billing missing (HTTP 429). Enable billing in OpenAI or switch backend to Ollama.");
+      }
+    
+}
 
     // ✅ store session id returned by API
     if (data.session_id) setSessionId(data.session_id);
