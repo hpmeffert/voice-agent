@@ -25,6 +25,8 @@ services:
       # optional tuning:
       OLLAMA_NUM_PREDICT: "160"   # oder 120 für sehr schnelle Antworten
       OLLAMA_TEMPERATURE: "0.3"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}" # OpenAI for Version 3 of voice agent.
+      OPENAI_MODEL: "gpt-5"
     depends_on:
       - piper
 

@@ -64,7 +64,28 @@ let sessionId = localStorage.getItem(SESSION_KEY) || "";
 const backendSel = el("backend");
 const modelSel = el("model");
 
+const btnRecord = el("btnRecord");
+const btnStop = el("btnStop");
+const btnSend = el("btnSend");
+const btnClear = el("btnClear");
+
+function setBusy(isBusy) {
+  btnRecord.disabled = isBusy;
+  btnStop.disabled = isBusy || (mediaRecorder ? mediaRecorder.state === "inactive" : true);
+  btnSend.disabled = isBusy || !recordedBlob;
+  btnClear.disabled = isBusy;
+  backendSel.disabled = isBusy;
+  modelSel.disabled = isBusy;
+}
+
 let modelCatalog = null;
+
+function setStatus(msg) { statusEl.textContent = msg; }
+
+function setSessionId(id) {
+  sessionId = id || "";
+  if (sessionId) localStorage.setItem(SESSION_KEY, sessionId);
+}
 
 function setModelOptions(options, preferred) {
   modelSel.innerHTML = "";
@@ -77,27 +98,38 @@ function setModelOptions(options, preferred) {
   if (preferred && options.includes(preferred)) modelSel.value = preferred;
 }
 
+// --------- retry helper (was missing) ----------
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+async function fetchWithRetry(url, tries = 15, delayMs = 1000) {
+  for (let i = 1; i <= tries; i++) {
+    try {
+      const r = await fetch(url);
+      if (r.ok) return r;
+    } catch {}
+    await sleep(delayMs);
+  }
+  throw new Error(`Failed to load ${url} after ${tries} tries`);
+}
+// -----------------------------------------------
+
 async function loadModels() {
   setStatus("Loading models...");
   const r = await fetchWithRetry("/api/models", 15, 1000);
-  if (!r.ok) throw new Error(`/api/models failed: ${r.status}`);
-  modelCatalog = await r.json();
+  const data = await r.json();
+  modelCatalog = data;
 
   // default: ollama models
-  const ollamaModels = modelCatalog?.ollama?.models || [];
-  const defaultOllama = modelCatalog?.ollama?.default_model || "";
-  if (ollamaModels.length > 0) {
-    setModelOptions(ollamaModels, defaultOllama);
-  } else {
-    setModelOptions([defaultOllama || "qwen2.5:7b"], defaultOllama);
-  }
+  const ollamaModels = data?.ollama?.models || [];
+  const defaultOllama = data?.ollama?.default_model || "";
+  setModelOptions(
+    ollamaModels.length ? ollamaModels : [defaultOllama || "qwen2.5:7b"],
+    defaultOllama
+  );
 
-
-  // If OpenAI not available, disable option in UI
-  if (!modelCatalog?.openai?.available) {
-    const opt = Array.from(backendSel.options).find(o => o.value === "openai");
-    if (opt) opt.disabled = true;
-  }
+  // Disable OpenAI option if not available
+  const opt = Array.from(backendSel.options).find(o => o.value === "openai");
+  if (opt) opt.disabled = !data?.openai?.available;
 
   setStatus("Idle");
 }
@@ -106,28 +138,35 @@ backendSel.onchange = () => {
   if (!modelCatalog) return;
 
   if (backendSel.value === "openai") {
-    const defaultOpenAI = modelCatalog?.openai?.default_model || "gpt-5";
-    // keep a small curated list; you can expand later
-    setModelOptions([defaultOpenAI], defaultOpenAI);
-  } else {
-    const ollamaModels = modelCatalog?.ollama?.models || [];
-    const defaultOllama = modelCatalog?.ollama?.default_model || "";
-    setModelOptions(ollamaModels.length ? ollamaModels : [defaultOllama], defaultOllama);
+    const openaiAvailable = !!modelCatalog?.openai?.available;
+    if (!openaiAvailable) {
+      setStatus("OpenAI not enabled (missing API key). Using Ollama.");
+      backendSel.value = "ollama";
+    } else {
+      const defaultOpenAI = modelCatalog?.openai?.default_model || "gpt-5";
+      setModelOptions([defaultOpenAI], defaultOpenAI);
+      setStatus("OpenAI selected (billing/quota required).");
+      return;
+    }
   }
+
+  // default back to Ollama models
+  const ollamaModels = modelCatalog?.ollama?.models || [];
+  const defaultOllama = modelCatalog?.ollama?.default_model || "";
+  setModelOptions(
+    ollamaModels.length ? ollamaModels : [defaultOllama || "qwen2.5:7b"],
+    defaultOllama
+  );
+  setStatus("Idle");
 };
 
 // call on page load
 loadModels().catch(err => {
   console.error(err);
   setStatus("Model load failed (see console).");
+  setBusy(false);
 });
 
-function setSessionId(id) {
-  sessionId = id || "";
-  if (sessionId) localStorage.setItem(SESSION_KEY, sessionId);
-}
-
-function setStatus(msg) { statusEl.textContent = msg; }
 
 el("btnClear").onclick = () => {
   chunks = [];
@@ -177,50 +216,60 @@ el("btnStop").onclick = () => {
   }
 };
 
-el("btnSend").onclick = async () => {
+btnSend.onclick = async () => {
   if (!recordedBlob) return;
-  setStatus("Uploading to API...");
 
+  setBusy(true);
+  setStatus("Uploading...");
   try {
     const fd = new FormData();
     const filename = recordedBlob.type.includes("ogg") ? "audio.ogg" : "audio.webm";
     fd.append("file", recordedBlob, filename);
     fd.append("return_audio", "0");
-
-    // ✅ send session id for conversation memory
     fd.append("session_id", sessionId);
-    // V3 Select Model
     fd.append("backend", backendSel.value);
     fd.append("model", modelSel.value);
 
+    setStatus("Transcribing + Thinking...");
     const r = await fetch(`/api/voice`, { method: "POST", body: fd });
+
     if (!r.ok) {
       const txt = await r.text();
-      if (r.status === 429) {
-        throw new Error("OpenAI quota/billing missing (HTTP 429). Enable billing in OpenAI or switch backend to Ollama.");
+
+      if (r.status === 429 && backendSel.value === "openai") {
+        // Friendly fallback
+        setStatus("OpenAI quota/billing missing (429). Switching back to Ollama.");
+        backendSel.value = "ollama";
+        backendSel.onchange?.();
+        throw new Error("OpenAI quota/billing missing (HTTP 429). Enable billing in OpenAI or use Ollama.");
       }
-    
-}
 
-    // ✅ store session id returned by API
+      throw new Error(`API /voice failed: ${r.status} ${txt}`);
+    }
+
+    const data = await r.json();
     if (data.session_id) setSessionId(data.session_id);
-
     resultEl.textContent = JSON.stringify(data, null, 2);
 
-    setStatus(`Generating speech via Piper... (session ${sessionId ? sessionId.slice(0,8) : "new"})`);
+    setStatus("Speaking...");
     const tts = await fetch(`/tts/tts`, {
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ text: data.answer, lang: data.lang })
     });
     if (!tts.ok) throw new Error(`Piper /tts failed: ${tts.status} ${await tts.text()}`);
+
     const wavBlob = await tts.blob();
     replyAudio.src = URL.createObjectURL(wavBlob);
+    // optional autoplay
+    try { await replyAudio.play(); } catch {}
 
     setStatus(`Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`);
   } catch (err) {
     console.error(err);
     setStatus(String(err));
+  } finally {
+    setBusy(false);
   }
 };
 </script>

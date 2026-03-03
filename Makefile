@@ -6,7 +6,7 @@ COMPOSE_FILE = docker/compose.sidecar.yml
 .PHONY: up-d wait - up down restart logs ps rebuild web-rebuild api-rebuild piper-rebuild health
 
 up-d:
-	docker compose -f $(COMPOSE_FILE) up -d --build --remove-orphans
+	docker compose --env-file .env -f $(COMPOSE_FILE) up -d --build --remove-orphans
 
 wait:
 	@$(MAKE) health
@@ -18,14 +18,14 @@ open:
 	open http://localhost:8080
 
 restart:
-	docker compose -f $(COMPOSE_FILE) down
-	docker compose -f $(COMPOSE_FILE) up --build
+	docker compose --env-file .env -f $(COMPOSE_FILE) down --remove-orphans
+	docker compose --env-file .env -f $(COMPOSE_FILE) up -d --build --remove-orphans
 
 ps:
-	docker compose -f $(COMPOSE_FILE) ps
+	docker compose --env-file .env -f $(COMPOSE_FILE) ps
 
 logs:
-	docker compose -f $(COMPOSE_FILE) logs -f
+	docker compose --env-file .env -f $(COMPOSE_FILE) logs -f --tail=200
 
 rebuild:
 	docker compose -f $(COMPOSE_FILE) build --no-cache
