@@ -46,17 +46,41 @@ const statusEl = el("status");
 const resultEl = el("result");
 const previewAudio = el("audioPreview");
 const replyAudio = el("audioReply");
+const SESSION_KEY = "voice_agent_session_id";
+
+let sessionId = localStorage.getItem(SESSION_KEY) || "";
+
+function setSessionId(id) {
+  sessionId = id || "";
+  if (sessionId) localStorage.setItem(SESSION_KEY, sessionId);
+}
 
 function setStatus(msg) { statusEl.textContent = msg; }
 
-el("btnClear").onclick = () => {
+el("btnClear").onclick = async () => {
   chunks = [];
   recordedBlob = null;
   previewAudio.src = "";
   replyAudio.src = "";
   resultEl.textContent = "";
   el("btnSend").disabled = true;
-  setStatus("Idle");
+
+  // reset local session id
+  if (sessionId) {
+    // optional: if you implement /api/session/reset in API, uncomment:
+    // try {
+    //   await fetch(`/api/session/reset`, {
+    //     method: "POST",
+    //     headers: {"Content-Type":"application/json"},
+    //     body: JSON.stringify({ session_id: sessionId })
+    //   });
+    // } catch {}
+  }
+
+  localStorage.removeItem(SESSION_KEY);
+  sessionId = "";
+
+  setStatus("Idle (session reset)");
 };
 
 el("btnRecord").onclick = async () => {
@@ -103,10 +127,16 @@ el("btnSend").onclick = async () => {
     const filename = recordedBlob.type.includes("ogg") ? "audio.ogg" : "audio.webm";
     fd.append("file", recordedBlob, filename);
     fd.append("return_audio", "0");
+    // Conversation Memory: send existing session id (if any)
+    fd.append("session_id", sessionId);
 
     const r = await fetch(`/api/voice`, { method: "POST", body: fd });
     if (!r.ok) throw new Error(`API /voice failed: ${r.status} ${await r.text()}`);
     const data = await r.json();
+    
+    if (data.session_id) {
+      setSessionId(data.session_id);
+    }
     resultEl.textContent = JSON.stringify(data, null, 2);
 
     // 2) TTS via nginx proxy -> /tts/tts maps to piper:5002/tts
