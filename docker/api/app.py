@@ -196,14 +196,14 @@ async def voice(
     except requests.HTTPError as e:
         # If OpenAI fails with quota/billing etc., forward readable error details
         status = getattr(e.response, "status_code", 502) or 502
-        detail = ""
+        
         try:
-        detail = e.response.text if e.response is not None else ""
+            detail = e.response.text if e.response is not None else ""
         except Exception:
-        detail = ""
-    r   eturn JSONResponse(
-        {"error": f"LLM failed (HTTP {status})", "detail": detail[:2000], "session_id": sid},
-        status_code=status if status in (400, 401, 403, 429) else 502,
+            detail = ""
+        return JSONResponse(
+            {"error": f"LLM failed (HTTP {status})", "detail": detail[:2000], "session_id": sid},
+            status_code=status if status in (400, 401, 403, 429) else 502,
         )
     except Exception as e:
         return JSONResponse({"error": f"LLM failed: {str(e)}", "session_id": sid}, status_code=502)
