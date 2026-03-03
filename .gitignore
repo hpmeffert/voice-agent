@@ -1,0 +1,24 @@
+# local env
+.env
+*.env
+
+# python venv
+.venv/
+venv/
+env/
+
+# caches
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# voices / models should never be committed
+voices/
+*.onnx
+*.onnx.json
+
+# audio outputs
+*.wav
+/tmp/

@@ -1,0 +1,59 @@
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: docker/web/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api
+      - piper
+    restart: unless-stopped
+  
+
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+      OLLAMA_MODEL: "qwen2.5:7b"
+      PIPER_BASE_URL: "http://piper:5002"
+      WHISPER_MODEL: "small"
+      WHISPER_COMPUTE: "int8"
+      # optional tuning:
+      OLLAMA_NUM_PREDICT: "160"   # oder 120 für sehr schnelle Antworten
+      OLLAMA_TEMPERATURE: "0.3"
+    depends_on:
+      - piper
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  
+
+  piper:
+    build: ./piper
+    ports:
+      - "5002:5002"
+    # IMPORTANT: voices are NOT stored in repo. Mount them from host.
+    # Change the left side to your local voices path:
+    volumes:
+      - ${PIPER_VOICES_HOST_PATH:-$HOME/models/piper-voices}:/voices:ro
+    environment:
+      VOICE_DE: "/voices/de_DE-thorsten-medium.onnx"
+      VOICE_EN: "/voices/en_GB-northern_english_male-medium.onnx"
+      # VOICE_EN: "/voices/en_US-lessac-medium.onnx"
+      VOICE_SV: "/voices/sv_SE-nst-medium.onnx"
+      VOICE_NO: "/voices/no_NO-talesyntese-medium.onnx"
+      VOICE_FI: "/voices/fi_FI-harri-medium.onnx"
+
+volumes:
+  ollama_data:
