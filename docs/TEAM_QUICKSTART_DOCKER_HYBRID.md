@@ -1,5 +1,7 @@
 # TEAM QUICKSTART — Docker Hybrid (Host Ollama + Docker API/Piper/Web)
 
+“Conversation Memory: session_id stored in browser localStorage; Clear resets session”
+
 This setup keeps **Piper (GPL)** separated from the core application while providing a simple web UI for testing.
 
 ## Architecture
