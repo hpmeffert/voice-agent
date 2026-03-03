@@ -41,9 +41,20 @@ piper-rebuild:
 	docker compose -f $(COMPOSE_FILE) up -d
 
 health:
-	curl -i http://localhost:8000/health || true
-	curl -i http://localhost:8080/api/health || true
-	curl -i http://localhost:5002/health || true
+	@echo "Checking services (retry up to 10x)..."
+	@for i in $$(seq 1 10); do \
+	  ok=1; \
+	  curl -fsS http://localhost:8000/health >/dev/null || ok=0; \
+	  curl -fsS http://localhost:8080/api/health >/dev/null || ok=0; \
+	  curl -fsS http://localhost:5002/health >/dev/null || ok=0; \
+	  if [ $$ok -eq 1 ]; then echo "OK"; exit 0; fi; \
+	  echo "Not ready yet ($$i/10) ..."; sleep 1; \
+	done; \
+	echo "Health check failed"; \
+	curl -i http://localhost:8000/health || true; \
+	curl -i http://localhost:8080/api/health || true; \
+	curl -i http://localhost:5002/health || true; \
+	exit 1
 
 ollama-check:
 	@echo "Checking host Ollama on http://localhost:11434 ..."
