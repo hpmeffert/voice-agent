@@ -134,6 +134,37 @@
       background: rgba(0,0,0,.25);
       color: var(--muted);
     }
+
+    /* ---- Animated dots ---- */
+    .dots::after{
+      content:"";
+      display:inline-block;
+      width: 1.5em;
+      text-align:left;
+      animation: dots 1.1s infinite steps(4, end);
+    }
+    @keyframes dots{
+      0%{ content:""; }
+      25%{ content:"."; }
+      50%{ content:".."; }
+      75%{ content:"..."; }
+      100%{ content:""; }
+    }
+
+    /* Settings box */
+    .settings{
+      border:1px solid var(--border);
+      background: rgba(0,0,0,.18);
+      border-radius: 14px;
+      padding: 10px 12px;
+      margin-top: 12px;
+    }
+    .toggle{
+      display:flex; align-items:center; gap:8px;
+      font-size: 12px; color: var(--muted);
+      user-select:none;
+    }
+    .toggle input{ transform: translateY(1px); }
   </style>
 </head>
 <body>
@@ -167,6 +198,15 @@
             <button id="btnStop" disabled>⏹ Stop</button>
             <button id="btnSend" class="good" disabled>➡️ Send</button>
             <button id="btnClear">🧹 Clear</button>
+          </div>
+
+          <div class="settings">
+            <div class="row">
+              <label class="toggle"><input type="checkbox" id="optAutoplay" checked> Autoplay</label>
+              <label class="toggle"><input type="checkbox" id="optTTS" checked> TTS enabled</label>
+              <label class="toggle"><input type="checkbox" id="optRetry" checked> Auto-retry transient errors</label>
+            </div>
+            <div class="muted">Autoplay may be blocked by browser. Retry helps with 502/503/504 during warm start.</div>
           </div>
 
           <div class="errorBox" id="errorBox"></div>
@@ -220,6 +260,10 @@ const btnClear = el("btnClear");
 const sessionPill = el("sessionPill");
 const btnCopySession = el("btnCopySession");
 
+const optAutoplay = el("optAutoplay");
+const optTTS = el("optTTS");
+const optRetry = el("optRetry");
+
 const SESSION_KEY = "voice_agent_session_id";
 let sessionId = localStorage.getItem(SESSION_KEY) || "";
 
@@ -251,6 +295,9 @@ function showError(msg) {
 }
 
 function setStatus(msg, kind="") {
+  // For thinking/speaking: add animated dots class to the status span
+  statusEl.classList.toggle("dots", msg.includes("Thinking") || msg.includes("Speaking") || msg.includes("Loading"));
+
   statusEl.textContent = msg;
 
   if (kind === "err") setStatusBadge("err", "Error");
@@ -361,7 +408,7 @@ async function fetchWithRetry(url, tries = 20, delayMs = 1000) {
 
 async function loadModels() {
   showError("");
-  setState(UI_STATE.LOADING_MODELS, "Loading models...", "warn");
+  setState(UI_STATE.LOADING_MODELS, "Loading models", "warn");
 
   try {
     const r = await fetchWithRetry("/api/models", 20, 1000);
@@ -382,7 +429,7 @@ async function loadModels() {
     toast("Models loaded.", "ok", "Ready", 2000);
   } catch (e) {
     showError("API not ready yet. Please wait a few seconds.\n" + String(e));
-    setState(UI_STATE.ERROR, "Waiting for API...", "warn");
+    setState(UI_STATE.ERROR, "Waiting for API", "warn");
     toast("API not ready yet. Retrying...", "warn", "Waiting", 2500);
     setTimeout(() => loadModels(), 2000);
   }
@@ -479,63 +526,97 @@ btnStop.onclick = () => {
   }
 };
 
+function isTransientStatus(status) {
+  return [408, 429, 500, 502, 503, 504].includes(status);
+}
+
+async function postVoiceOnce() {
+  const fd = new FormData();
+  const filename = recordedBlob.type.includes("ogg") ? "audio.ogg" : "audio.webm";
+  fd.append("file", recordedBlob, filename);
+  fd.append("return_audio", "0");
+  fd.append("session_id", sessionId);
+  fd.append("backend", backendSel.value);
+  fd.append("model", modelSel.value);
+
+  const r = await fetch(`/api/voice`, { method: "POST", body: fd });
+  return r;
+}
+
 btnSend.onclick = async () => {
   if (!recordedBlob) return;
 
   showError("");
-  setState(UI_STATE.UPLOADING, "Uploading...", "warn");
+  setState(UI_STATE.UPLOADING, "Uploading", "warn");
+
+  let attempts = 0;
+  const maxAttempts = optRetry.checked ? 2 : 1;
 
   try {
-    const fd = new FormData();
-    const filename = recordedBlob.type.includes("ogg") ? "audio.ogg" : "audio.webm";
-    fd.append("file", recordedBlob, filename);
-    fd.append("return_audio", "0");
-    fd.append("session_id", sessionId);
-    fd.append("backend", backendSel.value);
-    fd.append("model", modelSel.value);
+    while (attempts < maxAttempts) {
+      attempts += 1;
 
-    setState(UI_STATE.THINKING, "Transcribing + Thinking...", "warn");
-    const r = await fetch(`/api/voice`, { method: "POST", body: fd });
+      setState(UI_STATE.THINKING, attempts > 1 ? `Retry ${attempts}/${maxAttempts} - Thinking` : "Transcribing + Thinking", "warn");
+      const r = await postVoiceOnce();
 
-    if (!r.ok) {
-      const txt = await r.text();
+      if (!r.ok) {
+        const txt = await r.text();
 
-      if (r.status === 429 && backendSel.value === "openai") {
-        showError("OpenAI quota/billing missing (HTTP 429). Switching back to Ollama.");
-        toast("OpenAI quota/billing missing (429). Switched to Ollama.", "warn", "OpenAI fallback", 6000);
-        backendSel.value = "ollama";
-        backendSel.onchange?.();
-        throw new Error("OpenAI quota/billing missing (HTTP 429).");
+        // OpenAI quota fallback
+        if (r.status === 429 && backendSel.value === "openai") {
+          showError("OpenAI quota/billing missing (HTTP 429). Switching back to Ollama.");
+          toast("OpenAI quota/billing missing (429). Switched to Ollama.", "warn", "OpenAI fallback", 6000);
+          backendSel.value = "ollama";
+          backendSel.onchange?.();
+          throw new Error("OpenAI quota/billing missing (HTTP 429).");
+        }
+
+        // retry transient if enabled
+        if (optRetry.checked && attempts < maxAttempts && isTransientStatus(r.status)) {
+          toast(`Transient error (${r.status}). Retrying...`, "warn", "Retry", 2500);
+          await sleep(800);
+          continue;
+        }
+
+        throw new Error(`API /voice failed: ${r.status} ${txt}`);
       }
 
-      throw new Error(`API /voice failed: ${r.status} ${txt}`);
+      const data = await r.json();
+      if (data.session_id) setSessionId(data.session_id);
+      updateSessionPill();
+      resultEl.textContent = JSON.stringify(data, null, 2);
+
+      if (!optTTS.checked) {
+        setState(UI_STATE.DONE, `Done ✅ (TTS disabled)`, "live");
+        toast("Done (TTS disabled).", "ok", "Success", 2000);
+        return;
+      }
+
+      setState(UI_STATE.SPEAKING, "Speaking", "warn");
+      const tts = await fetch(`/tts/tts`, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ text: data.answer, lang: data.lang })
+      });
+      if (!tts.ok) throw new Error(`Piper /tts failed: ${tts.status} ${await tts.text()}`);
+
+      const wavBlob = await tts.blob();
+      replyAudio.src = URL.createObjectURL(wavBlob);
+
+      if (optAutoplay.checked) {
+        try { await replyAudio.play(); }
+        catch {
+          toast("Autoplay blocked. Click play once to allow audio.", "info", "Autoplay", 6000);
+          showError("Autoplay blocked by the browser. Click the play button once to allow audio.");
+        }
+      } else {
+        toast("Autoplay disabled in settings.", "info", "Autoplay");
+      }
+
+      setState(UI_STATE.DONE, `Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`, "live");
+      toast("Done.", "ok", "Success", 2000);
+      return;
     }
-
-    const data = await r.json();
-    if (data.session_id) setSessionId(data.session_id);
-    updateSessionPill();
-
-    resultEl.textContent = JSON.stringify(data, null, 2);
-
-    setState(UI_STATE.SPEAKING, "Speaking...", "warn");
-    const tts = await fetch(`/tts/tts`, {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ text: data.answer, lang: data.lang })
-    });
-    if (!tts.ok) throw new Error(`Piper /tts failed: ${tts.status} ${await tts.text()}`);
-
-    const wavBlob = await tts.blob();
-    replyAudio.src = URL.createObjectURL(wavBlob);
-
-    try { await replyAudio.play(); }
-    catch {
-      toast("Autoplay blocked. Click play once to allow audio.", "info", "Autoplay", 6000);
-      showError("Autoplay blocked by the browser. Click the play button once to allow audio.");
-    }
-
-    setState(UI_STATE.DONE, `Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`, "live");
-    toast("Done.", "ok", "Success", 2000);
   } catch (err) {
     console.error(err);
     showError(String(err));
