@@ -3,139 +3,141 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Test UI</title>
+  <title>Voice Agent</title>
   <style>
-  :root{
-    --bg:#0b1020; --card:#111a33; --muted:#93a4c7; --text:#eaf0ff;
-    --border:rgba(255,255,255,.08);
-    --brand:#7c3aed; --brand2:#22c55e; --warn:#f59e0b; --err:#ef4444;
-    --shadow: 0 10px 30px rgba(0,0,0,.35);
-    --radius:16px;
-  }
-  body{ font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-        margin:0; background: radial-gradient(1200px 800px at 20% 0%, #19244a 0%, var(--bg) 45%, #070a14 100%);
-        color:var(--text); }
-  .wrap{ max-width: 980px; margin: 32px auto; padding: 0 16px; }
-  h1{ font-size: 22px; margin: 0 0 8px 0; letter-spacing:.2px; }
-  .sub{ color:var(--muted); margin:0 0 18px 0; }
-  .grid{ display:grid; grid-template-columns: 1fr; gap:14px; }
-  @media (min-width: 900px){ .grid{ grid-template-columns: 1.1fr .9fr; } }
+    :root{
+      --bg:#0b1020; --muted:#93a4c7; --text:#eaf0ff;
+      --border:rgba(255,255,255,.08);
+      --brand:#7c3aed; --err:#ef4444;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius:16px;
+    }
+    body{
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      margin:0;
+      background: radial-gradient(1200px 800px at 20% 0%, #19244a 0%, var(--bg) 45%, #070a14 100%);
+      color:var(--text);
+    }
+    .wrap{ max-width: 980px; margin: 32px auto; padding: 0 16px; }
+    h1{ font-size: 22px; margin: 0 0 8px 0; letter-spacing:.2px; }
+    .sub{ color:var(--muted); margin:0 0 18px 0; }
+    .grid{ display:grid; grid-template-columns: 1fr; gap:14px; }
+    @media (min-width: 900px){ .grid{ grid-template-columns: 1.1fr .9fr; } }
 
-  .card{ background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
-         border:1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
-  .card .hd{ padding:14px 14px 10px 14px; border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:center; justify-content:space-between;}
-  .card .bd{ padding:14px; }
-  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  label{ color:var(--muted); font-size: 12px; }
-  select, input[type="text"]{
-    background: rgba(0,0,0,.25); color: var(--text);
-    border:1px solid var(--border); border-radius: 12px;
-    padding: 10px 12px; outline:none;
-  }
-  button{
-    border:1px solid var(--border);
-    background: rgba(0,0,0,.25);
-    color:var(--text);
-    padding: 10px 12px; border-radius: 12px;
-    cursor:pointer;
-  }
-  button.primary{ background: linear-gradient(90deg, var(--brand), #2563eb); border-color: rgba(255,255,255,.12); }
-  button.good{ background: linear-gradient(90deg, #16a34a, #22c55e); border-color: rgba(255,255,255,.12); }
-  button.danger{ background: linear-gradient(90deg, #b91c1c, var(--err)); border-color: rgba(255,255,255,.12); }
-  button:disabled{ opacity:.45; cursor:not-allowed; }
-  .badge{
-    font-size:12px; padding:6px 10px; border-radius:999px;
-    border:1px solid var(--border); background: rgba(0,0,0,.25); color: var(--muted);
-  }
-  .badge.live{ color:#bbf7d0; border-color: rgba(34,197,94,.25); }
-  .badge.warn{ color:#fde68a; border-color: rgba(245,158,11,.25); }
-  .badge.err{ color:#fecaca; border-color: rgba(239,68,68,.25); }
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .card .hd{
+      padding:14px 14px 10px 14px;
+      border-bottom:1px solid var(--border);
+      display:flex; gap:10px; align-items:center; justify-content:space-between;
+    }
+    .card .bd{ padding:14px; }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    label{ color:var(--muted); font-size: 12px; }
 
-  pre{
-    background: rgba(0,0,0,.35);
-    border:1px solid var(--border);
-    padding:12px; border-radius: 14px;
-    overflow:auto; max-height: 320px;
-  }
-  audio{ width:100%; margin-top: 8px; }
-  .muted{ color:var(--muted); font-size:12px; }
+    select, input[type="text"]{
+      background: rgba(0,0,0,.25); color: var(--text);
+      border:1px solid var(--border); border-radius: 12px;
+      padding: 10px 12px; outline:none;
+    }
+    button{
+      border:1px solid var(--border);
+      background: rgba(0,0,0,.25);
+      color:var(--text);
+      padding: 10px 12px; border-radius: 12px;
+      cursor:pointer;
+    }
+    button.primary{ background: linear-gradient(90deg, var(--brand), #2563eb); border-color: rgba(255,255,255,.12); }
+    button.good{ background: linear-gradient(90deg, #16a34a, #22c55e); border-color: rgba(255,255,255,.12); }
+    button:disabled{ opacity:.45; cursor:not-allowed; }
 
-  .errorBox{
-    display:none;
-    margin-top:12px;
-    border:1px solid rgba(239,68,68,.25);
-    background: rgba(239,68,68,.08);
-    color:#fecaca;
-    border-radius: 14px;
-    padding:12px;
-  }
-  .errorBox.show{ display:block; }
-</style>
+    .badge{
+      font-size:12px; padding:6px 10px; border-radius:999px;
+      border:1px solid var(--border); background: rgba(0,0,0,.25); color: var(--muted);
+    }
+    .badge.live{ color:#bbf7d0; border-color: rgba(34,197,94,.25); }
+    .badge.warn{ color:#fde68a; border-color: rgba(245,158,11,.25); }
+    .badge.err{ color:#fecaca; border-color: rgba(239,68,68,.25); }
+
+    pre{
+      background: rgba(0,0,0,.35);
+      border:1px solid var(--border);
+      padding:12px; border-radius: 14px;
+      overflow:auto; max-height: 320px;
+    }
+    audio{ width:100%; margin-top: 8px; }
+    .muted{ color:var(--muted); font-size:12px; }
+
+    .errorBox{
+      display:none;
+      margin-top:12px;
+      border:1px solid rgba(239,68,68,.25);
+      background: rgba(239,68,68,.08);
+      color:#fecaca;
+      border-radius: 14px;
+      padding:12px;
+      white-space: pre-wrap;
+    }
+    .errorBox.show{ display:block; }
+  </style>
 </head>
 <body>
-  <h1>Voice Agent Test UI</h1>
-
   <div class="wrap">
-  <h1>Voice Agent</h1>
-  <p class="sub">STT → LLM (Ollama/OpenAI) → TTS (Piper). Session memory enabled.</p>
+    <h1>Voice Agent</h1>
+    <p class="sub">STT → LLM (Ollama/OpenAI) → TTS (Piper). Session memory enabled.</p>
 
-  <div class="grid">
-    <div class="card">
-      <div class="hd">
-        <div class="row">
-          <span class="badge" id="statusBadge">Idle</span>
-          <span class="muted" id="status">Ready.</span>
+    <div class="grid">
+      <div class="card">
+        <div class="hd">
+          <div class="row">
+            <span class="badge" id="statusBadge">Idle</span>
+            <span class="muted" id="status">Ready.</span>
+          </div>
+          <div class="row">
+            <label><b>Backend</b></label>
+            <select id="backend">
+              <option value="ollama" selected>Ollama (local)</option>
+              <option value="openai">OpenAI (cloud)</option>
+            </select>
+            <label><b>Model</b></label>
+            <select id="model"></select>
+          </div>
         </div>
-        <div class="row">
-          <label><b>Backend</b></label>
-          <select id="backend">
-            <option value="ollama" selected>Ollama (local)</option>
-            <option value="openai">OpenAI (cloud)</option>
-          </select>
-          <label><b>Model</b></label>
-          <select id="model"></select>
+
+        <div class="bd">
+          <div class="row">
+            <button id="btnRecord" class="primary">🎙️ Record</button>
+            <button id="btnStop" disabled>⏹ Stop</button>
+            <button id="btnSend" class="good" disabled>➡️ Send</button>
+            <button id="btnClear">🧹 Clear</button>
+          </div>
+
+          <div class="errorBox" id="errorBox"></div>
+
+          <h3>Captured audio</h3>
+          <audio id="audioPreview" controls></audio>
+
+          <h3>Spoken reply (Piper)</h3>
+          <audio id="audioReply" controls></audio>
+          <div class="muted">Tip: If autoplay is blocked, click play once to grant permission.</div>
         </div>
       </div>
 
-      <div class="bd">
-        <div class="row">
-          <button id="btnRecord" class="primary">🎙️ Record</button>
-          <button id="btnStop" disabled>⏹ Stop</button>
-          <button id="btnSend" class="good" disabled>➡️ Send</button>
-          <button id="btnClear">🧹 Clear</button>
+      <div class="card">
+        <div class="hd">
+          <b>Result</b>
+          <span class="muted">transcript / lang / answer</span>
         </div>
-
-        <div class="errorBox" id="errorBox"></div>
-
-        <h3>Captured audio</h3>
-        <audio id="audioPreview" controls></audio>
-
-        <h3>Spoken reply (Piper)</h3>
-        <audio id="audioReply" controls></audio>
-        <div class="muted">Tip: If autoplay is blocked, click play once to grant permission.</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="hd">
-        <b>Result</b>
-        <span class="muted">transcript / lang / answer</span>
-      </div>
-      <div class="bd">
-        <pre id="result"></pre>
+        <div class="bd">
+          <pre id="result"></pre>
+        </div>
       </div>
     </div>
   </div>
-</div>
-
-  <h3>Captured audio</h3>
-  <audio id="audioPreview" controls></audio>
-
-  <h3>Result (transcript/answer/lang)</h3>
-  <pre id="result"></pre>
-
-  <h3>Spoken reply (Piper)</h3>
-  <audio id="audioReply" controls></audio>
 
 <script>
 let mediaRecorder;
@@ -144,12 +146,12 @@ let recordedBlob = null;
 
 const el = (id) => document.getElementById(id);
 const statusEl = el("status");
+const badgeEl = el("statusBadge");
+const errorBox = el("errorBox");
+
 const resultEl = el("result");
 const previewAudio = el("audioPreview");
 const replyAudio = el("audioReply");
-
-const SESSION_KEY = "voice_agent_session_id";
-let sessionId = localStorage.getItem(SESSION_KEY) || "";
 
 const backendSel = el("backend");
 const modelSel = el("model");
@@ -159,8 +161,10 @@ const btnStop = el("btnStop");
 const btnSend = el("btnSend");
 const btnClear = el("btnClear");
 
-const badgeEl = el("statusBadge");
-const errorBox = el("errorBox");
+const SESSION_KEY = "voice_agent_session_id";
+let sessionId = localStorage.getItem(SESSION_KEY) || "";
+
+let modelCatalog = null;
 
 function setStatusBadge(kind, text) {
   badgeEl.className = "badge" + (kind ? " " + kind : "");
@@ -172,6 +176,15 @@ function showError(msg) {
   errorBox.classList.toggle("show", !!msg);
 }
 
+function setStatus(msg, kind="") {
+  statusEl.textContent = msg;
+
+  if (kind === "err") setStatusBadge("err", "Error");
+  else if (kind === "warn") setStatusBadge("warn", "Working");
+  else if (kind === "live") setStatusBadge("live", "Live");
+  else setStatusBadge("", "Idle");
+}
+
 function setBusy(isBusy) {
   btnRecord.disabled = isBusy;
   btnStop.disabled = isBusy || (mediaRecorder ? mediaRecorder.state === "inactive" : true);
@@ -180,10 +193,6 @@ function setBusy(isBusy) {
   backendSel.disabled = isBusy;
   modelSel.disabled = isBusy;
 }
-
-let modelCatalog = null;
-
-function setStatus(msg) { statusEl.textContent = msg; }
 
 function setSessionId(id) {
   sessionId = id || "";
@@ -201,7 +210,7 @@ function setModelOptions(options, preferred) {
   if (preferred && options.includes(preferred)) modelSel.value = preferred;
 }
 
-// --------- retry helper (was missing) ----------
+// --- retry helper ---
 function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
 
 async function fetchWithRetry(url, tries = 15, delayMs = 1000) {
@@ -214,15 +223,15 @@ async function fetchWithRetry(url, tries = 15, delayMs = 1000) {
   }
   throw new Error(`Failed to load ${url} after ${tries} tries`);
 }
-// -----------------------------------------------
+// -------------------
 
 async function loadModels() {
-  setStatus("Loading models...");
+  showError("");
+  setStatus("Loading models...", "warn");
   const r = await fetchWithRetry("/api/models", 15, 1000);
   const data = await r.json();
   modelCatalog = data;
 
-  // default: ollama models
   const ollamaModels = data?.ollama?.models || [];
   const defaultOllama = data?.ollama?.default_model || "";
   setModelOptions(
@@ -230,62 +239,63 @@ async function loadModels() {
     defaultOllama
   );
 
-  // Disable OpenAI option if not available
   const opt = Array.from(backendSel.options).find(o => o.value === "openai");
   if (opt) opt.disabled = !data?.openai?.available;
 
-  setStatus("Idle");
+  setStatus("Ready.", "");
 }
 
 backendSel.onchange = () => {
   if (!modelCatalog) return;
 
+  showError("");
+
   if (backendSel.value === "openai") {
     const openaiAvailable = !!modelCatalog?.openai?.available;
     if (!openaiAvailable) {
-      setStatus("OpenAI not enabled (missing API key). Using Ollama.");
+      showError("OpenAI not enabled (missing API key). Using Ollama.");
       backendSel.value = "ollama";
     } else {
       const defaultOpenAI = modelCatalog?.openai?.default_model || "gpt-5";
       setModelOptions([defaultOpenAI], defaultOpenAI);
-      setStatus("OpenAI selected (billing/quota required).");
+      setStatus("OpenAI selected (billing/quota required).", "warn");
       return;
     }
   }
 
-  // default back to Ollama models
   const ollamaModels = modelCatalog?.ollama?.models || [];
   const defaultOllama = modelCatalog?.ollama?.default_model || "";
   setModelOptions(
     ollamaModels.length ? ollamaModels : [defaultOllama || "qwen2.5:7b"],
     defaultOllama
   );
-  setStatus("Idle");
+  setStatus("Ready.", "");
 };
 
-// call on page load
 loadModels().catch(err => {
   console.error(err);
-  setStatus("Model load failed (see console).");
+  showError(String(err));
+  setStatus("Model load failed.", "err");
   setBusy(false);
 });
 
-
-el("btnClear").onclick = () => {
+btnClear.onclick = () => {
   chunks = [];
   recordedBlob = null;
   previewAudio.src = "";
   replyAudio.src = "";
   resultEl.textContent = "";
-  el("btnSend").disabled = true;
+  btnSend.disabled = true;
 
   localStorage.removeItem(SESSION_KEY);
   sessionId = "";
 
-  setStatus("Idle (session reset)");
+  showError("");
+  setStatus("Idle (session reset).", "");
 };
 
-el("btnRecord").onclick = async () => {
+btnRecord.onclick = async () => {
+  showError("");
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     chunks = [];
@@ -296,34 +306,37 @@ el("btnRecord").onclick = async () => {
     mediaRecorder.onstop = () => {
       recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
       previewAudio.src = URL.createObjectURL(recordedBlob);
-      el("btnSend").disabled = false;
-      setStatus("Recorded. Ready to send.");
+      btnSend.disabled = false;
+      setStatus("Recorded. Ready to send.", "live");
       stream.getTracks().forEach(t => t.stop());
     };
 
     mediaRecorder.start();
-    el("btnRecord").disabled = true;
-    el("btnStop").disabled = false;
-    setStatus("Recording...");
+    btnRecord.disabled = true;
+    btnStop.disabled = false;
+    setStatus("Recording...", "live");
   } catch (err) {
     console.error(err);
-    setStatus("Mic permission / recording error. Check browser permissions.");
+    showError("Mic permission / recording error. Check browser permissions.");
+    setStatus("Mic error.", "err");
   }
 };
 
-el("btnStop").onclick = () => {
+btnStop.onclick = () => {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
-    el("btnRecord").disabled = false;
-    el("btnStop").disabled = true;
+    btnRecord.disabled = false;
+    btnStop.disabled = true;
   }
 };
 
 btnSend.onclick = async () => {
   if (!recordedBlob) return;
 
+  showError("");
   setBusy(true);
-  setStatus("Uploading...");
+  setStatus("Uploading...", "warn");
+
   try {
     const fd = new FormData();
     const filename = recordedBlob.type.includes("ogg") ? "audio.ogg" : "audio.webm";
@@ -333,18 +346,17 @@ btnSend.onclick = async () => {
     fd.append("backend", backendSel.value);
     fd.append("model", modelSel.value);
 
-    setStatus("Transcribing + Thinking...");
+    setStatus("Transcribing + Thinking...", "warn");
     const r = await fetch(`/api/voice`, { method: "POST", body: fd });
 
     if (!r.ok) {
       const txt = await r.text();
 
       if (r.status === 429 && backendSel.value === "openai") {
-        // Friendly fallback
-        setStatus("OpenAI quota/billing missing (429). Switching back to Ollama.");
+        showError("OpenAI quota/billing missing (HTTP 429). Switching back to Ollama.");
         backendSel.value = "ollama";
         backendSel.onchange?.();
-        throw new Error("OpenAI quota/billing missing (HTTP 429). Enable billing in OpenAI or use Ollama.");
+        throw new Error("OpenAI quota/billing missing (HTTP 429).");
       }
 
       throw new Error(`API /voice failed: ${r.status} ${txt}`);
@@ -354,7 +366,7 @@ btnSend.onclick = async () => {
     if (data.session_id) setSessionId(data.session_id);
     resultEl.textContent = JSON.stringify(data, null, 2);
 
-    setStatus("Speaking...");
+    setStatus("Speaking...", "warn");
     const tts = await fetch(`/tts/tts`, {
       method: "POST",
       headers: {"Content-Type":"application/json"},
@@ -364,13 +376,14 @@ btnSend.onclick = async () => {
 
     const wavBlob = await tts.blob();
     replyAudio.src = URL.createObjectURL(wavBlob);
-    // optional autoplay
+
     try { await replyAudio.play(); } catch {}
 
-    setStatus(`Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`);
+    setStatus(`Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`, "live");
   } catch (err) {
     console.error(err);
-    setStatus(String(err));
+    showError(String(err));
+    setStatus("Failed.", "err");
   } finally {
     setBusy(false);
   }
