@@ -5,38 +5,128 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Voice Agent Test UI</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px; }
-    button { padding: 10px 14px; margin-right: 8px; }
-    .row { margin: 12px 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    pre { background: #f3f4f6; padding: 12px; border-radius: 10px; overflow: auto; }
-    .status { padding: 8px 12px; background: #eef2ff; border-radius: 10px; }
-    audio { width: 100%; margin-top: 8px; }
-  </style>
+  :root{
+    --bg:#0b1020; --card:#111a33; --muted:#93a4c7; --text:#eaf0ff;
+    --border:rgba(255,255,255,.08);
+    --brand:#7c3aed; --brand2:#22c55e; --warn:#f59e0b; --err:#ef4444;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+    --radius:16px;
+  }
+  body{ font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        margin:0; background: radial-gradient(1200px 800px at 20% 0%, #19244a 0%, var(--bg) 45%, #070a14 100%);
+        color:var(--text); }
+  .wrap{ max-width: 980px; margin: 32px auto; padding: 0 16px; }
+  h1{ font-size: 22px; margin: 0 0 8px 0; letter-spacing:.2px; }
+  .sub{ color:var(--muted); margin:0 0 18px 0; }
+  .grid{ display:grid; grid-template-columns: 1fr; gap:14px; }
+  @media (min-width: 900px){ .grid{ grid-template-columns: 1.1fr .9fr; } }
+
+  .card{ background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+         border:1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .card .hd{ padding:14px 14px 10px 14px; border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:center; justify-content:space-between;}
+  .card .bd{ padding:14px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  label{ color:var(--muted); font-size: 12px; }
+  select, input[type="text"]{
+    background: rgba(0,0,0,.25); color: var(--text);
+    border:1px solid var(--border); border-radius: 12px;
+    padding: 10px 12px; outline:none;
+  }
+  button{
+    border:1px solid var(--border);
+    background: rgba(0,0,0,.25);
+    color:var(--text);
+    padding: 10px 12px; border-radius: 12px;
+    cursor:pointer;
+  }
+  button.primary{ background: linear-gradient(90deg, var(--brand), #2563eb); border-color: rgba(255,255,255,.12); }
+  button.good{ background: linear-gradient(90deg, #16a34a, #22c55e); border-color: rgba(255,255,255,.12); }
+  button.danger{ background: linear-gradient(90deg, #b91c1c, var(--err)); border-color: rgba(255,255,255,.12); }
+  button:disabled{ opacity:.45; cursor:not-allowed; }
+  .badge{
+    font-size:12px; padding:6px 10px; border-radius:999px;
+    border:1px solid var(--border); background: rgba(0,0,0,.25); color: var(--muted);
+  }
+  .badge.live{ color:#bbf7d0; border-color: rgba(34,197,94,.25); }
+  .badge.warn{ color:#fde68a; border-color: rgba(245,158,11,.25); }
+  .badge.err{ color:#fecaca; border-color: rgba(239,68,68,.25); }
+
+  pre{
+    background: rgba(0,0,0,.35);
+    border:1px solid var(--border);
+    padding:12px; border-radius: 14px;
+    overflow:auto; max-height: 320px;
+  }
+  audio{ width:100%; margin-top: 8px; }
+  .muted{ color:var(--muted); font-size:12px; }
+
+  .errorBox{
+    display:none;
+    margin-top:12px;
+    border:1px solid rgba(239,68,68,.25);
+    background: rgba(239,68,68,.08);
+    color:#fecaca;
+    border-radius: 14px;
+    padding:12px;
+  }
+  .errorBox.show{ display:block; }
+</style>
 </head>
 <body>
   <h1>Voice Agent Test UI</h1>
 
-  <div class="row">
-    <label><b>Backend:</b></label>
-    <select id="backend">
-      <option value="ollama" selected>Ollama (local)</option>
-      <option value="openai">OpenAI (cloud)</option>
-    </select>
+  <div class="wrap">
+  <h1>Voice Agent</h1>
+  <p class="sub">STT → LLM (Ollama/OpenAI) → TTS (Piper). Session memory enabled.</p>
 
-    <label><b>Model:</b></label>
-      <select id="model"> </select>
-  </div>
+  <div class="grid">
+    <div class="card">
+      <div class="hd">
+        <div class="row">
+          <span class="badge" id="statusBadge">Idle</span>
+          <span class="muted" id="status">Ready.</span>
+        </div>
+        <div class="row">
+          <label><b>Backend</b></label>
+          <select id="backend">
+            <option value="ollama" selected>Ollama (local)</option>
+            <option value="openai">OpenAI (cloud)</option>
+          </select>
+          <label><b>Model</b></label>
+          <select id="model"></select>
+        </div>
+      </div>
 
-  <div class="row">
-    <button id="btnRecord">🎙️ Record</button>
-    <button id="btnStop" disabled>⏹ Stop</button>
-    <span class="status" id="status">Idle</span>
-  </div>
+      <div class="bd">
+        <div class="row">
+          <button id="btnRecord" class="primary">🎙️ Record</button>
+          <button id="btnStop" disabled>⏹ Stop</button>
+          <button id="btnSend" class="good" disabled>➡️ Send</button>
+          <button id="btnClear">🧹 Clear</button>
+        </div>
 
-  <div class="row">
-    <button id="btnSend" disabled>➡️ Send</button>
-    <button id="btnClear">🧹 Clear</button>
+        <div class="errorBox" id="errorBox"></div>
+
+        <h3>Captured audio</h3>
+        <audio id="audioPreview" controls></audio>
+
+        <h3>Spoken reply (Piper)</h3>
+        <audio id="audioReply" controls></audio>
+        <div class="muted">Tip: If autoplay is blocked, click play once to grant permission.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd">
+        <b>Result</b>
+        <span class="muted">transcript / lang / answer</span>
+      </div>
+      <div class="bd">
+        <pre id="result"></pre>
+      </div>
+    </div>
   </div>
+</div>
 
   <h3>Captured audio</h3>
   <audio id="audioPreview" controls></audio>
@@ -68,6 +158,19 @@ const btnRecord = el("btnRecord");
 const btnStop = el("btnStop");
 const btnSend = el("btnSend");
 const btnClear = el("btnClear");
+
+const badgeEl = el("statusBadge");
+const errorBox = el("errorBox");
+
+function setStatusBadge(kind, text) {
+  badgeEl.className = "badge" + (kind ? " " + kind : "");
+  badgeEl.textContent = text || "Idle";
+}
+
+function showError(msg) {
+  errorBox.textContent = msg || "";
+  errorBox.classList.toggle("show", !!msg);
+}
 
 function setBusy(isBusy) {
   btnRecord.disabled = isBusy;
