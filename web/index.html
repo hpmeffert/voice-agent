@@ -123,7 +123,7 @@
 
           <h3>Spoken reply (Piper)</h3>
           <audio id="audioReply" controls></audio>
-          <div class="muted">Tip: If autoplay is blocked, click play once to grant permission.</div>
+          <div class="muted">Tip: If autoplay is blocked, click the play button once to allow audio.</div>
         </div>
       </div>
 
@@ -166,6 +166,21 @@ let sessionId = localStorage.getItem(SESSION_KEY) || "";
 
 let modelCatalog = null;
 
+// ---------- UI state machine ----------
+const UI_STATE = {
+  IDLE: "idle",
+  LOADING_MODELS: "loading_models",
+  RECORDING: "recording",
+  RECORDED: "recorded",
+  UPLOADING: "uploading",
+  THINKING: "thinking",
+  SPEAKING: "speaking",
+  DONE: "done",
+  ERROR: "error",
+};
+
+let uiState = UI_STATE.IDLE;
+
 function setStatusBadge(kind, text) {
   badgeEl.className = "badge" + (kind ? " " + kind : "");
   badgeEl.textContent = text || "Idle";
@@ -185,20 +200,37 @@ function setStatus(msg, kind="") {
   else setStatusBadge("", "Idle");
 }
 
-function setBusy(isBusy) {
-  btnRecord.disabled = isBusy;
-  btnStop.disabled = isBusy || (mediaRecorder ? mediaRecorder.state === "inactive" : true);
-  btnSend.disabled = isBusy || !recordedBlob;
-  btnClear.disabled = isBusy;
-  backendSel.disabled = isBusy;
-  modelSel.disabled = isBusy;
+function applyState() {
+  const busy = [
+    UI_STATE.LOADING_MODELS,
+    UI_STATE.UPLOADING,
+    UI_STATE.THINKING,
+    UI_STATE.SPEAKING,
+  ].includes(uiState);
+
+  btnRecord.disabled = busy || uiState === UI_STATE.RECORDING;
+  btnStop.disabled   = busy || uiState !== UI_STATE.RECORDING;
+  btnSend.disabled   = busy || !recordedBlob;
+  btnClear.disabled  = busy;
+
+  backendSel.disabled = busy || uiState === UI_STATE.RECORDING;
+  modelSel.disabled   = busy || uiState === UI_STATE.RECORDING;
 }
 
+function setState(next, msg = "", kind = "") {
+  uiState = next;
+  if (msg) setStatus(msg, kind);
+  applyState();
+}
+// ------------------------------------
+
+// session helper
 function setSessionId(id) {
   sessionId = id || "";
   if (sessionId) localStorage.setItem(SESSION_KEY, sessionId);
 }
 
+// model select helper
 function setModelOptions(options, preferred) {
   modelSel.innerHTML = "";
   for (const name of options) {
@@ -210,10 +242,10 @@ function setModelOptions(options, preferred) {
   if (preferred && options.includes(preferred)) modelSel.value = preferred;
 }
 
-// --- retry helper ---
+// retry helper
 function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
 
-async function fetchWithRetry(url, tries = 15, delayMs = 1000) {
+async function fetchWithRetry(url, tries = 20, delayMs = 1000) {
   for (let i = 1; i <= tries; i++) {
     try {
       const r = await fetch(url);
@@ -223,26 +255,34 @@ async function fetchWithRetry(url, tries = 15, delayMs = 1000) {
   }
   throw new Error(`Failed to load ${url} after ${tries} tries`);
 }
-// -------------------
 
 async function loadModels() {
   showError("");
-  setStatus("Loading models...", "warn");
-  const r = await fetchWithRetry("/api/models", 15, 1000);
-  const data = await r.json();
-  modelCatalog = data;
+  setState(UI_STATE.LOADING_MODELS, "Loading models...", "warn");
 
-  const ollamaModels = data?.ollama?.models || [];
-  const defaultOllama = data?.ollama?.default_model || "";
-  setModelOptions(
-    ollamaModels.length ? ollamaModels : [defaultOllama || "qwen2.5:7b"],
-    defaultOllama
-  );
+  try {
+    const r = await fetchWithRetry("/api/models", 20, 1000);
+    const data = await r.json();
+    modelCatalog = data;
 
-  const opt = Array.from(backendSel.options).find(o => o.value === "openai");
-  if (opt) opt.disabled = !data?.openai?.available;
+    // default: ollama models
+    const ollamaModels = data?.ollama?.models || [];
+    const defaultOllama = data?.ollama?.default_model || "";
+    setModelOptions(
+      ollamaModels.length ? ollamaModels : [defaultOllama || "qwen2.5:7b"],
+      defaultOllama
+    );
 
-  setStatus("Ready.", "");
+    // Disable OpenAI option if not available
+    const opt = Array.from(backendSel.options).find(o => o.value === "openai");
+    if (opt) opt.disabled = !data?.openai?.available;
+
+    setState(UI_STATE.IDLE, "Ready.", "");
+  } catch (e) {
+    showError("API not ready yet. Please wait a few seconds.\n" + String(e));
+    setState(UI_STATE.ERROR, "Waiting for API...", "warn");
+    setTimeout(() => loadModels(), 2000);
+  }
 }
 
 backendSel.onchange = () => {
@@ -259,6 +299,7 @@ backendSel.onchange = () => {
       const defaultOpenAI = modelCatalog?.openai?.default_model || "gpt-5";
       setModelOptions([defaultOpenAI], defaultOpenAI);
       setStatus("OpenAI selected (billing/quota required).", "warn");
+      applyState();
       return;
     }
   }
@@ -270,13 +311,14 @@ backendSel.onchange = () => {
     defaultOllama
   );
   setStatus("Ready.", "");
+  applyState();
 };
 
+// init
 loadModels().catch(err => {
   console.error(err);
   showError(String(err));
-  setStatus("Model load failed.", "err");
-  setBusy(false);
+  setState(UI_STATE.ERROR, "Model load failed.", "err");
 });
 
 btnClear.onclick = () => {
@@ -285,13 +327,12 @@ btnClear.onclick = () => {
   previewAudio.src = "";
   replyAudio.src = "";
   resultEl.textContent = "";
-  btnSend.disabled = true;
 
   localStorage.removeItem(SESSION_KEY);
   sessionId = "";
 
   showError("");
-  setStatus("Idle (session reset).", "");
+  setState(UI_STATE.IDLE, "Idle (session reset).", "");
 };
 
 btnRecord.onclick = async () => {
@@ -306,27 +347,22 @@ btnRecord.onclick = async () => {
     mediaRecorder.onstop = () => {
       recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
       previewAudio.src = URL.createObjectURL(recordedBlob);
-      btnSend.disabled = false;
-      setStatus("Recorded. Ready to send.", "live");
+      setState(UI_STATE.RECORDED, "Recorded. Ready to send.", "live");
       stream.getTracks().forEach(t => t.stop());
     };
 
     mediaRecorder.start();
-    btnRecord.disabled = true;
-    btnStop.disabled = false;
-    setStatus("Recording...", "live");
+    setState(UI_STATE.RECORDING, "Recording...", "live");
   } catch (err) {
     console.error(err);
     showError("Mic permission / recording error. Check browser permissions.");
-    setStatus("Mic error.", "err");
+    setState(UI_STATE.ERROR, "Mic error.", "err");
   }
 };
 
 btnStop.onclick = () => {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
-    btnRecord.disabled = false;
-    btnStop.disabled = true;
   }
 };
 
@@ -334,8 +370,7 @@ btnSend.onclick = async () => {
   if (!recordedBlob) return;
 
   showError("");
-  setBusy(true);
-  setStatus("Uploading...", "warn");
+  setState(UI_STATE.UPLOADING, "Uploading...", "warn");
 
   try {
     const fd = new FormData();
@@ -346,7 +381,7 @@ btnSend.onclick = async () => {
     fd.append("backend", backendSel.value);
     fd.append("model", modelSel.value);
 
-    setStatus("Transcribing + Thinking...", "warn");
+    setState(UI_STATE.THINKING, "Transcribing + Thinking...", "warn");
     const r = await fetch(`/api/voice`, { method: "POST", body: fd });
 
     if (!r.ok) {
@@ -364,9 +399,10 @@ btnSend.onclick = async () => {
 
     const data = await r.json();
     if (data.session_id) setSessionId(data.session_id);
+
     resultEl.textContent = JSON.stringify(data, null, 2);
 
-    setStatus("Speaking...", "warn");
+    setState(UI_STATE.SPEAKING, "Speaking...", "warn");
     const tts = await fetch(`/tts/tts`, {
       method: "POST",
       headers: {"Content-Type":"application/json"},
@@ -377,15 +413,14 @@ btnSend.onclick = async () => {
     const wavBlob = await tts.blob();
     replyAudio.src = URL.createObjectURL(wavBlob);
 
-    try { await replyAudio.play(); } catch {}
+    try { await replyAudio.play(); }
+    catch { showError("Autoplay blocked by the browser. Click the play button once to allow audio."); }
 
-    setStatus(`Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`, "live");
+    setState(UI_STATE.DONE, `Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`, "live");
   } catch (err) {
     console.error(err);
     showError(String(err));
-    setStatus("Failed.", "err");
-  } finally {
-    setBusy(false);
+    setState(UI_STATE.ERROR, "Failed.", "err");
   }
 };
 </script>
