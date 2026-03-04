@@ -83,6 +83,57 @@
       white-space: pre-wrap;
     }
     .errorBox.show{ display:block; }
+
+    /* ---- Toast ---- */
+    .toastWrap{
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      z-index: 9999;
+    }
+    .toast{
+      min-width: 260px;
+      max-width: 360px;
+      border-radius: 14px;
+      border:1px solid var(--border);
+      background: rgba(0,0,0,.55);
+      box-shadow: var(--shadow);
+      padding: 10px 12px;
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+    }
+    .toast .tTitle{ font-weight: 700; font-size: 13px; margin:0; }
+    .toast .tMsg{ margin:2px 0 0 0; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
+    .toast .tX{
+      margin-left:auto;
+      border:none;
+      background: transparent;
+      color: var(--muted);
+      cursor:pointer;
+      padding: 4px 6px;
+    }
+    .toast.info{ border-color: rgba(59,130,246,.25); }
+    .toast.warn{ border-color: rgba(245,158,11,.25); }
+    .toast.err{ border-color: rgba(239,68,68,.25); }
+    .toast.ok{ border-color: rgba(34,197,94,.25); }
+
+    .smallBtn{
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+    .pill{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius: 999px;
+      border:1px solid var(--border);
+      background: rgba(0,0,0,.25);
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -96,6 +147,8 @@
           <div class="row">
             <span class="badge" id="statusBadge">Idle</span>
             <span class="muted" id="status">Ready.</span>
+            <span class="pill" id="sessionPill">session: -</span>
+            <button class="smallBtn" id="btnCopySession" title="Copy session id">Copy</button>
           </div>
           <div class="row">
             <label><b>Backend</b></label>
@@ -139,6 +192,8 @@
     </div>
   </div>
 
+  <div class="toastWrap" id="toastWrap"></div>
+
 <script>
 let mediaRecorder;
 let chunks = [];
@@ -148,6 +203,7 @@ const el = (id) => document.getElementById(id);
 const statusEl = el("status");
 const badgeEl = el("statusBadge");
 const errorBox = el("errorBox");
+const toastWrap = el("toastWrap");
 
 const resultEl = el("result");
 const previewAudio = el("audioPreview");
@@ -160,6 +216,9 @@ const btnRecord = el("btnRecord");
 const btnStop = el("btnStop");
 const btnSend = el("btnSend");
 const btnClear = el("btnClear");
+
+const sessionPill = el("sessionPill");
+const btnCopySession = el("btnCopySession");
 
 const SESSION_KEY = "voice_agent_session_id";
 let sessionId = localStorage.getItem(SESSION_KEY) || "";
@@ -195,8 +254,8 @@ function setStatus(msg, kind="") {
   statusEl.textContent = msg;
 
   if (kind === "err") setStatusBadge("err", "Error");
-  else if (kind === "warn") setStatusBadge("warn", "Working");
-  else if (kind === "live") setStatusBadge("live", "Live");
+  else if (kind === "warn") setStatusBadge("warn", msg || "Working");
+  else if (kind === "live") setStatusBadge("live", msg || "Live");
   else setStatusBadge("", "Idle");
 }
 
@@ -224,11 +283,55 @@ function setState(next, msg = "", kind = "") {
 }
 // ------------------------------------
 
+// toast helpers
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function toast(message, type="info", title="Info", ttl=4500) {
+  const elToast = document.createElement("div");
+  elToast.className = `toast ${type}`;
+  elToast.innerHTML = `
+    <div>
+      <div class="tTitle">${escapeHtml(title)}</div>
+      <div class="tMsg">${escapeHtml(message)}</div>
+    </div>
+    <button class="tX" aria-label="close">✕</button>
+  `;
+  elToast.querySelector(".tX").onclick = () => elToast.remove();
+  toastWrap.appendChild(elToast);
+  setTimeout(() => { try { elToast.remove(); } catch {} }, ttl);
+}
+
 // session helper
 function setSessionId(id) {
   sessionId = id || "";
   if (sessionId) localStorage.setItem(SESSION_KEY, sessionId);
 }
+
+function updateSessionPill() {
+  const short = sessionId ? sessionId.slice(0,8) : "-";
+  sessionPill.textContent = `session: ${short}`;
+}
+updateSessionPill();
+
+btnCopySession.onclick = async () => {
+  if (!sessionId) {
+    toast("No session id yet. Send one request first.", "warn", "Nothing to copy");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(sessionId);
+    toast("Session id copied to clipboard.", "ok", "Copied");
+  } catch {
+    toast("Clipboard blocked by browser. Copy manually:\n" + sessionId, "warn", "Clipboard blocked", 7000);
+  }
+};
 
 // model select helper
 function setModelOptions(options, preferred) {
@@ -265,7 +368,6 @@ async function loadModels() {
     const data = await r.json();
     modelCatalog = data;
 
-    // default: ollama models
     const ollamaModels = data?.ollama?.models || [];
     const defaultOllama = data?.ollama?.default_model || "";
     setModelOptions(
@@ -273,14 +375,15 @@ async function loadModels() {
       defaultOllama
     );
 
-    // Disable OpenAI option if not available
     const opt = Array.from(backendSel.options).find(o => o.value === "openai");
     if (opt) opt.disabled = !data?.openai?.available;
 
     setState(UI_STATE.IDLE, "Ready.", "");
+    toast("Models loaded.", "ok", "Ready", 2000);
   } catch (e) {
     showError("API not ready yet. Please wait a few seconds.\n" + String(e));
     setState(UI_STATE.ERROR, "Waiting for API...", "warn");
+    toast("API not ready yet. Retrying...", "warn", "Waiting", 2500);
     setTimeout(() => loadModels(), 2000);
   }
 }
@@ -295,10 +398,12 @@ backendSel.onchange = () => {
     if (!openaiAvailable) {
       showError("OpenAI not enabled (missing API key). Using Ollama.");
       backendSel.value = "ollama";
+      toast("OpenAI not enabled. Switched to Ollama.", "warn", "OpenAI disabled");
     } else {
       const defaultOpenAI = modelCatalog?.openai?.default_model || "gpt-5";
       setModelOptions([defaultOpenAI], defaultOpenAI);
       setStatus("OpenAI selected (billing/quota required).", "warn");
+      toast("OpenAI selected. Billing/quota required.", "info", "OpenAI");
       applyState();
       return;
     }
@@ -311,6 +416,7 @@ backendSel.onchange = () => {
     defaultOllama
   );
   setStatus("Ready.", "");
+  toast("Ollama selected.", "info", "Backend");
   applyState();
 };
 
@@ -319,6 +425,7 @@ loadModels().catch(err => {
   console.error(err);
   showError(String(err));
   setState(UI_STATE.ERROR, "Model load failed.", "err");
+  toast(String(err), "err", "Model load failed", 7000);
 });
 
 btnClear.onclick = () => {
@@ -330,9 +437,11 @@ btnClear.onclick = () => {
 
   localStorage.removeItem(SESSION_KEY);
   sessionId = "";
+  updateSessionPill();
 
   showError("");
   setState(UI_STATE.IDLE, "Idle (session reset).", "");
+  toast("Session cleared.", "info", "Reset");
 };
 
 btnRecord.onclick = async () => {
@@ -348,21 +457,25 @@ btnRecord.onclick = async () => {
       recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
       previewAudio.src = URL.createObjectURL(recordedBlob);
       setState(UI_STATE.RECORDED, "Recorded. Ready to send.", "live");
+      toast("Recording captured.", "ok", "Recorded", 2000);
       stream.getTracks().forEach(t => t.stop());
     };
 
     mediaRecorder.start();
     setState(UI_STATE.RECORDING, "Recording...", "live");
+    toast("Recording started.", "info", "Recording", 1500);
   } catch (err) {
     console.error(err);
     showError("Mic permission / recording error. Check browser permissions.");
     setState(UI_STATE.ERROR, "Mic error.", "err");
+    toast("Mic permission/recording error.", "err", "Mic error", 7000);
   }
 };
 
 btnStop.onclick = () => {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
+    toast("Recording stopped.", "info", "Stopped", 1500);
   }
 };
 
@@ -389,6 +502,7 @@ btnSend.onclick = async () => {
 
       if (r.status === 429 && backendSel.value === "openai") {
         showError("OpenAI quota/billing missing (HTTP 429). Switching back to Ollama.");
+        toast("OpenAI quota/billing missing (429). Switched to Ollama.", "warn", "OpenAI fallback", 6000);
         backendSel.value = "ollama";
         backendSel.onchange?.();
         throw new Error("OpenAI quota/billing missing (HTTP 429).");
@@ -399,6 +513,7 @@ btnSend.onclick = async () => {
 
     const data = await r.json();
     if (data.session_id) setSessionId(data.session_id);
+    updateSessionPill();
 
     resultEl.textContent = JSON.stringify(data, null, 2);
 
@@ -414,13 +529,18 @@ btnSend.onclick = async () => {
     replyAudio.src = URL.createObjectURL(wavBlob);
 
     try { await replyAudio.play(); }
-    catch { showError("Autoplay blocked by the browser. Click the play button once to allow audio."); }
+    catch {
+      toast("Autoplay blocked. Click play once to allow audio.", "info", "Autoplay", 6000);
+      showError("Autoplay blocked by the browser. Click the play button once to allow audio.");
+    }
 
     setState(UI_STATE.DONE, `Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`, "live");
+    toast("Done.", "ok", "Success", 2000);
   } catch (err) {
     console.error(err);
     showError(String(err));
     setState(UI_STATE.ERROR, "Failed.", "err");
+    toast(String(err), "err", "Request failed", 7000);
   }
 };
 </script>
