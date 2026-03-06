@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+requests
+faster-whisper
+numpy
+python-multipart
+pydantic
+pymongo
