@@ -1,0 +1,49 @@
+services:
+  piper:
+    image: docker-piper
+    build:
+      context: ./piper
+    ports:
+      - "5002:5002"
+    environment:
+      PIPER_VOICES_DIR: "/voices"
+      PIPER_VOICE_DE: "de_DE-thorsten-medium.onnx"
+      PIPER_VOICE_EN: "en_GB-northern_english_male-medium.onnx"
+      PIPER_VOICE_SV: "sv_SE-nst-medium.onnx"
+      PIPER_VOICE_NO: "no_NO-talesyntese-medium.onnx"
+      PIPER_VOICE_FI: "fi_FI-harri-medium.onnx"
+      PIPER_DEBUG: "0"
+    volumes:
+      - "${PIPER_VOICES_HOST_PATH}:/voices:ro"
+
+  api:
+    image: docker-api
+    build:
+      context: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL}"
+      PIPER_BASE_URL: "http://piper:5002"
+      WHISPER_MODEL: "${WHISPER_MODEL}"
+      WHISPER_COMPUTE: "${WHISPER_COMPUTE}"
+      OLLAMA_NUM_PREDICT: "${OLLAMA_NUM_PREDICT}"
+      OLLAMA_TEMPERATURE: "${OLLAMA_TEMPERATURE}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      OPENAI_MODEL: "${OPENAI_MODEL}"
+    depends_on:
+      - piper
+
+  web:
+    image: docker-web
+    build:
+      # build context must be repo root, so we point one level up
+      context: ..
+      dockerfile: docker/web/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api
+      - piper
+      

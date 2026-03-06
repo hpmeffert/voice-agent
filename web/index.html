@@ -6,9 +6,9 @@
   <title>Voice Agent</title>
   <style>
     :root{
-      --bg:#0b1020; --muted:#93a4c7; --text:#eaf0ff;
+      --bg:#0b1020; --card:#111a33; --muted:#93a4c7; --text:#eaf0ff;
       --border:rgba(255,255,255,.08);
-      --brand:#7c3aed; --err:#ef4444;
+      --brand:#7c3aed; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444;
       --shadow: 0 10px 30px rgba(0,0,0,.35);
       --radius:16px;
     }
@@ -18,46 +18,58 @@
       background: radial-gradient(1200px 800px at 20% 0%, #19244a 0%, var(--bg) 45%, #070a14 100%);
       color:var(--text);
     }
-    .wrap{ max-width: 980px; margin: 32px auto; padding: 0 16px; }
+    .wrap{ max-width: 980px; margin: 28px auto; padding: 0 16px; }
     h1{ font-size: 22px; margin: 0 0 8px 0; letter-spacing:.2px; }
     .sub{ color:var(--muted); margin:0 0 18px 0; }
     .grid{ display:grid; grid-template-columns: 1fr; gap:14px; }
     @media (min-width: 900px){ .grid{ grid-template-columns: 1.1fr .9fr; } }
-
     .card{
       background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
       border:1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
     }
-    .card .hd{
+    .hd{
       padding:14px 14px 10px 14px;
       border-bottom:1px solid var(--border);
-      display:flex; gap:10px; align-items:center; justify-content:space-between;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
     }
-    .card .bd{ padding:14px; }
+    .bd{ padding:14px; }
     .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     label{ color:var(--muted); font-size: 12px; }
-
-    select, input[type="text"]{
-      background: rgba(0,0,0,.25); color: var(--text);
-      border:1px solid var(--border); border-radius: 12px;
-      padding: 10px 12px; outline:none;
+    select{
+      background: rgba(0,0,0,.25);
+      color: var(--text);
+      border:1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      outline:none;
+      min-width: 220px;
     }
     button{
       border:1px solid var(--border);
       background: rgba(0,0,0,.25);
       color:var(--text);
-      padding: 10px 12px; border-radius: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
       cursor:pointer;
     }
     button.primary{ background: linear-gradient(90deg, var(--brand), #2563eb); border-color: rgba(255,255,255,.12); }
-    button.good{ background: linear-gradient(90deg, #16a34a, #22c55e); border-color: rgba(255,255,255,.12); }
+    button.good{ background: linear-gradient(90deg, #16a34a, var(--ok)); border-color: rgba(255,255,255,.12); }
+    button.danger{ background: linear-gradient(90deg, #b91c1c, var(--err)); border-color: rgba(255,255,255,.12); }
     button:disabled{ opacity:.45; cursor:not-allowed; }
-
     .badge{
-      font-size:12px; padding:6px 10px; border-radius:999px;
-      border:1px solid var(--border); background: rgba(0,0,0,.25); color: var(--muted);
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background: rgba(0,0,0,.25);
+      color: var(--muted);
+      user-select:none;
     }
     .badge.live{ color:#bbf7d0; border-color: rgba(34,197,94,.25); }
     .badge.warn{ color:#fde68a; border-color: rgba(245,158,11,.25); }
@@ -66,8 +78,11 @@
     pre{
       background: rgba(0,0,0,.35);
       border:1px solid var(--border);
-      padding:12px; border-radius: 14px;
-      overflow:auto; max-height: 320px;
+      padding:12px;
+      border-radius: 14px;
+      overflow:auto;
+      max-height: 380px;
+      margin:0;
     }
     audio{ width:100%; margin-top: 8px; }
     .muted{ color:var(--muted); font-size:12px; }
@@ -83,88 +98,6 @@
       white-space: pre-wrap;
     }
     .errorBox.show{ display:block; }
-
-    /* ---- Toast ---- */
-    .toastWrap{
-      position: fixed;
-      right: 16px;
-      bottom: 16px;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      z-index: 9999;
-    }
-    .toast{
-      min-width: 260px;
-      max-width: 360px;
-      border-radius: 14px;
-      border:1px solid var(--border);
-      background: rgba(0,0,0,.55);
-      box-shadow: var(--shadow);
-      padding: 10px 12px;
-      display:flex;
-      gap:10px;
-      align-items:flex-start;
-    }
-    .toast .tTitle{ font-weight: 700; font-size: 13px; margin:0; }
-    .toast .tMsg{ margin:2px 0 0 0; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
-    .toast .tX{
-      margin-left:auto;
-      border:none;
-      background: transparent;
-      color: var(--muted);
-      cursor:pointer;
-      padding: 4px 6px;
-    }
-    .toast.info{ border-color: rgba(59,130,246,.25); }
-    .toast.warn{ border-color: rgba(245,158,11,.25); }
-    .toast.err{ border-color: rgba(239,68,68,.25); }
-    .toast.ok{ border-color: rgba(34,197,94,.25); }
-
-    .smallBtn{
-      padding: 8px 10px;
-      border-radius: 10px;
-      font-size: 12px;
-    }
-    .pill{
-      font-size:12px;
-      padding:6px 10px;
-      border-radius: 999px;
-      border:1px solid var(--border);
-      background: rgba(0,0,0,.25);
-      color: var(--muted);
-    }
-
-    /* ---- Animated dots ---- */
-    .dots::after{
-      content:"";
-      display:inline-block;
-      width: 1.5em;
-      text-align:left;
-      animation: dots 1.1s infinite steps(4, end);
-    }
-    @keyframes dots{
-      0%{ content:""; }
-      25%{ content:"."; }
-      50%{ content:".."; }
-      75%{ content:"..."; }
-      100%{ content:""; }
-    }
-
-    /* Settings box */
-    .settings{
-      border:1px solid var(--border);
-      background: rgba(0,0,0,.18);
-      border-radius: 14px;
-      padding: 10px 12px;
-      margin-top: 12px;
-    }
-    .toggle{
-      display:flex; align-items:center; gap:8px;
-      font-size: 12px; color: var(--muted);
-      user-select:none;
-    }
-    .toggle input{ transform: translateY(1px); }
   </style>
 </head>
 <body>
@@ -178,15 +111,15 @@
           <div class="row">
             <span class="badge" id="statusBadge">Idle</span>
             <span class="muted" id="status">Ready.</span>
-            <span class="pill" id="sessionPill">session: -</span>
-            <button class="smallBtn" id="btnCopySession" title="Copy session id">Copy</button>
           </div>
+
           <div class="row">
             <label><b>Backend</b></label>
             <select id="backend">
               <option value="ollama" selected>Ollama (local)</option>
               <option value="openai">OpenAI (cloud)</option>
             </select>
+
             <label><b>Model</b></label>
             <select id="model"></select>
           </div>
@@ -200,15 +133,6 @@
             <button id="btnClear">🧹 Clear</button>
           </div>
 
-          <div class="settings">
-            <div class="row">
-              <label class="toggle"><input type="checkbox" id="optAutoplay" checked> Autoplay</label>
-              <label class="toggle"><input type="checkbox" id="optTTS" checked> TTS enabled</label>
-              <label class="toggle"><input type="checkbox" id="optRetry" checked> Auto-retry transient errors</label>
-            </div>
-            <div class="muted">Autoplay may be blocked by browser. Retry helps with 502/503/504 during warm start.</div>
-          </div>
-
           <div class="errorBox" id="errorBox"></div>
 
           <h3>Captured audio</h3>
@@ -216,7 +140,7 @@
 
           <h3>Spoken reply (Piper)</h3>
           <audio id="audioReply" controls></audio>
-          <div class="muted">Tip: If autoplay is blocked, click the play button once to allow audio.</div>
+          <div class="muted">Tip: If autoplay is blocked, click play once to grant permission.</div>
         </div>
       </div>
 
@@ -232,8 +156,6 @@
     </div>
   </div>
 
-  <div class="toastWrap" id="toastWrap"></div>
-
 <script>
 let mediaRecorder;
 let chunks = [];
@@ -241,146 +163,47 @@ let recordedBlob = null;
 
 const el = (id) => document.getElementById(id);
 const statusEl = el("status");
-const badgeEl = el("statusBadge");
+const badgeEl  = el("statusBadge");
 const errorBox = el("errorBox");
-const toastWrap = el("toastWrap");
-
 const resultEl = el("result");
 const previewAudio = el("audioPreview");
 const replyAudio = el("audioReply");
 
-const backendSel = el("backend");
-const modelSel = el("model");
-
 const btnRecord = el("btnRecord");
-const btnStop = el("btnStop");
-const btnSend = el("btnSend");
-const btnClear = el("btnClear");
+const btnStop   = el("btnStop");
+const btnSend   = el("btnSend");
+const btnClear  = el("btnClear");
 
-const sessionPill = el("sessionPill");
-const btnCopySession = el("btnCopySession");
-
-const optAutoplay = el("optAutoplay");
-const optTTS = el("optTTS");
-const optRetry = el("optRetry");
+const backendSel = el("backend");
+const modelSel   = el("model");
 
 const SESSION_KEY = "voice_agent_session_id";
 let sessionId = localStorage.getItem(SESSION_KEY) || "";
 
 let modelCatalog = null;
 
-// ---------- UI state machine ----------
-const UI_STATE = {
-  IDLE: "idle",
-  LOADING_MODELS: "loading_models",
-  RECORDING: "recording",
-  RECORDED: "recorded",
-  UPLOADING: "uploading",
-  THINKING: "thinking",
-  SPEAKING: "speaking",
-  DONE: "done",
-  ERROR: "error",
-};
-
-let uiState = UI_STATE.IDLE;
-
-function setStatusBadge(kind, text) {
+function setStatus(msg) { statusEl.textContent = msg; }
+function setBadge(kind, text) {
   badgeEl.className = "badge" + (kind ? " " + kind : "");
   badgeEl.textContent = text || "Idle";
 }
-
 function showError(msg) {
   errorBox.textContent = msg || "";
   errorBox.classList.toggle("show", !!msg);
 }
-
-function setStatus(msg, kind="") {
-  // For thinking/speaking: add animated dots class to the status span
-  statusEl.classList.toggle("dots", msg.includes("Thinking") || msg.includes("Speaking") || msg.includes("Loading"));
-
-  statusEl.textContent = msg;
-
-  if (kind === "err") setStatusBadge("err", "Error");
-  else if (kind === "warn") setStatusBadge("warn", msg || "Working");
-  else if (kind === "live") setStatusBadge("live", msg || "Live");
-  else setStatusBadge("", "Idle");
-}
-
-function applyState() {
-  const busy = [
-    UI_STATE.LOADING_MODELS,
-    UI_STATE.UPLOADING,
-    UI_STATE.THINKING,
-    UI_STATE.SPEAKING,
-  ].includes(uiState);
-
-  btnRecord.disabled = busy || uiState === UI_STATE.RECORDING;
-  btnStop.disabled   = busy || uiState !== UI_STATE.RECORDING;
-  btnSend.disabled   = busy || !recordedBlob;
-  btnClear.disabled  = busy;
-
-  backendSel.disabled = busy || uiState === UI_STATE.RECORDING;
-  modelSel.disabled   = busy || uiState === UI_STATE.RECORDING;
-}
-
-function setState(next, msg = "", kind = "") {
-  uiState = next;
-  if (msg) setStatus(msg, kind);
-  applyState();
-}
-// ------------------------------------
-
-// toast helpers
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-function toast(message, type="info", title="Info", ttl=4500) {
-  const elToast = document.createElement("div");
-  elToast.className = `toast ${type}`;
-  elToast.innerHTML = `
-    <div>
-      <div class="tTitle">${escapeHtml(title)}</div>
-      <div class="tMsg">${escapeHtml(message)}</div>
-    </div>
-    <button class="tX" aria-label="close">✕</button>
-  `;
-  elToast.querySelector(".tX").onclick = () => elToast.remove();
-  toastWrap.appendChild(elToast);
-  setTimeout(() => { try { elToast.remove(); } catch {} }, ttl);
-}
-
-// session helper
 function setSessionId(id) {
   sessionId = id || "";
   if (sessionId) localStorage.setItem(SESSION_KEY, sessionId);
 }
-
-function updateSessionPill() {
-  const short = sessionId ? sessionId.slice(0,8) : "-";
-  sessionPill.textContent = `session: ${short}`;
+function setBusy(isBusy) {
+  btnRecord.disabled = isBusy;
+  btnStop.disabled   = isBusy || !(mediaRecorder && mediaRecorder.state !== "inactive");
+  btnSend.disabled   = isBusy || !recordedBlob;
+  btnClear.disabled  = isBusy;
+  backendSel.disabled = isBusy;
+  modelSel.disabled   = isBusy;
 }
-updateSessionPill();
 
-btnCopySession.onclick = async () => {
-  if (!sessionId) {
-    toast("No session id yet. Send one request first.", "warn", "Nothing to copy");
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(sessionId);
-    toast("Session id copied to clipboard.", "ok", "Copied");
-  } catch {
-    toast("Clipboard blocked by browser. Copy manually:\n" + sessionId, "warn", "Clipboard blocked", 7000);
-  }
-};
-
-// model select helper
 function setModelOptions(options, preferred) {
   modelSel.innerHTML = "";
   for (const name of options) {
@@ -392,13 +215,12 @@ function setModelOptions(options, preferred) {
   if (preferred && options.includes(preferred)) modelSel.value = preferred;
 }
 
-// retry helper
 function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
 
-async function fetchWithRetry(url, tries = 20, delayMs = 1000) {
+async function fetchWithRetry(url, tries = 15, delayMs = 1000) {
   for (let i = 1; i <= tries; i++) {
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { cache: "no-store" });
       if (r.ok) return r;
     } catch {}
     await sleep(delayMs);
@@ -407,72 +229,56 @@ async function fetchWithRetry(url, tries = 20, delayMs = 1000) {
 }
 
 async function loadModels() {
+  setBadge("warn", "Loading");
+  setStatus("Loading models...");
   showError("");
-  setState(UI_STATE.LOADING_MODELS, "Loading models", "warn");
 
-  try {
-    const r = await fetchWithRetry("/api/models", 20, 1000);
-    const data = await r.json();
-    modelCatalog = data;
+  const r = await fetchWithRetry("/api/models", 20, 1000);
+  const data = await r.json();
+  modelCatalog = data;
 
-    const ollamaModels = data?.ollama?.models || [];
-    const defaultOllama = data?.ollama?.default_model || "";
-    setModelOptions(
-      ollamaModels.length ? ollamaModels : [defaultOllama || "qwen2.5:7b"],
-      defaultOllama
-    );
+  // Populate Ollama models by default
+  const ollamaModels = data?.ollama?.models || [];
+  const defaultOllama = data?.ollama?.default_model || "qwen2.5:3b";
 
-    const opt = Array.from(backendSel.options).find(o => o.value === "openai");
-    if (opt) opt.disabled = !data?.openai?.available;
+  setModelOptions(ollamaModels.length ? ollamaModels : [defaultOllama], defaultOllama);
 
-    setState(UI_STATE.IDLE, "Ready.", "");
-    toast("Models loaded.", "ok", "Ready", 2000);
-  } catch (e) {
-    showError("API not ready yet. Please wait a few seconds.\n" + String(e));
-    setState(UI_STATE.ERROR, "Waiting for API", "warn");
-    toast("API not ready yet. Retrying...", "warn", "Waiting", 2500);
-    setTimeout(() => loadModels(), 2000);
-  }
+  // Disable OpenAI option if not available
+  const openaiOpt = Array.from(backendSel.options).find(o => o.value === "openai");
+  if (openaiOpt) openaiOpt.disabled = !data?.openai?.available;
+
+  setBadge("", "Idle");
+  setStatus("Ready.");
 }
 
 backendSel.onchange = () => {
   if (!modelCatalog) return;
 
-  showError("");
-
   if (backendSel.value === "openai") {
     const openaiAvailable = !!modelCatalog?.openai?.available;
     if (!openaiAvailable) {
-      showError("OpenAI not enabled (missing API key). Using Ollama.");
+      setStatus("OpenAI not enabled (missing API key). Using Ollama.");
       backendSel.value = "ollama";
-      toast("OpenAI not enabled. Switched to Ollama.", "warn", "OpenAI disabled");
     } else {
       const defaultOpenAI = modelCatalog?.openai?.default_model || "gpt-5";
       setModelOptions([defaultOpenAI], defaultOpenAI);
-      setStatus("OpenAI selected (billing/quota required).", "warn");
-      toast("OpenAI selected. Billing/quota required.", "info", "OpenAI");
-      applyState();
+      setStatus("OpenAI selected (billing/quota required).");
       return;
     }
   }
 
+  // back to Ollama
   const ollamaModels = modelCatalog?.ollama?.models || [];
-  const defaultOllama = modelCatalog?.ollama?.default_model || "";
-  setModelOptions(
-    ollamaModels.length ? ollamaModels : [defaultOllama || "qwen2.5:7b"],
-    defaultOllama
-  );
-  setStatus("Ready.", "");
-  toast("Ollama selected.", "info", "Backend");
-  applyState();
+  const defaultOllama = modelCatalog?.ollama?.default_model || "qwen2.5:3b";
+  setModelOptions(ollamaModels.length ? ollamaModels : [defaultOllama], defaultOllama);
+  setStatus("Ready.");
 };
 
-// init
 loadModels().catch(err => {
   console.error(err);
+  setBadge("err", "Error");
+  setStatus("Model load failed (see console).");
   showError(String(err));
-  setState(UI_STATE.ERROR, "Model load failed.", "err");
-  toast(String(err), "err", "Model load failed", 7000);
 });
 
 btnClear.onclick = () => {
@@ -484,98 +290,112 @@ btnClear.onclick = () => {
 
   localStorage.removeItem(SESSION_KEY);
   sessionId = "";
-  updateSessionPill();
 
+  btnSend.disabled = true;
+  setBadge("", "Idle");
+  setStatus("Idle (session reset)");
   showError("");
-  setState(UI_STATE.IDLE, "Idle (session reset).", "");
-  toast("Session cleared.", "info", "Reset");
 };
 
 btnRecord.onclick = async () => {
-  showError("");
   try {
+    showError("");
+    setBadge("live", "Rec");
+    setStatus("Requesting microphone...");
+
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     chunks = [];
     recordedBlob = null;
 
     mediaRecorder = new MediaRecorder(stream);
     mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+
     mediaRecorder.onstop = () => {
       recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
       previewAudio.src = URL.createObjectURL(recordedBlob);
-      setState(UI_STATE.RECORDED, "Recorded. Ready to send.", "live");
-      toast("Recording captured.", "ok", "Recorded", 2000);
+      btnSend.disabled = false;
+
+      setBadge("warn", "Ready");
+      setStatus("Recorded. Ready to send.");
       stream.getTracks().forEach(t => t.stop());
     };
 
     mediaRecorder.start();
-    setState(UI_STATE.RECORDING, "Recording...", "live");
-    toast("Recording started.", "info", "Recording", 1500);
+    btnRecord.disabled = true;
+    btnStop.disabled = false;
+    setStatus("Recording...");
   } catch (err) {
     console.error(err);
-    showError("Mic permission / recording error. Check browser permissions.");
-    setState(UI_STATE.ERROR, "Mic error.", "err");
-    toast("Mic permission/recording error.", "err", "Mic error", 7000);
+    setBadge("err", "Error");
+    setStatus("Mic permission / recording error. Check browser permissions.");
+    showError(`Mic error: ${err?.name || ""} ${err?.message || err}`);
   }
 };
 
 btnStop.onclick = () => {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
-    toast("Recording stopped.", "info", "Stopped", 1500);
+    btnRecord.disabled = false;
+    btnStop.disabled = true;
   }
 };
-
-function isTransientStatus(status) {
-  return [408, 429, 500, 502, 503, 504].includes(status);
-}
-
-async function postVoiceOnce() {
-  const fd = new FormData();
-  const filename = recordedBlob.type.includes("ogg") ? "audio.ogg" : "audio.webm";
-  fd.append("file", recordedBlob, filename);
-  fd.append("return_audio", "0");
-  fd.append("session_id", sessionId);
-  fd.append("backend", backendSel.value);
-  fd.append("model", modelSel.value);
-
-  const r = await fetch(`/api/voice`, { method: "POST", body: fd });
-  return r;
-}
 
 btnSend.onclick = async () => {
   if (!recordedBlob) return;
 
+  setBusy(true);
+  setBadge("warn", "Work");
+  setStatus("Uploading...");
   showError("");
-  setState(UI_STATE.UPLOADING, "Uploading", "warn");
-
-  let attempts = 0;
-  const maxAttempts = optRetry.checked ? 2 : 1;
 
   try {
-    while (attempts < maxAttempts) {
-      attempts += 1;
+    async function buildFormData() {
+      const fd = new FormData();
+      const filename = recordedBlob.type.includes("ogg") ? "audio.ogg" : "audio.webm";
+      fd.append("file", recordedBlob, filename);
+      fd.append("return_audio", "0");
+      fd.append("session_id", sessionId);
+      fd.append("backend", backendSel.value);
+      fd.append("model", modelSel.value);
+      return fd;
+    }
 
-      setState(UI_STATE.THINKING, attempts > 1 ? `Retry ${attempts}/${maxAttempts} - Thinking` : "Transcribing + Thinking", "warn");
-      const r = await postVoiceOnce();
+    let triedFallback = false;
+
+    while (true) {
+      const fd = await buildFormData();
+      setStatus("Transcribing + Thinking...");
+      const r = await fetch(`/api/voice`, { method: "POST", body: fd });
 
       if (!r.ok) {
         const txt = await r.text();
+        let errObj = null;
+        try { errObj = JSON.parse(txt); } catch {}
 
-        // OpenAI quota fallback
+        // OpenAI quota/billing
         if (r.status === 429 && backendSel.value === "openai") {
-          showError("OpenAI quota/billing missing (HTTP 429). Switching back to Ollama.");
-          toast("OpenAI quota/billing missing (429). Switched to Ollama.", "warn", "OpenAI fallback", 6000);
+          setStatus("OpenAI quota/billing missing (429). Switching to Ollama.");
           backendSel.value = "ollama";
           backendSel.onchange?.();
+          showError("OpenAI quota/billing missing. Switched to Ollama.");
           throw new Error("OpenAI quota/billing missing (HTTP 429).");
         }
 
-        // retry transient if enabled
-        if (optRetry.checked && attempts < maxAttempts && isTransientStatus(r.status)) {
-          toast(`Transient error (${r.status}). Retrying...`, "warn", "Retry", 2500);
-          await sleep(800);
-          continue;
+        // ✅ Ollama insufficient memory -> auto switch to qwen2.5:3b and retry once
+        const code = errObj?.code || "";
+        if (!triedFallback && (r.status === 507 || code === "insufficient_memory")) {
+          triedFallback = true;
+
+          backendSel.value = "ollama";
+          backendSel.onchange?.();
+
+          const safeModel = "qwen2.5:3b";
+          modelSel.value = safeModel;
+
+          setStatus("Model too big for RAM. Auto-switching to qwen2.5:3b and retrying...");
+          showError("Selected model needs more RAM. Switched to qwen2.5:3b and retrying.");
+
+          continue; // retry loop
         }
 
         throw new Error(`API /voice failed: ${r.status} ${txt}`);
@@ -583,16 +403,11 @@ btnSend.onclick = async () => {
 
       const data = await r.json();
       if (data.session_id) setSessionId(data.session_id);
-      updateSessionPill();
       resultEl.textContent = JSON.stringify(data, null, 2);
 
-      if (!optTTS.checked) {
-        setState(UI_STATE.DONE, `Done ✅ (TTS disabled)`, "live");
-        toast("Done (TTS disabled).", "ok", "Success", 2000);
-        return;
-      }
+      setBadge("live", "Speak");
+      setStatus("Speaking...");
 
-      setState(UI_STATE.SPEAKING, "Speaking", "warn");
       const tts = await fetch(`/tts/tts`, {
         method: "POST",
         headers: {"Content-Type":"application/json"},
@@ -602,26 +417,21 @@ btnSend.onclick = async () => {
 
       const wavBlob = await tts.blob();
       replyAudio.src = URL.createObjectURL(wavBlob);
+      try { await replyAudio.play(); } catch {}
 
-      if (optAutoplay.checked) {
-        try { await replyAudio.play(); }
-        catch {
-          toast("Autoplay blocked. Click play once to allow audio.", "info", "Autoplay", 6000);
-          showError("Autoplay blocked by the browser. Click the play button once to allow audio.");
-        }
-      } else {
-        toast("Autoplay disabled in settings.", "info", "Autoplay");
-      }
-
-      setState(UI_STATE.DONE, `Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`, "live");
-      toast("Done.", "ok", "Success", 2000);
-      return;
+      setBadge("warn", "Ready");
+      setStatus(`Done ✅ (session ${sessionId ? sessionId.slice(0,8) : "?"})`);
+      showError("");
+      break;
     }
+
   } catch (err) {
     console.error(err);
+    setBadge("err", "Error");
+    setStatus("Error");
     showError(String(err));
-    setState(UI_STATE.ERROR, "Failed.", "err");
-    toast(String(err), "err", "Request failed", 7000);
+  } finally {
+    setBusy(false);
   }
 };
 </script>
