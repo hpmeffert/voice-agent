@@ -1,0 +1,70 @@
+name: voice-agent-v6
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  piper:
+    build:
+      context: ./piper
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    environment:
+      VOICE_DE: "/voices/de_DE-thorsten-medium.onnx"
+      VOICE_EN: "/voices/en_GB-northern_english_male-medium.onnx"
+      VOICE_SV: "/voices/sv_SE-nst-medium.onnx"
+      VOICE_NO: "/voices/no_NO-talesyntese-medium.onnx"
+      VOICE_FI: "/voices/fi_FI-harri-medium.onnx"
+    volumes:
+      - ${PIPER_VOICES_HOST_PATH:-$HOME/models/piper-voices}:/voices:ro
+
+  api:
+    build:
+      context: ./api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen2.5:7b}"
+      PIPER_BASE_URL: "http://piper:5002"
+      WHISPER_MODEL: "${WHISPER_MODEL:-small}"
+      WHISPER_COMPUTE: "${WHISPER_COMPUTE:-int8}"
+      OLLAMA_NUM_PREDICT: "${OLLAMA_NUM_PREDICT:-160}"
+      OLLAMA_TEMPERATURE: "${OLLAMA_TEMPERATURE:-0.3}"
+      OLLAMA_NUM_CTX: "${OLLAMA_NUM_CTX:-2048}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5}"
+      MONGO_URL: "${MONGO_URL:-mongodb://mongo:27017/voice_agent}"
+      MESSAGE_RETENTION_DAYS: "${MESSAGE_RETENTION_DAYS:-30}"
+      SESSION_RETENTION_DAYS: "${SESSION_RETENTION_DAYS:-90}"
+      MAX_AUDIO_BYTES: "${MAX_AUDIO_BYTES:-26214400}"
+      MAX_TEXT_CHARS: "${MAX_TEXT_CHARS:-8000}"
+    depends_on:
+      - mongo
+      - piper
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  web:
+    build:
+      context: ../..
+      dockerfile: v6/docker/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api
+      - piper
+
+volumes:
+  mongo_data:
