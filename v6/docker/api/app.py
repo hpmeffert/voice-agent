@@ -71,7 +71,7 @@ def session_expiry() -> datetime:
 def ensure_ready() -> None:
     if whisper is None:
         raise RuntimeError("Whisper model not initialized")
-    if not all([mongo_client, mongo_db, users_col, sessions_col, messages_col]):
+    if mongo_client is None or mongo_db is None or users_col is None or sessions_col is None or messages_col is None:
         raise RuntimeError("MongoDB not initialized")
 
 
