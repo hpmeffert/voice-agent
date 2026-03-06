@@ -1,0 +1,72 @@
+# TEAM QUICKSTART - V6 (macOS, Mongo persistence)
+
+This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
+
+## What V6 adds
+- MongoDB-backed persistence for `users`, `sessions`, `messages`
+- TTL retention:
+  - `MESSAGE_RETENTION_DAYS` (default `30`)
+  - `SESSION_RETENTION_DAYS` (default `90`)
+- Delete endpoints:
+  - `POST /api/session/delete`
+  - `POST /api/user/delete`
+- Session history endpoint:
+  - `GET /api/session/{session_id}?user_id=...&limit=20`
+
+## Prerequisites
+- Docker Desktop on macOS
+- Host Ollama running on `http://host.docker.internal:11434`
+- Piper voices on host, default path `~/models/piper-voices`
+
+## Run V6
+```bash
+docker compose -f v6/docker/compose.dev.yml up -d --build
+```
+
+Open UI:
+- [http://localhost:8080](http://localhost:8080)
+
+## Health checks
+```bash
+curl -s http://localhost:8080/api/health
+curl -s http://localhost:8080/api/models
+```
+
+## Mongo check
+```bash
+docker compose -f v6/docker/compose.dev.yml exec mongo mongosh --eval 'db.runCommand({ ping: 1 })'
+```
+
+## Session persistence check
+1. Call `/api/voice` with a fixed `session_id` + `user_id` twice.
+2. Query `/api/session/{session_id}` and verify message count grows.
+
+Example JSON mode call (`return_audio=0`):
+```bash
+curl -s -X POST http://localhost:8080/api/voice \
+  -F "file=@/path/to/audio.webm" \
+  -F "return_audio=0" \
+  -F "session_id=test-session-1" \
+  -F "user_id=test-user-1" \
+  -F "backend=ollama"
+```
+
+History query:
+```bash
+curl -s "http://localhost:8080/api/session/test-session-1?user_id=test-user-1&limit=20"
+```
+
+## Delete API examples
+Delete one session:
+```bash
+curl -s -X POST http://localhost:8080/api/session/delete \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":"test-user-1","session_id":"test-session-1"}'
+```
+
+Delete a whole user:
+```bash
+curl -s -X POST http://localhost:8080/api/user/delete \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":"test-user-1"}'
+```
