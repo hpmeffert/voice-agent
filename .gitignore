@@ -22,3 +22,5 @@ voices/
 # audio outputs
 *.wav
 /tmp/
+# build/output artifacts
+output/
