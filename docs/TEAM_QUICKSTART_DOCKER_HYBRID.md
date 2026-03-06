@@ -169,6 +169,22 @@ Voice model not found
 docker compose -f docker/compose.sidecar.yml exec piper ls -la /voices | head
 
 
+
+## Azure Windows Server: Ollama Port Workaround (11434 may be blocked)
+
+On some Azure Windows Server images, port **11434** can be occupied/reserved by a Windows service (e.g. `iphlpsvc` / IP Helper).
+Symptoms:
+- `ollama serve` fails to bind on 127.0.0.1:11434
+- API shows empty model list (`models: []`)
+- `/voice` fails with connection errors to Ollama
+
+### Fix: run Ollama on port 11435
+1) Start Ollama on **11435** (host):
+```bat
+set OLLAMA_HOST=http://127.0.0.1:11435
+"C:\Users\Demo\AppData\Local\Programs\Ollama\ollama.exe" serve
+
+
 ⸻
 
 License separation note
