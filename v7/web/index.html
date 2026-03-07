@@ -349,6 +349,10 @@
           </div>
 
           <div class="controlGrid">
+            <label class="muted">Listen Mode
+              <input id="listenMode" type="checkbox" />
+            </label>
+
             <label class="muted">Auto-stop on silence
               <input id="autoStop" type="checkbox" checked />
             </label>
@@ -359,6 +363,10 @@
 
             <label class="muted">Silence threshold (ms)
               <input id="silenceMs" type="number" min="300" max="5000" step="100" value="1100" />
+            </label>
+
+            <label class="muted">Voice threshold (RMS)
+              <input id="voiceThreshold" type="number" min="0.001" max="0.200" step="0.001" value="0.012" />
             </label>
 
             <label class="muted">Max recording seconds
@@ -472,8 +480,12 @@ let recordStartAt = 0;
 let speechStartedAt = 0;
 let lastVoiceAt = 0;
 let stopReason = "manual";
+let isReplyPlaying = false;
+let listenAutoStartTimer = null;
+let settingsSaveTimer = null;
+let applyingUserSettings = false;
 
-const VOICE_RMS_THRESHOLD = 0.012;
+const DEFAULT_VOICE_RMS_THRESHOLD = 0.012;
 const MIN_SPEECH_MS = 250;
 const NO_SPEECH_TIMEOUT_MS = 8000;
 
@@ -531,6 +543,8 @@ const protocolStatusEl = el("protocolStatus");
 const autoStopChk = el("autoStop");
 const autoSendChk = el("autoSend");
 const silenceMsInput = el("silenceMs");
+const listenModeChk = el("listenMode");
+const voiceThresholdInput = el("voiceThreshold");
 const maxRecordSecInput = el("maxRecordSec");
 
 const SESSION_KEY = "voice_agent_session_id";
@@ -549,7 +563,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v7.0.0";
+let uiVersionText = "v7.1.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 
@@ -638,7 +652,7 @@ function setSessionId(id) {
 function setUserId(id) {
   userId = id || userId;
   if (userId) localStorage.setItem(USER_KEY, userId);
-  loadUserPrefs();
+  loadUserProfile();
   refreshIdentityPills();
 }
 function setBusy(isBusy) {
@@ -652,10 +666,13 @@ function setBusy(isBusy) {
   crmExportToggle.disabled = isBusy || !crmExportGlobalEnabled;
   autoStopChk.disabled = isBusy;
   autoSendChk.disabled = isBusy || !autoStopChk.checked;
+  listenModeChk.disabled = isBusy;
   silenceMsInput.disabled = isBusy || !autoStopChk.checked;
+  voiceThresholdInput.disabled = isBusy || !autoStopChk.checked;
   maxRecordSecInput.disabled = isBusy || !autoStopChk.checked;
   updateExportUi();
   updateProtocolUi();
+  syncHandsfreeControls();
 }
 
 function updateExportUi() {
@@ -765,17 +782,50 @@ document.addEventListener("keydown", (ev) => {
 });
 
 function syncHandsfreeControls() {
+  const listenMode = !!listenModeChk.checked;
+  if (listenMode) {
+    autoStopChk.checked = true;
+    autoSendChk.checked = true;
+  }
   const enabled = !!autoStopChk.checked;
-  autoSendChk.disabled = uiBusy || !enabled;
+  autoStopChk.disabled = uiBusy || listenMode;
+  autoSendChk.disabled = uiBusy || listenMode || !enabled;
   silenceMsInput.disabled = uiBusy || !enabled;
+  voiceThresholdInput.disabled = uiBusy || !enabled;
   maxRecordSecInput.disabled = uiBusy || !enabled;
 }
 
 autoStopChk.onchange = () => {
+  if (listenModeChk.checked) {
+    autoStopChk.checked = true;
+    autoSendChk.checked = true;
+    return;
+  }
   if (!autoStopChk.checked) {
     autoSendChk.checked = false;
   }
   syncHandsfreeControls();
+};
+
+listenModeChk.onchange = () => {
+  syncHandsfreeControls();
+  if (applyingUserSettings) return;
+  queueSaveUserSettings({ listen_mode_default: !!listenModeChk.checked });
+  scheduleListenModeAutoStart("listen-mode-toggle");
+};
+
+silenceMsInput.onchange = () => {
+  const val = Math.max(300, Math.min(5000, Number(silenceMsInput.value || 1100)));
+  silenceMsInput.value = String(Math.round(val));
+  if (applyingUserSettings) return;
+  queueSaveUserSettings({ silence_ms: Math.round(val) });
+};
+
+voiceThresholdInput.onchange = () => {
+  const val = Math.max(0.001, Math.min(0.2, Number(voiceThresholdInput.value || DEFAULT_VOICE_RMS_THRESHOLD)));
+  voiceThresholdInput.value = val.toFixed(3);
+  if (applyingUserSettings) return;
+  queueSaveUserSettings({ threshold: val });
 };
 
 function setModelOptions(options, preferred) {
@@ -901,7 +951,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v7.0.0";
+    const ver = cfg?.ui?.version || "v7.1.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
   } catch (_) {
@@ -909,7 +959,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v7.0.0";
+    uiVersionText = "v7.1.0";
   }
   await loadWhoAmI();
   recomputeCrmExportEnabled();
@@ -935,16 +985,7 @@ async function loadWhoAmI() {
 }
 
 async function loadUserPrefs() {
-  if (!userId) return;
-  try {
-    const r = await fetchWithRetry(`/api/user/prefs?user_id=${encodeURIComponent(userId)}`, 12, 300);
-    const data = await r.json();
-    crmExportUserEnabled = data.crm_export_enabled !== false;
-  } catch (_) {
-    crmExportUserEnabled = true;
-  }
-  recomputeCrmExportEnabled();
-  updateExportUi();
+  await loadUserProfile();
 }
 
 async function saveUserPrefs(nextEnabled) {
@@ -964,6 +1005,61 @@ async function saveUserPrefs(nextEnabled) {
   crmExportUserEnabled = data.crm_export_enabled !== false;
   recomputeCrmExportEnabled();
   updateExportUi();
+}
+
+async function loadUserProfile() {
+  if (!userId) return;
+  try {
+    const r = await fetchWithRetry(`/api/user/${encodeURIComponent(userId)}`, 12, 300);
+    const data = await r.json();
+    crmExportUserEnabled = data?.prefs?.crm_export_enabled !== false;
+
+    const settings = data?.settings || {};
+    applyingUserSettings = true;
+    listenModeChk.checked = !!settings.listen_mode_default;
+    silenceMsInput.value = String(Number(settings.silence_ms || 1100));
+    const nextThreshold = Number(settings.threshold || DEFAULT_VOICE_RMS_THRESHOLD);
+    voiceThresholdInput.value = Number.isFinite(nextThreshold) ? nextThreshold.toFixed(3) : "0.012";
+    applyingUserSettings = false;
+  } catch (_) {
+    crmExportUserEnabled = true;
+  }
+  recomputeCrmExportEnabled();
+  updateExportUi();
+  syncHandsfreeControls();
+  scheduleListenModeAutoStart("profile-load");
+}
+
+async function saveUserSettings(patch) {
+  if (!userId) return;
+  const resp = await fetch("/api/user/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, ...patch }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Failed to save user settings: ${resp.status}`);
+  }
+  const data = await resp.json();
+  const settings = data?.settings || {};
+  applyingUserSettings = true;
+  listenModeChk.checked = !!settings.listen_mode_default;
+  silenceMsInput.value = String(Number(settings.silence_ms || 1100));
+  const nextThreshold = Number(settings.threshold || DEFAULT_VOICE_RMS_THRESHOLD);
+  voiceThresholdInput.value = Number.isFinite(nextThreshold) ? nextThreshold.toFixed(3) : "0.012";
+  applyingUserSettings = false;
+}
+
+function queueSaveUserSettings(patch) {
+  if (settingsSaveTimer) clearTimeout(settingsSaveTimer);
+  settingsSaveTimer = setTimeout(async () => {
+    try {
+      await saveUserSettings(patch);
+      syncHandsfreeControls();
+    } catch (err) {
+      showError(String(err));
+    }
+  }, 250);
 }
 
 backendSel.onchange = () => {
@@ -988,14 +1084,16 @@ backendSel.onchange = () => {
   setStatus("Listening");
 };
 
-loadModels().catch((err) => {
-  console.error(err);
-  setBadge("err", "Error");
-  setStatus("Listening");
-  showError(String(err));
-});
-loadConfig();
-loadUserPrefs();
+loadModels()
+  .then(() => loadConfig())
+  .then(() => loadUserProfile())
+  .then(() => scheduleListenModeAutoStart("init"))
+  .catch((err) => {
+    console.error(err);
+    setBadge("err", "Error");
+    setStatus("Listening");
+    showError(String(err));
+  });
 
 adminTokenSave.onclick = async () => {
   adminToken = (adminTokenInput.value || "").trim();
@@ -1014,6 +1112,18 @@ adminTokenInput.addEventListener("keydown", async (ev) => {
     ev.preventDefault();
     adminTokenSave.onclick();
   }
+});
+
+replyAudio.addEventListener("ended", () => {
+  isReplyPlaying = false;
+  setBadge("", "Idle");
+  setStatus("Listening");
+  scheduleListenModeAutoStart("tts-ended");
+});
+
+replyAudio.addEventListener("pause", () => {
+  if (replyAudio.ended) return;
+  isReplyPlaying = false;
 });
 
 crmExportToggle.onchange = async () => {
@@ -1049,6 +1159,36 @@ function cleanupRecordingResources() {
   analyserNode = null;
 }
 
+function canStartListenModeRecording() {
+  return (
+    !!listenModeChk.checked &&
+    !uiBusy &&
+    !isReplyPlaying &&
+    (!mediaRecorder || mediaRecorder.state === "inactive")
+  );
+}
+
+function scheduleListenModeAutoStart(reason) {
+  if (listenAutoStartTimer) {
+    clearTimeout(listenAutoStartTimer);
+    listenAutoStartTimer = null;
+  }
+  if (!canStartListenModeRecording()) return;
+  setStatus("Listening");
+  setBadge("warn", "Listen");
+  listenAutoStartTimer = setTimeout(async () => {
+    if (!canStartListenModeRecording()) return;
+    try {
+      await startRecording();
+    } catch (err) {
+      setBadge("err", "Error");
+      setStatus("Listening");
+      showError(`Listen mode start failed (${reason}): ${String(err)}`);
+      cleanupRecordingResources();
+    }
+  }, 300);
+}
+
 function computeRmsFromAnalyser() {
   if (!analyserNode) return 0;
   const data = new Uint8Array(analyserNode.fftSize);
@@ -1072,6 +1212,7 @@ function handleAutoConversationMonitoring() {
 
   const silenceMs = Math.max(300, Number(silenceMsInput.value || 1100));
   const maxRecordMs = Math.max(5000, Number(maxRecordSecInput.value || 45) * 1000);
+  const voiceThreshold = Math.max(0.001, Math.min(0.2, Number(voiceThresholdInput.value || DEFAULT_VOICE_RMS_THRESHOLD)));
 
   monitorTimer = setInterval(() => {
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
@@ -1082,7 +1223,7 @@ function handleAutoConversationMonitoring() {
     const now = Date.now();
     const rms = computeRmsFromAnalyser();
 
-    if (rms > VOICE_RMS_THRESHOLD) {
+    if (rms > voiceThreshold) {
       if (!speechStartedAt) {
         speechStartedAt = now;
       }
@@ -1109,6 +1250,9 @@ function handleAutoConversationMonitoring() {
 }
 
 async function startRecording() {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    return;
+  }
   showError("");
   setBadge("live", "Rec");
   setStatus("Recording");
@@ -1146,6 +1290,7 @@ async function startRecording() {
       setBadge("warn", "Idle");
       setStatus("Listening");
       showError("No speech detected within timeout. Try again.");
+      scheduleListenModeAutoStart("no-speech");
       return;
     }
 
@@ -1156,11 +1301,12 @@ async function startRecording() {
     const stoppedByAutomation = stopReason === "silence" || stopReason === "max_record";
     if (autoStopChk.checked && autoSendChk.checked && stoppedByAutomation) {
       setBadge("warn", "Ready");
-      setStatus("Transcribing");
+      setStatus("Sending");
       await sendRecording();
     } else {
       setBadge("warn", "Ready");
       setStatus("Listening");
+      scheduleListenModeAutoStart("record-stop");
     }
   };
 
@@ -1198,6 +1344,7 @@ btnStop.onclick = () => {
 btnClear.onclick = () => {
   chunks = [];
   recordedBlob = null;
+  isReplyPlaying = false;
   previewAudio.src = "";
   replyAudio.src = "";
   resetOutputView();
@@ -1210,6 +1357,7 @@ btnClear.onclick = () => {
   setStatus("Listening");
   showError("");
   refreshIdentityPills();
+  scheduleListenModeAutoStart("clear");
 };
 
 btnExport.onclick = async () => {
@@ -1322,7 +1470,7 @@ async function sendRecording() {
 
   setBusy(true);
   setBadge("warn", "Work");
-  setStatus("Transcribing");
+  setStatus("Sending");
   showError("");
 
   try {
@@ -1391,13 +1539,20 @@ async function sendRecording() {
       if (!tts.ok) throw new Error(`Piper /tts failed: ${tts.status} ${await tts.text()}`);
 
       const wavBlob = await tts.blob();
+      isReplyPlaying = false;
       replyAudio.src = URL.createObjectURL(wavBlob);
       setBadge("live", "Speak");
       setStatus("Speaking");
-      try { await replyAudio.play(); } catch (_) {}
+      try {
+        isReplyPlaying = true;
+        await replyAudio.play();
+      } catch (_) {
+        isReplyPlaying = false;
+        setBadge("", "Idle");
+        setStatus("Listening");
+        scheduleListenModeAutoStart("tts-play-blocked");
+      }
 
-      setBadge("", "Idle");
-      setStatus("Listening");
       showError("");
       break;
     }

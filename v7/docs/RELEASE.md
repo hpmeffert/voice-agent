@@ -1,7 +1,18 @@
 # Release Notes (V7.x)
 
 ## Current
-- Version: `v7.0.0`
+- Version: `v7.1.0`
+
+## Highlights in v7.1.0
+- Added `Listen Mode` for continuous hands-free conversation.
+- Recording now supports auto-start, silence-based auto-stop, auto-send, and auto-resume after TTS playback.
+- Per-user listen settings are stored in Mongo:
+  - `users.settings.listen_mode_default`
+  - `users.settings.silence_ms`
+  - `users.settings.threshold`
+- New user settings endpoints:
+  - `GET /api/user/{user_id}`
+  - `POST /api/user/settings`
 
 ## Highlights in v7.0.0
 - New isolated V7 tree under `v7/` (no V6 runtime edits).
