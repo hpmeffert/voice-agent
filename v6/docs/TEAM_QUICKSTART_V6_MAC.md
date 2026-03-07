@@ -12,6 +12,11 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
   - `POST /api/user/delete`
 - Session history endpoint:
   - `GET /api/session/{session_id}?user_id=...&limit=20`
+- Session export endpoint:
+  - `GET /api/session/{session_id}/export?user_id=...&format=json|md`
+- Auto conversation frontend mode:
+  - silence-based auto-stop
+  - optional auto-send after stop
 
 ## Prerequisites
 - Docker Desktop on macOS
@@ -54,6 +59,17 @@ curl -s -X POST http://localhost:8080/api/voice \
 History query:
 ```bash
 curl -s "http://localhost:8080/api/session/test-session-1?user_id=test-user-1&limit=20"
+```
+
+## Transcript export
+Export JSON:
+```bash
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&include_meta=1"
+```
+
+Export Markdown:
+```bash
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md&include_meta=1"
 ```
 
 ## Delete API examples
