@@ -9,7 +9,7 @@
 ## Hands-free mode (V6.8.0)
 - `Auto-stop on silence`: stops recording automatically after silence window.
 - `Auto-send after stop`: automatically sends after auto-stop.
-- `Silence threshold (ms)`: default `1100`.
+- `Silence threshold (ms)`: default `1300`.
 - `Max recording seconds`: safety stop for long recordings.
 - Manual `Stop` + `Send` still works when auto-stop is disabled.
 

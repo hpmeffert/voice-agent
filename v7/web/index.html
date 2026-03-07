@@ -296,7 +296,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V7.0.0</h1>
+        <h1>Voice Agent V7.2.0</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
@@ -310,11 +310,11 @@
         <div id="menuPanel" class="menuPanel">
           <div id="menuVersion" class="menuHeader">Version: -</div>
           <input id="adminTokenInput" type="password" placeholder="Admin token (optional)" />
-          <button id="adminTokenSave" class="menuItem">Save Admin Token</button>
-          <button class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Help">Help</button>
+          <button id="adminTokenSave" class="menuItem">Admin Token speichern</button>
+          <button class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Benutzer Dokumentation">Help</button>
           <button class="menuItem" data-help-doc="/docs/ui/DEMO_GUIDE.md" data-help-title="Demo Guide">Demo Guide</button>
           <button id="adminGuideItem" class="menuItem" data-help-endpoint="/api/admin/docs/help" data-help-title="Admin Docs" style="display:none;">Admin Docs</button>
-          <button class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="V7 Release Notes">V7 Release Notes</button>
+          <button class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V7">Release Notes</button>
         </div>
       </div>
     </div>
@@ -362,7 +362,7 @@
             </label>
 
             <label class="muted">Silence threshold (ms)
-              <input id="silenceMs" type="number" min="300" max="5000" step="100" value="1100" />
+              <input id="silenceMs" type="number" min="300" max="5000" step="100" value="1300" />
             </label>
 
             <label class="muted">Voice threshold (RMS)
@@ -563,7 +563,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v7.1.0";
+let uiVersionText = "v7.2.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 
@@ -815,7 +815,7 @@ listenModeChk.onchange = () => {
 };
 
 silenceMsInput.onchange = () => {
-  const val = Math.max(300, Math.min(5000, Number(silenceMsInput.value || 1100)));
+  const val = Math.max(300, Math.min(5000, Number(silenceMsInput.value || 1300)));
   silenceMsInput.value = String(Math.round(val));
   if (applyingUserSettings) return;
   queueSaveUserSettings({ silence_ms: Math.round(val) });
@@ -951,7 +951,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v7.1.0";
+    const ver = cfg?.ui?.version || "v7.2.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
   } catch (_) {
@@ -959,7 +959,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v7.1.0";
+    uiVersionText = "v7.2.0";
   }
   await loadWhoAmI();
   recomputeCrmExportEnabled();
@@ -1017,7 +1017,7 @@ async function loadUserProfile() {
     const settings = data?.settings || {};
     applyingUserSettings = true;
     listenModeChk.checked = !!settings.listen_mode_default;
-    silenceMsInput.value = String(Number(settings.silence_ms || 1100));
+    silenceMsInput.value = String(Number(settings.silence_ms || 1300));
     const nextThreshold = Number(settings.threshold || DEFAULT_VOICE_RMS_THRESHOLD);
     voiceThresholdInput.value = Number.isFinite(nextThreshold) ? nextThreshold.toFixed(3) : "0.012";
     applyingUserSettings = false;
@@ -1044,7 +1044,7 @@ async function saveUserSettings(patch) {
   const settings = data?.settings || {};
   applyingUserSettings = true;
   listenModeChk.checked = !!settings.listen_mode_default;
-  silenceMsInput.value = String(Number(settings.silence_ms || 1100));
+  silenceMsInput.value = String(Number(settings.silence_ms || 1300));
   const nextThreshold = Number(settings.threshold || DEFAULT_VOICE_RMS_THRESHOLD);
   voiceThresholdInput.value = Number.isFinite(nextThreshold) ? nextThreshold.toFixed(3) : "0.012";
   applyingUserSettings = false;
@@ -1202,6 +1202,22 @@ function computeRmsFromAnalyser() {
   return Math.sqrt(sum / data.length);
 }
 
+function preferredRecorderMimeType() {
+  if (!window.MediaRecorder || typeof window.MediaRecorder.isTypeSupported !== "function") {
+    return "";
+  }
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+  ];
+  for (const mime of candidates) {
+    if (window.MediaRecorder.isTypeSupported(mime)) return mime;
+  }
+  return "";
+}
+
 function handleAutoConversationMonitoring() {
   if (!autoStopChk.checked) return;
 
@@ -1210,7 +1226,7 @@ function handleAutoConversationMonitoring() {
   speechStartedAt = 0;
   lastVoiceAt = 0;
 
-  const silenceMs = Math.max(300, Number(silenceMsInput.value || 1100));
+  const silenceMs = Math.max(300, Number(silenceMsInput.value || 1300));
   const maxRecordMs = Math.max(5000, Number(maxRecordSecInput.value || 45) * 1000);
   const voiceThreshold = Math.max(0.001, Math.min(0.2, Number(voiceThresholdInput.value || DEFAULT_VOICE_RMS_THRESHOLD)));
 
@@ -1268,9 +1284,12 @@ async function startRecording() {
 
   chunks = [];
   recordedBlob = null;
+  btnSend.disabled = true;
   stopReason = "manual";
 
-  mediaRecorder = new MediaRecorder(stream);
+  const preferredMime = preferredRecorderMimeType();
+  const recorderOptions = preferredMime ? { mimeType: preferredMime } : undefined;
+  mediaRecorder = new MediaRecorder(stream, recorderOptions);
   mediaRecorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
@@ -1278,14 +1297,20 @@ async function startRecording() {
   mediaRecorder.onstop = async () => {
     stopMonitoring();
 
-    recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
-    previewAudio.src = URL.createObjectURL(recordedBlob);
-    btnSend.disabled = false;
+    recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || preferredMime || "audio/webm" });
+    if (recordedBlob.size > 0) {
+      previewAudio.src = URL.createObjectURL(recordedBlob);
+      btnSend.disabled = false;
+    } else {
+      previewAudio.src = "";
+      btnSend.disabled = true;
+    }
 
     cleanupRecordingResources();
 
     if (stopReason === "no_speech") {
       recordedBlob = null;
+      previewAudio.src = "";
       btnSend.disabled = true;
       setBadge("warn", "Idle");
       setStatus("Listening");
@@ -1466,7 +1491,10 @@ btnProtocol.onclick = async () => {
 };
 
 async function sendRecording() {
-  if (!recordedBlob) return;
+  if (!recordedBlob || recordedBlob.size === 0) {
+    showError("No recorded audio available.");
+    return;
+  }
 
   setBusy(true);
   setBadge("warn", "Work");
@@ -1476,7 +1504,10 @@ async function sendRecording() {
   try {
     async function buildFormData() {
       const fd = new FormData();
-      const filename = recordedBlob.type.includes("ogg") ? "audio.ogg" : "audio.webm";
+      let filename = "audio.webm";
+      if (recordedBlob.type.includes("ogg")) filename = "audio.ogg";
+      if (recordedBlob.type.includes("wav")) filename = "audio.wav";
+      if (recordedBlob.type.includes("mp4") || recordedBlob.type.includes("m4a")) filename = "audio.m4a";
       fd.append("file", recordedBlob, filename);
       fd.append("return_audio", "0");
       fd.append("session_id", sessionId);

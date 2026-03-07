@@ -12,7 +12,8 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import requests
-from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from faster_whisper import WhisperModel
 from pydantic import BaseModel, Field
@@ -22,7 +23,7 @@ from starlette.background import BackgroundTask
 
 from protocol_renderer import render_protocol
 
-app = FastAPI(title="Voice Agent API V7.1.0")
+app = FastAPI(title="Voice Agent API V7.2.0")
 
 # ----------------------------
 # Config / ENV
@@ -72,10 +73,10 @@ MAX_EXPORT_MESSAGES = int(os.getenv("MAX_EXPORT_MESSAGES", "200"))
 MAX_EXPORT_BYTES = int(os.getenv("MAX_EXPORT_BYTES", str(1_500_000)))
 ADMIN_DEV_MODE = os.getenv("ADMIN_DEV_MODE", "0").strip() == "1"
 ADMIN_UI_TOKEN = os.getenv("ADMIN_UI_TOKEN", "").strip()
-UI_VERSION = os.getenv("UI_VERSION", "v7.1.0").strip() or "v7.1.0"
+UI_VERSION = os.getenv("UI_VERSION", "v7.2.0").strip() or "v7.2.0"
 UI_BUILD = os.getenv("UI_BUILD", "").strip()
 LISTEN_MODE_DEFAULT = os.getenv("LISTEN_MODE_DEFAULT", "0").strip().lower() in {"1", "true", "yes", "on"}
-LISTEN_SILENCE_MS_DEFAULT = int(os.getenv("LISTEN_SILENCE_MS_DEFAULT", "1100"))
+LISTEN_SILENCE_MS_DEFAULT = int(os.getenv("LISTEN_SILENCE_MS_DEFAULT", "1300"))
 LISTEN_THRESHOLD_DEFAULT = float(os.getenv("LISTEN_THRESHOLD_DEFAULT", "0.012"))
 CRM_EXPORT_MODE = os.getenv("CRM_EXPORT_MODE", "file").strip().lower()
 CRM_EXPORT_WEBHOOK_URL = os.getenv("CRM_EXPORT_WEBHOOK_URL", "").strip()
@@ -117,6 +118,25 @@ telemetry_col: Collection | None = None
 # ----------------------------
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def build_error_payload(
+    *,
+    error: str,
+    detail: str | None = None,
+    request: Request | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"error": error}
+    if detail:
+        payload["detail"] = detail
+    if request is not None:
+        user_id = request.query_params.get("user_id")
+        session_id = request.query_params.get("session_id")
+        if user_id:
+            payload["user_id"] = user_id
+        if session_id:
+            payload["session_id"] = session_id
+    return payload
 
 
 def message_expiry() -> datetime:
@@ -191,7 +211,9 @@ def run_ffmpeg_to_wav_16k_mono(input_path: str) -> str:
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         cleanup_paths(output_path)
-        raise HTTPException(status_code=400, detail="Unsupported/invalid audio")
+        ffmpeg_detail = (proc.stderr or proc.stdout or "ffmpeg conversion failed").strip()
+        ffmpeg_detail = ffmpeg_detail[-400:]
+        raise HTTPException(status_code=400, detail=f"Unsupported/invalid audio ({ffmpeg_detail})")
     return output_path
 
 
@@ -402,7 +424,7 @@ def build_export_payload(
     }
 
     json_payload = {
-        "version": "v7.1.0",
+        "version": "v7.2.0",
         "session": {
             "session_id": session.get("_id"),
             "user_id": session.get("user_id"),
@@ -502,6 +524,43 @@ def on_startup() -> None:
 def on_shutdown() -> None:
     if mongo_client is not None:
         mongo_client.close()
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    detail_text = str(exc.detail) if exc.detail else None
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=build_error_payload(
+            error=detail_text or "Request failed",
+            detail=detail_text,
+            request=request,
+        ),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content=build_error_payload(
+            error="Validation failed",
+            detail=str(exc),
+            request=request,
+        ),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content=build_error_payload(
+            error="Internal server error",
+            detail=str(exc),
+            request=request,
+        ),
+    )
 
 
 # ----------------------------
@@ -1390,7 +1449,7 @@ def download_protocol(
             "format": format or CRM_PROTOCOL_FORMAT,
             "template": CRM_PROTOCOL_TEMPLATE,
             "tz": tz,
-            "export_version": "v7.1.0",
+            "export_version": "v7.2.0",
         },
     )
 
@@ -1514,6 +1573,8 @@ async def voice(
         return JSONResponse(payload, status_code=status_code)
 
     raw = await file.read()
+    if not raw:
+        return error_response(status_code=400, error="Empty audio upload", error_code="empty_audio")
     if len(raw) > MAX_AUDIO_BYTES:
         return error_response(status_code=413, error=f"Audio too large (>{MAX_AUDIO_BYTES} bytes)", error_code="audio_too_large")
 
@@ -1530,8 +1591,14 @@ async def voice(
 
         try:
             converted_wav_path = run_ffmpeg_to_wav_16k_mono(input_path)
-        except HTTPException:
-            return error_response(status_code=400, error="Unsupported/invalid audio", error_code="unsupported_audio")
+        except HTTPException as exc:
+            detail = str(exc.detail) if exc.detail else None
+            return error_response(
+                status_code=400,
+                error="Unsupported/invalid audio",
+                error_code="unsupported_audio",
+                detail=detail,
+            )
 
         t1 = time.perf_counter()
         metrics["audio_read_ms"] = max(0, int((t1 - t0) * 1000))
