@@ -67,6 +67,10 @@ Feature toggle envs for API:
 - `CRM_EXPORT_ENABLED` (`0` or `1`, default `0`)
 - `CRM_EXPORT_MODE` (`file|webhook|both`, default `file`)
 - `CRM_EXPORT_WEBHOOK_URL` (required if mode includes webhook)
+- `CRM_PROTOCOL_ENABLED` (`0` or `1`, default `1`)
+- `CRM_PROTOCOL_TEMPLATE` (default `crm_protocol_default.md.j2`)
+- `CRM_PROTOCOL_FORMAT` (`md|txt|json`, default `md`)
+- `CRM_PROTOCOL_TIMEZONE` (default `Europe/Berlin`)
 
 Export JSON:
 ```bash
@@ -97,6 +101,30 @@ curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-us
 # enabled mode
 CRM_EXPORT_ENABLED=1 CRM_EXPORT_MODE=file docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
 curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=crm&include_meta=1&limit=200"
+```
+
+## Protocol download (V6.4)
+Download protocol as Markdown:
+```bash
+curl -L -o protocol.md "http://localhost:8080/api/protocol/test-session-1?user_id=test-user-1&format=md"
+```
+
+Download protocol as JSON:
+```bash
+curl -L -o protocol.json "http://localhost:8080/api/protocol/test-session-1?user_id=test-user-1&format=json"
+```
+
+Protocol negative checks:
+```bash
+# wrong owner -> 403
+curl -i "http://localhost:8080/api/protocol/test-session-1?user_id=wrong-user&format=md"
+
+# unknown session -> 404
+curl -i "http://localhost:8080/api/protocol/unknown-session?user_id=test-user-1&format=md"
+
+# protocol disabled -> 409
+CRM_PROTOCOL_ENABLED=0 docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
+curl -i "http://localhost:8080/api/protocol/test-session-1?user_id=test-user-1&format=md"
 ```
 
 ## Delete API examples

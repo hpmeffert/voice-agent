@@ -220,6 +220,18 @@
             <span class="muted" id="exportStatus">Loading export config...</span>
           </div>
 
+          <div class="row" style="margin-top:8px;">
+            <label class="muted">Protocol format
+              <select id="protocolFormat">
+                <option value="md" selected>Markdown</option>
+                <option value="txt">Text</option>
+                <option value="json">JSON</option>
+              </select>
+            </label>
+            <button id="btnProtocol">Download Protocol</button>
+            <span class="muted" id="protocolStatus">Loading protocol config...</span>
+          </div>
+
           <div class="errorBox" id="errorBox"></div>
 
           <h3>Captured audio</h3>
@@ -275,6 +287,7 @@ const btnStop = el("btnStop");
 const btnSend = el("btnSend");
 const btnClear = el("btnClear");
 const btnExport = el("btnExport");
+const btnProtocol = el("btnProtocol");
 
 const backendSel = el("backend");
 const modelSel = el("model");
@@ -282,6 +295,8 @@ const themeSel = el("themeMode");
 const exportTemplateSel = el("exportTemplate");
 const exportFormatSel = el("exportFormat");
 const exportStatusEl = el("exportStatus");
+const protocolFormatSel = el("protocolFormat");
+const protocolStatusEl = el("protocolStatus");
 
 const conversationModeSel = el("conversationMode");
 const autoSendChk = el("autoSend");
@@ -297,6 +312,8 @@ let userId = localStorage.getItem(USER_KEY) || "";
 let modelCatalog = null;
 let crmExportEnabled = false;
 let crmExportMode = "file";
+let crmProtocolEnabled = true;
+let crmProtocolFormat = "md";
 let uiBusy = false;
 
 function shortId(value) {
@@ -308,6 +325,7 @@ function refreshIdentityPills() {
   sessionPill.textContent = `Session: ${shortId(sessionId)}`;
   userPill.textContent = `User: ${shortId(userId)}`;
   updateExportUi();
+  updateProtocolUi();
 }
 
 function makeUuid() {
@@ -355,6 +373,7 @@ function setBusy(isBusy) {
   silenceMsInput.disabled = isBusy && conversationModeSel.value === "auto";
   maxRecordSecInput.disabled = isBusy && conversationModeSel.value === "auto";
   updateExportUi();
+  updateProtocolUi();
 }
 
 function updateExportUi() {
@@ -375,6 +394,21 @@ function updateExportUi() {
   } else {
     exportStatusEl.textContent = `CRM export enabled (${crmExportMode})`;
   }
+}
+
+function updateProtocolUi() {
+  const hasSession = !!sessionId;
+  protocolFormatSel.disabled = !crmProtocolEnabled;
+  btnProtocol.disabled = !crmProtocolEnabled || !hasSession || uiBusy;
+  if (!crmProtocolEnabled) {
+    protocolStatusEl.textContent = "Protocol export disabled";
+    return;
+  }
+  if (!hasSession) {
+    protocolStatusEl.textContent = "Create a session first to download protocol";
+    return;
+  }
+  protocolStatusEl.textContent = `Protocol export enabled (${crmProtocolFormat})`;
 }
 
 function applyTheme(mode) {
@@ -462,11 +496,19 @@ async function loadConfig() {
     const cfg = await r.json();
     crmExportEnabled = !!cfg.crm_export_enabled;
     crmExportMode = cfg.crm_export_mode || "file";
+    crmProtocolEnabled = cfg.crm_protocol_enabled !== false;
+    crmProtocolFormat = cfg.crm_protocol_format || "md";
+    if (["md", "txt", "json"].includes(crmProtocolFormat)) {
+      protocolFormatSel.value = crmProtocolFormat;
+    }
   } catch (_) {
     crmExportEnabled = false;
     crmExportMode = "file";
+    crmProtocolEnabled = false;
+    crmProtocolFormat = "md";
   }
   updateExportUi();
+  updateProtocolUi();
 }
 
 backendSel.onchange = () => {
@@ -745,6 +787,50 @@ btnExport.onclick = async () => {
     exportStatusEl.textContent = "Export successful";
   } catch (err) {
     exportStatusEl.textContent = "Export failed";
+    showError(String(err));
+  }
+};
+
+btnProtocol.onclick = async () => {
+  if (!crmProtocolEnabled) {
+    protocolStatusEl.textContent = "Protocol export disabled";
+    return;
+  }
+  if (!sessionId || !userId) {
+    protocolStatusEl.textContent = "No active session for protocol export";
+    return;
+  }
+
+  const format = protocolFormatSel.value || "md";
+  protocolStatusEl.textContent = "Generating protocol...";
+
+  try {
+    const url =
+      `/api/protocol/${encodeURIComponent(sessionId)}` +
+      `?user_id=${encodeURIComponent(userId)}` +
+      `&format=${encodeURIComponent(format)}`;
+    const r = await fetch(url, { method: "GET" });
+
+    if (r.status === 409) {
+      crmProtocolEnabled = false;
+      updateProtocolUi();
+      protocolStatusEl.textContent = "Protocol export disabled";
+      return;
+    }
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`Protocol export failed: ${r.status} ${txt}`);
+    }
+
+    const blob = await r.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `protocol_${sessionId}.${format}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    protocolStatusEl.textContent = "Protocol download successful";
+  } catch (err) {
+    protocolStatusEl.textContent = "Protocol download failed";
     showError(String(err));
   }
 };

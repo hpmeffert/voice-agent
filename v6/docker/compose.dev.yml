@@ -26,7 +26,8 @@ services:
 
   api:
     build:
-      context: ${PWD}/v6/docker/api
+      context: ${PWD}
+      dockerfile: v6/docker/api/Dockerfile
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -49,6 +50,10 @@ services:
       CRM_EXPORT_ENABLED: "${CRM_EXPORT_ENABLED:-0}"
       CRM_EXPORT_MODE: "${CRM_EXPORT_MODE:-file}"
       CRM_EXPORT_WEBHOOK_URL: "${CRM_EXPORT_WEBHOOK_URL:-}"
+      CRM_PROTOCOL_ENABLED: "${CRM_PROTOCOL_ENABLED:-1}"
+      CRM_PROTOCOL_TEMPLATE: "${CRM_PROTOCOL_TEMPLATE:-crm_protocol_default.md.j2}"
+      CRM_PROTOCOL_FORMAT: "${CRM_PROTOCOL_FORMAT:-md}"
+      CRM_PROTOCOL_TIMEZONE: "${CRM_PROTOCOL_TIMEZONE:-Europe/Berlin}"
     depends_on:
       - mongo
       - piper

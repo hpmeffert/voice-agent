@@ -6,3 +6,4 @@ numpy
 python-multipart
 pydantic
 pymongo
+Jinja2>=3.1

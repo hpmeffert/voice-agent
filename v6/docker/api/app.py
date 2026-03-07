@@ -8,15 +8,18 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import requests
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from faster_whisper import WhisperModel
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.collection import Collection
 from starlette.background import BackgroundTask
+
+from protocol_renderer import render_protocol
 
 app = FastAPI(title="Voice Agent API V6.1")
 
@@ -47,9 +50,15 @@ MAX_TEXT_CHARS = int(os.getenv("MAX_TEXT_CHARS", "8000"))
 CRM_EXPORT_ENABLED = os.getenv("CRM_EXPORT_ENABLED", "0").strip() == "1"
 CRM_EXPORT_MODE = os.getenv("CRM_EXPORT_MODE", "file").strip().lower()
 CRM_EXPORT_WEBHOOK_URL = os.getenv("CRM_EXPORT_WEBHOOK_URL", "").strip()
+CRM_PROTOCOL_ENABLED = os.getenv("CRM_PROTOCOL_ENABLED", "1").strip() == "1"
+CRM_PROTOCOL_TEMPLATE = os.getenv("CRM_PROTOCOL_TEMPLATE", "crm_protocol_default.md.j2").strip() or "crm_protocol_default.md.j2"
+CRM_PROTOCOL_FORMAT = os.getenv("CRM_PROTOCOL_FORMAT", "md").strip().lower()
+CRM_PROTOCOL_TIMEZONE = os.getenv("CRM_PROTOCOL_TIMEZONE", "Europe/Berlin").strip() or "Europe/Berlin"
 
 if CRM_EXPORT_MODE not in {"file", "webhook", "both"}:
     CRM_EXPORT_MODE = "file"
+if CRM_PROTOCOL_FORMAT not in {"md", "txt", "json"}:
+    CRM_PROTOCOL_FORMAT = "md"
 
 SYSTEM_PROMPT = (
     "Du bist ein hilfreicher, präziser Assistent. Antworte kurz, klar und korrekt. "
@@ -585,6 +594,8 @@ def config():
     return {
         "crm_export_enabled": CRM_EXPORT_ENABLED,
         "crm_export_mode": CRM_EXPORT_MODE,
+        "crm_protocol_enabled": CRM_PROTOCOL_ENABLED,
+        "crm_protocol_format": CRM_PROTOCOL_FORMAT,
     }
 
 
@@ -870,6 +881,57 @@ def export_session(
     return JSONResponse(
         payload,
         headers={"Content-Disposition": f'attachment; filename="{filename_base}.json"'},
+    )
+
+
+@app.get("/protocol/{session_id}")
+def download_protocol(
+    session_id: str,
+    user_id: str = Query(..., min_length=8),
+    format: str = Query("", pattern="^(|md|txt|json)$"),
+    limit: int = Query(200, ge=1, le=500),
+):
+    if not CRM_PROTOCOL_ENABLED:
+        raise HTTPException(status_code=409, detail="CRM protocol export is disabled")
+
+    session = assert_session_owned_by_user(session_id, user_id)
+    docs = list(
+        messages_col.find({"session_id": session_id, "user_id": user_id})
+        .sort("t", ASCENDING)
+        .limit(limit)
+    )
+
+    try:
+        tz = ZoneInfo(CRM_PROTOCOL_TIMEZONE)
+    except Exception:
+        tz = timezone.utc
+
+    content, filename, content_type = render_protocol(
+        session_doc=session,
+        messages=docs,
+        meta={
+            "format": format or CRM_PROTOCOL_FORMAT,
+            "template": CRM_PROTOCOL_TEMPLATE,
+            "tz": tz,
+            "export_version": "v6.4.0",
+        },
+    )
+
+    sessions_col.update_one(
+        {"_id": session_id, "user_id": user_id},
+        {
+            "$set": {
+                "updated_at": now_utc(),
+                "meta.last_exported_at": now_utc(),
+                "meta.last_protocol_template": CRM_PROTOCOL_TEMPLATE,
+            }
+        },
+    )
+
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
