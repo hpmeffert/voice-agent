@@ -25,7 +25,7 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
 
 ## Run V6
 ```bash
-docker compose -f v6/docker/compose.dev.yml up -d --build
+docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build
 ```
 
 Open UI:
@@ -35,6 +35,7 @@ Open UI:
 ```bash
 curl -s http://localhost:8080/api/health
 curl -s http://localhost:8080/api/models
+curl -s http://localhost:8080/api/config
 ```
 
 ## Mongo check
@@ -62,6 +63,11 @@ curl -s "http://localhost:8080/api/session/test-session-1?user_id=test-user-1&li
 ```
 
 ## Transcript export
+Feature toggle envs for API:
+- `CRM_EXPORT_ENABLED` (`0` or `1`, default `0`)
+- `CRM_EXPORT_MODE` (`file|webhook|both`, default `file`)
+- `CRM_EXPORT_WEBHOOK_URL` (required if mode includes webhook)
+
 Export JSON:
 ```bash
 curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=default&include_meta=1&limit=200"
@@ -80,6 +86,17 @@ curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-us
 Export CRM Markdown note:
 ```bash
 curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md&template=crm&include_meta=1&limit=200"
+```
+
+Toggle smoke checks:
+```bash
+# disabled mode
+CRM_EXPORT_ENABLED=0 docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=crm"
+
+# enabled mode
+CRM_EXPORT_ENABLED=1 CRM_EXPORT_MODE=file docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=crm&include_meta=1&limit=200"
 ```
 
 ## Delete API examples

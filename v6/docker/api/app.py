@@ -7,6 +7,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
@@ -38,10 +39,17 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5").strip()
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://mongo:27017/voice_agent").strip()
+MONGO_DB = os.getenv("MONGO_DB", "voice_agent").strip() or "voice_agent"
 MESSAGE_RETENTION_DAYS = int(os.getenv("MESSAGE_RETENTION_DAYS", "30"))
 SESSION_RETENTION_DAYS = int(os.getenv("SESSION_RETENTION_DAYS", "90"))
 MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
 MAX_TEXT_CHARS = int(os.getenv("MAX_TEXT_CHARS", "8000"))
+CRM_EXPORT_ENABLED = os.getenv("CRM_EXPORT_ENABLED", "0").strip() == "1"
+CRM_EXPORT_MODE = os.getenv("CRM_EXPORT_MODE", "file").strip().lower()
+CRM_EXPORT_WEBHOOK_URL = os.getenv("CRM_EXPORT_WEBHOOK_URL", "").strip()
+
+if CRM_EXPORT_MODE not in {"file", "webhook", "both"}:
+    CRM_EXPORT_MODE = "file"
 
 SYSTEM_PROMPT = (
     "Du bist ein hilfreicher, präziser Assistent. Antworte kurz, klar und korrekt. "
@@ -159,6 +167,14 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
     return None
 
 
+def resolve_mongo_db_name(mongo_url: str) -> str:
+    parsed = urlparse(mongo_url)
+    db_name = (parsed.path or "").lstrip("/")
+    if db_name:
+        return db_name.split("/")[0]
+    return MONGO_DB
+
+
 # ----------------------------
 # Startup / Shutdown
 # ----------------------------
@@ -170,7 +186,7 @@ def on_startup() -> None:
 
     mongo_client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=5000)
     mongo_client.admin.command("ping")
-    mongo_db = mongo_client.get_default_database()
+    mongo_db = mongo_client[resolve_mongo_db_name(MONGO_URL)]
 
     users_col = mongo_db["users"]
     sessions_col = mongo_db["sessions"]
@@ -491,6 +507,33 @@ def generate_crm_summary(
     return summary
 
 
+def should_export_file() -> bool:
+    return CRM_EXPORT_MODE in {"file", "both"}
+
+
+def should_export_webhook() -> bool:
+    return CRM_EXPORT_MODE in {"webhook", "both"}
+
+
+def post_to_crm_webhook(payload: dict[str, Any]) -> tuple[bool, str | None]:
+    if not should_export_webhook():
+        return True, None
+    if not CRM_EXPORT_WEBHOOK_URL:
+        return False, "CRM webhook URL is not configured"
+    try:
+        r = requests.post(
+            CRM_EXPORT_WEBHOOK_URL,
+            json=payload,
+            timeout=12,
+            headers={"Content-Type": "application/json"},
+        )
+        if r.status_code >= 400:
+            return False, f"CRM webhook HTTP {r.status_code}"
+        return True, None
+    except requests.RequestException:
+        return False, "CRM webhook request failed"
+
+
 # ----------------------------
 # Models
 # ----------------------------
@@ -534,6 +577,14 @@ def models():
             "available": bool(OPENAI_API_KEY),
             "default_model": OPENAI_MODEL,
         },
+    }
+
+
+@app.get("/config")
+def config():
+    return {
+        "crm_export_enabled": CRM_EXPORT_ENABLED,
+        "crm_export_mode": CRM_EXPORT_MODE,
     }
 
 
@@ -609,6 +660,9 @@ def export_session(
     include_meta: int = Query(1, ge=0, le=1),
     limit: int = Query(200, ge=1, le=500),
 ):
+    if not CRM_EXPORT_ENABLED:
+        return JSONResponse({"status": "disabled"})
+
     session = assert_session_owned_by_user(session_id, user_id)
     docs = list(
         messages_col.find({"session_id": session_id, "user_id": user_id})
@@ -708,6 +762,27 @@ def export_session(
                 },
             },
         }
+
+        ok, err = post_to_crm_webhook(crm_payload)
+        if not ok:
+            return JSONResponse(
+                {
+                    "error": "CRM webhook delivery failed",
+                    "detail": err,
+                },
+                status_code=502,
+            )
+
+        if not should_export_file():
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "delivery": "webhook",
+                    "schema_version": crm_payload["schema_version"],
+                    "session_id": session_id,
+                }
+            )
+
         if format == "md":
             lines = [
                 f"# CRM Note - Session {session_id}",
@@ -751,6 +826,16 @@ def export_session(
         return JSONResponse(
             crm_payload,
             headers={"Content-Disposition": f'attachment; filename="{filename_base}_crm.json"'},
+        )
+
+    if not should_export_file():
+        # For default template we only support file-style export.
+        return JSONResponse(
+            {
+                "status": "ok",
+                "delivery": "webhook",
+                "detail": "No default file export in webhook-only mode",
+            }
         )
 
     if format == "md":
