@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent V6.8</title>
+  <title>Voice Agent V6.8.1</title>
   <style>
     :root {
       --bg:#f4f7fb;
@@ -129,8 +129,39 @@
       background: color-mix(in srgb, var(--card), var(--text) 4%);
       font-size: 12px;
     }
-    pre#result {
+    pre#debugJson {
       white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .textBlock {
+      border:1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 66px;
+      background: color-mix(in srgb, var(--card), var(--text) 4%);
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .metaGrid {
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px;
+      margin: 10px 0;
+    }
+    .metaCell {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      background: color-mix(in srgb, var(--card), var(--text) 3%);
+    }
+    .metaLabel { color: var(--muted); font-size: 11px; }
+    .metaValue {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
       word-break: break-word;
       overflow-wrap: anywhere;
     }
@@ -224,7 +255,7 @@
     }
     .latencyRow {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 8px;
     }
     .latencyCell {
@@ -234,14 +265,27 @@
     }
     .latencyLabel { color: var(--muted); font-size: 11px; }
     .latencyValue { font-weight: 700; font-size: 13px; }
+    details.debugBox {
+      margin-top: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--card), var(--text) 3%);
+      padding: 8px;
+    }
+    details.debugBox summary {
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--muted);
+      user-select: none;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V6.8</h1>
-        <p class="sub">Hands-free silence auto-stop with optional auto-send and transcript export.</p>
+        <h1>Voice Agent V6.8.1</h1>
+        <p class="sub">Readable output blocks, latency panel, and debug JSON for voice responses.</p>
       </div>
       <div class="topRight">
         <button id="menuBtn" class="menuBtn" title="Help / Menu">Help</button>
@@ -353,19 +397,38 @@
       <div class="card">
         <div class="hd">
           <b>Result</b>
-          <span class="muted">transcript / lang / answer</span>
+          <span class="muted">transcript / answer / metrics</span>
         </div>
         <div class="bd">
-          <pre id="result"></pre>
+          <div class="muted" style="margin-bottom:6px;">Transcript</div>
+          <div id="transcriptText" class="textBlock">-</div>
+
+          <div class="muted" style="margin:10px 0 6px 0;">Answer</div>
+          <div id="answerText" class="textBlock">-</div>
+
+          <div class="metaGrid">
+            <div class="metaCell"><div class="metaLabel">Session</div><div id="metaSession" class="metaValue">-</div></div>
+            <div class="metaCell"><div class="metaLabel">User</div><div id="metaUser" class="metaValue">-</div></div>
+            <div class="metaCell"><div class="metaLabel">Lang</div><div id="metaLang" class="metaValue">-</div></div>
+            <div class="metaCell"><div class="metaLabel">Backend</div><div id="metaBackend" class="metaValue">-</div></div>
+            <div class="metaCell"><div class="metaLabel">Model</div><div id="metaModel" class="metaValue">-</div></div>
+          </div>
+
           <div id="latencyBox" class="latencyBox">
             <div class="muted">Latency breakdown (ms)</div>
             <div class="latencyRow">
+              <div class="latencyCell"><div class="latencyLabel">Audio Read</div><div id="latAudioRead" class="latencyValue">-</div></div>
               <div class="latencyCell"><div class="latencyLabel">STT</div><div id="latStt" class="latencyValue">-</div></div>
               <div class="latencyCell"><div class="latencyLabel">LLM</div><div id="latLlm" class="latencyValue">-</div></div>
               <div class="latencyCell"><div class="latencyLabel">TTS</div><div id="latTts" class="latencyValue">-</div></div>
               <div class="latencyCell"><div class="latencyLabel">Total</div><div id="latTotal" class="latencyValue">-</div></div>
             </div>
           </div>
+
+          <details class="debugBox">
+            <summary>Debug JSON</summary>
+            <pre id="debugJson">-</pre>
+          </details>
         </div>
       </div>
     </div>
@@ -405,7 +468,15 @@ const el = (id) => document.getElementById(id);
 const statusEl = el("status");
 const badgeEl = el("statusBadge");
 const errorBox = el("errorBox");
-const resultEl = el("result");
+const transcriptTextEl = el("transcriptText");
+const answerTextEl = el("answerText");
+const debugJsonEl = el("debugJson");
+const metaSessionEl = el("metaSession");
+const metaUserEl = el("metaUser");
+const metaLangEl = el("metaLang");
+const metaBackendEl = el("metaBackend");
+const metaModelEl = el("metaModel");
+const latAudioReadEl = el("latAudioRead");
 const latSttEl = el("latStt");
 const latLlmEl = el("latLlm");
 const latTtsEl = el("latTts");
@@ -463,7 +534,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v6.6.1";
+let uiVersionText = "v6.8.1";
 const helpDocCache = {};
 
 function shortId(value) {
@@ -496,14 +567,44 @@ if (!userId) {
 refreshIdentityPills();
 
 function setStatus(msg) { statusEl.textContent = msg; }
-function setLatency(stt, llm, tts, total) {
+function setLatency(audioRead, stt, llm, tts, total) {
+  latAudioReadEl.textContent = Number.isFinite(audioRead) ? String(Math.max(0, Math.round(audioRead))) : "-";
   latSttEl.textContent = Number.isFinite(stt) ? String(Math.max(0, Math.round(stt))) : "-";
   latLlmEl.textContent = Number.isFinite(llm) ? String(Math.max(0, Math.round(llm))) : "-";
   latTtsEl.textContent = Number.isFinite(tts) ? String(Math.max(0, Math.round(tts))) : "-";
   latTotalEl.textContent = Number.isFinite(total) ? String(Math.max(0, Math.round(total))) : "-";
 }
 function clearLatency() {
-  setLatency(NaN, NaN, NaN, NaN);
+  setLatency(NaN, NaN, NaN, NaN, NaN);
+}
+function resetOutputView() {
+  transcriptTextEl.textContent = "-";
+  answerTextEl.textContent = "-";
+  debugJsonEl.textContent = "-";
+  metaSessionEl.textContent = "-";
+  metaUserEl.textContent = "-";
+  metaLangEl.textContent = "-";
+  metaBackendEl.textContent = "-";
+  metaModelEl.textContent = "-";
+  clearLatency();
+}
+function renderVoiceResult(data) {
+  transcriptTextEl.textContent = data?.transcript || "";
+  answerTextEl.textContent = data?.answer || "";
+  metaSessionEl.textContent = data?.session_id || sessionId || "-";
+  metaUserEl.textContent = data?.user_id || userId || "-";
+  metaLangEl.textContent = data?.lang || "-";
+  metaBackendEl.textContent = data?.backend || backendSel.value || "-";
+  metaModelEl.textContent = data?.model || modelSel.value || "-";
+  const m = data?.metrics || {};
+  setLatency(
+    data?.audio_read_ms ?? m.audio_read_ms,
+    data?.stt_ms ?? m.stt_ms,
+    data?.llm_ms ?? m.llm_ms,
+    data?.tts_ms ?? m.tts_ms,
+    data?.total_ms ?? m.total_ms,
+  );
+  debugJsonEl.textContent = JSON.stringify(data || {}, null, 2);
 }
 function setBadge(kind, text) {
   badgeEl.className = "badge" + (kind ? " " + kind : "");
@@ -746,7 +847,7 @@ async function loadConfig() {
       protocolFormatSel.value = crmProtocolFormat;
     }
     uiAdmin = !!cfg?.ui?.admin;
-    const ver = cfg?.ui?.version || "v6.6.1";
+    const ver = cfg?.ui?.version || "v6.8.1";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
   } catch (_) {
@@ -755,7 +856,7 @@ async function loadConfig() {
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
     uiAdmin = false;
-    uiVersionText = "v6.6.1";
+    uiVersionText = "v6.8.1";
   }
   recomputeCrmExportEnabled();
   updateExportUi();
@@ -1010,8 +1111,7 @@ btnClear.onclick = () => {
   recordedBlob = null;
   previewAudio.src = "";
   replyAudio.src = "";
-  resultEl.textContent = "";
-  clearLatency();
+  resetOutputView();
 
   localStorage.removeItem(SESSION_KEY);
   sessionId = "";
@@ -1189,14 +1289,7 @@ async function sendRecording() {
         recomputeCrmExportEnabled();
         updateExportUi();
       }
-      const m = data.metrics || {};
-      setLatency(
-        data.stt_ms ?? m.stt_ms,
-        data.llm_ms ?? m.llm_ms,
-        data.tts_ms ?? m.tts_ms,
-        data.total_ms ?? m.total_ms,
-      );
-      resultEl.textContent = JSON.stringify(data, null, 2);
+      renderVoiceResult(data);
 
       setBadge("warn", "Think");
       setStatus("Thinking");
@@ -1235,6 +1328,7 @@ btnSend.onclick = async () => {
 };
 
 syncHandsfreeControls();
+resetOutputView();
 </script>
 </body>
 </html>

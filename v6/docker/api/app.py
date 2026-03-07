@@ -48,6 +48,7 @@ MESSAGE_RETENTION_DAYS = int(os.getenv("MESSAGE_RETENTION_DAYS", "30"))
 SESSION_RETENTION_DAYS = int(os.getenv("SESSION_RETENTION_DAYS", "90"))
 MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
 MAX_TEXT_CHARS = int(os.getenv("MAX_TEXT_CHARS", "8000"))
+TELEMETRY_RETENTION_DAYS = int(os.getenv("TELEMETRY_RETENTION_DAYS", "30"))
 CRM_EXPORT_ENABLED = os.getenv("CRM_EXPORT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
 CRM_EXPORT_DEFAULT_ENABLED = os.getenv("CRM_EXPORT_DEFAULT_ENABLED", "true").strip().lower() in {
     "1",
@@ -70,7 +71,7 @@ CRM_EXPORT_TIMEZONE = os.getenv("CRM_EXPORT_TIMEZONE", "Europe/Berlin").strip() 
 MAX_EXPORT_MESSAGES = int(os.getenv("MAX_EXPORT_MESSAGES", "200"))
 MAX_EXPORT_BYTES = int(os.getenv("MAX_EXPORT_BYTES", str(1_500_000)))
 ADMIN_DEV_MODE = os.getenv("ADMIN_DEV_MODE", "0").strip() == "1"
-UI_VERSION = os.getenv("UI_VERSION", "v6.6.1").strip() or "v6.6.1"
+UI_VERSION = os.getenv("UI_VERSION", "v6.8.1").strip() or "v6.8.1"
 UI_BUILD = os.getenv("UI_BUILD", "").strip()
 CRM_EXPORT_MODE = os.getenv("CRM_EXPORT_MODE", "file").strip().lower()
 CRM_EXPORT_WEBHOOK_URL = os.getenv("CRM_EXPORT_WEBHOOK_URL", "").strip()
@@ -101,6 +102,7 @@ mongo_db = None
 users_col: Collection | None = None
 sessions_col: Collection | None = None
 messages_col: Collection | None = None
+telemetry_col: Collection | None = None
 
 
 # ----------------------------
@@ -118,11 +120,29 @@ def session_expiry() -> datetime:
     return now_utc() + timedelta(days=SESSION_RETENTION_DAYS)
 
 
+def telemetry_expiry() -> datetime:
+    return now_utc() + timedelta(days=TELEMETRY_RETENTION_DAYS)
+
+
 def ensure_ready() -> None:
     if whisper is None:
         raise RuntimeError("Whisper model not initialized")
-    if mongo_client is None or mongo_db is None or users_col is None or sessions_col is None or messages_col is None:
+    if (
+        mongo_client is None
+        or mongo_db is None
+        or users_col is None
+        or sessions_col is None
+        or messages_col is None
+        or telemetry_col is None
+    ):
         raise RuntimeError("MongoDB not initialized")
+
+
+def safe_ms(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except Exception:
+        return 0
 
 
 def normalize_user_id(user_id: str | None) -> str:
@@ -363,7 +383,7 @@ def build_export_payload(
 # ----------------------------
 @app.on_event("startup")
 def on_startup() -> None:
-    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col
+    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col
 
     whisper = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type=WHISPER_COMPUTE)
 
@@ -374,6 +394,7 @@ def on_startup() -> None:
     users_col = mongo_db["users"]
     sessions_col = mongo_db["sessions"]
     messages_col = mongo_db["messages"]
+    telemetry_col = mongo_db["telemetry_logs"]
 
     users_col.create_index([("updated_at", DESCENDING)])
 
@@ -385,6 +406,11 @@ def on_startup() -> None:
     messages_col.create_index([("user_id", ASCENDING), ("t", DESCENDING)])
     messages_col.create_index([("session_id", ASCENDING), ("t", ASCENDING)])
     messages_col.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
+
+    telemetry_col.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
+    telemetry_col.create_index([("created_at", DESCENDING)])
+    telemetry_col.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
+    telemetry_col.create_index([("status", ASCENDING), ("created_at", DESCENDING)])
 
 
 @app.on_event("shutdown")
@@ -518,6 +544,7 @@ def append_message(
     }
     if metrics:
         doc["metrics"] = {
+            "audio_read_ms": max(0, int(metrics.get("audio_read_ms", 0))),
             "stt_ms": max(0, int(metrics.get("stt_ms", 0))),
             "llm_ms": max(0, int(metrics.get("llm_ms", 0))),
             "tts_ms": max(0, int(metrics.get("tts_ms", 0))),
@@ -572,6 +599,51 @@ def assert_session_owned_by_user(session_id: str, user_id: str) -> dict[str, Any
     if session.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Session does not belong to user_id")
     return session
+
+
+def log_telemetry(
+    *,
+    user_id: str,
+    session_id: str,
+    backend: str,
+    model: str | None,
+    metrics: dict[str, int] | None,
+    lang: str | None,
+    transcript: str | None,
+    answer: str | None,
+    status: str,
+    error_code: str | None = None,
+    error_detail: str | None = None,
+) -> None:
+    ensure_ready()
+    ts = now_utc()
+    m = metrics or {}
+    doc: dict[str, Any] = {
+        "created_at": ts,
+        "expires_at": telemetry_expiry(),
+        "user_id": user_id,
+        "session_id": session_id,
+        "backend": backend,
+        "model": model,
+        "metrics": {
+            "audio_read_ms": safe_ms(m.get("audio_read_ms")),
+            "stt_ms": safe_ms(m.get("stt_ms")),
+            "llm_ms": safe_ms(m.get("llm_ms")),
+            "tts_ms": safe_ms(m.get("tts_ms")),
+            "total_ms": safe_ms(m.get("total_ms")),
+        },
+        "lang": lang,
+        "transcript": (transcript or "")[:MAX_TEXT_CHARS],
+        "answer": (answer or "")[:MAX_TEXT_CHARS],
+        "status": status,
+        "error_code": (error_code or "")[:128] or None,
+        "error_detail": (error_detail or "")[:512] or None,
+    }
+    try:
+        telemetry_col.insert_one(doc)
+    except Exception:
+        # Telemetry must never break request processing.
+        pass
 
 
 # ----------------------------
@@ -836,6 +908,7 @@ def config(user_id: str | None = Query(None)):
         "crm_export_include_timestamps": CRM_EXPORT_INCLUDE_TIMESTAMPS,
         "crm_protocol_enabled": CRM_PROTOCOL_ENABLED,
         "crm_protocol_format": CRM_PROTOCOL_FORMAT,
+        "telemetry_retention_days": TELEMETRY_RETENTION_DAYS,
         "ui": {
             "admin": is_admin_user(user_id),
             "version": UI_VERSION,
@@ -971,6 +1044,7 @@ def metrics_recent(
                 "backend": d.get("backend"),
                 "model": d.get("model"),
                 "lang": d.get("lang"),
+                "audio_read_ms": max(0, int(m.get("audio_read_ms", 0))),
                 "stt_ms": max(0, int(m.get("stt_ms", 0))),
                 "llm_ms": max(0, int(m.get("llm_ms", 0))),
                 "tts_ms": max(0, int(m.get("tts_ms", 0))),
@@ -1128,22 +1202,59 @@ async def voice(
     upsert_user(uid)
     crm_export_user_enabled = is_crm_export_enabled_for_user(uid)
 
+    backend = (backend or "ollama").strip().lower()
     model_override = model.strip() if model and model.strip() else None
-    selected_model = model_override or OLLAMA_MODEL
+    selected_model = model_override or (OPENAI_MODEL if backend == "openai" else OLLAMA_MODEL)
     sid = get_or_create_session(session_id, uid, backend=backend, model=selected_model)
+
+    metrics: dict[str, int] = {
+        "audio_read_ms": 0,
+        "stt_ms": 0,
+        "llm_ms": 0,
+        "tts_ms": 0,
+        "total_ms": 0,
+    }
+    transcript = ""
+    answer = ""
+    lang: str | None = None
+
+    def error_response(
+        *,
+        status_code: int,
+        error: str,
+        error_code: str | None = None,
+        detail: str | None = None,
+    ) -> JSONResponse:
+        metrics["total_ms"] = max(0, int((time.perf_counter() - t0) * 1000))
+        log_telemetry(
+            user_id=uid,
+            session_id=sid,
+            backend=backend,
+            model=selected_model,
+            metrics=metrics,
+            lang=lang,
+            transcript=transcript,
+            answer=answer,
+            status="error",
+            error_code=error_code,
+            error_detail=detail or error,
+        )
+        payload: dict[str, Any] = {
+            "error": error,
+            "session_id": sid,
+            "user_id": uid,
+            "crm_export_enabled": crm_export_user_enabled,
+            "export_generated": False,
+        }
+        if error_code:
+            payload["code"] = error_code
+        if detail:
+            payload["detail"] = detail
+        return JSONResponse(payload, status_code=status_code)
 
     raw = await file.read()
     if len(raw) > MAX_AUDIO_BYTES:
-        return JSONResponse(
-                {
-                    "error": f"Audio too large (>{MAX_AUDIO_BYTES} bytes)",
-                    "session_id": sid,
-                    "user_id": uid,
-                    "crm_export_enabled": crm_export_user_enabled,
-                    "export_generated": False,
-                },
-                status_code=413,
-            )
+        return error_response(status_code=413, error=f"Audio too large (>{MAX_AUDIO_BYTES} bytes)", error_code="audio_too_large")
 
     input_path = None
     converted_wav_path = None
@@ -1156,123 +1267,70 @@ async def voice(
         with open(input_path, "wb") as handle:
             handle.write(raw)
 
-        converted_wav_path = run_ffmpeg_to_wav_16k_mono(input_path)
+        try:
+            converted_wav_path = run_ffmpeg_to_wav_16k_mono(input_path)
+        except HTTPException:
+            return error_response(status_code=400, error="Unsupported/invalid audio", error_code="unsupported_audio")
 
         t1 = time.perf_counter()
+        metrics["audio_read_ms"] = max(0, int((t1 - t0) * 1000))
         try:
             segments, info = whisper.transcribe(converted_wav_path, language=None, vad_filter=True)
         except Exception:
-            return JSONResponse(
-                {
-                    "error": "Unsupported/invalid audio",
-                    "session_id": sid,
-                    "user_id": uid,
-                    "crm_export_enabled": crm_export_user_enabled,
-                    "export_generated": False,
-                },
-                status_code=400,
-            )
+            return error_response(status_code=400, error="Unsupported/invalid audio", error_code="stt_decode_failed")
         transcript = "".join(seg.text for seg in segments).strip()
-        lang = getattr(info, "language", None)
+        lang = str(getattr(info, "language", "") or "") or None
 
         if not transcript:
-            return JSONResponse(
-                {
-                    "error": "No speech detected",
-                    "session_id": sid,
-                    "user_id": uid,
-                    "crm_export_enabled": crm_export_user_enabled,
-                    "export_generated": False,
-                },
-                status_code=400,
-            )
+            return error_response(status_code=400, error="No speech detected", error_code="no_speech")
 
         if len(transcript) > MAX_TEXT_CHARS:
-            return JSONResponse(
-                {
-                    "error": f"Transcript too long (>{MAX_TEXT_CHARS} chars)",
-                    "session_id": sid,
-                    "user_id": uid,
-                    "crm_export_enabled": crm_export_user_enabled,
-                    "export_generated": False,
-                },
+            return error_response(
                 status_code=400,
+                error=f"Transcript too long (>{MAX_TEXT_CHARS} chars)",
+                error_code="transcript_too_long",
             )
 
         prompt = build_prompt_with_history(sid, transcript, SYSTEM_PROMPT)
         append_message(uid, sid, role="user", content=transcript, lang=lang, backend=backend, model=selected_model)
 
         t2 = time.perf_counter()
+        metrics["stt_ms"] = max(0, int((t2 - t1) * 1000))
         try:
             answer = llm_generate(backend=backend, prompt=prompt, model_override=model_override)
         except Exception as e:
+            metrics["llm_ms"] = max(0, int((time.perf_counter() - t2) * 1000))
             msg = str(e)
             if msg.startswith("OLLAMA_INSUFFICIENT_MEMORY::"):
                 detail = msg.split("::", 1)[1]
-                return JSONResponse(
-                    {
-                        "error": "LLM failed: insufficient memory for selected model",
-                        "code": "insufficient_memory",
-                        "detail": detail,
-                        "session_id": sid,
-                        "user_id": uid,
-                        "crm_export_enabled": crm_export_user_enabled,
-                        "export_generated": False,
-                    },
+                return error_response(
                     status_code=507,
+                    error="LLM failed: insufficient memory for selected model",
+                    error_code="insufficient_memory",
+                    detail=detail,
                 )
             if msg.startswith("OPENAI_NOT_CONFIGURED::"):
                 detail = msg.split("::", 1)[1]
-                return JSONResponse(
-                    {
-                        "error": "OpenAI backend not configured",
-                        "code": "openai_not_configured",
-                        "detail": detail,
-                        "session_id": sid,
-                        "user_id": uid,
-                        "crm_export_enabled": crm_export_user_enabled,
-                        "export_generated": False,
-                    },
+                return error_response(
                     status_code=503,
+                    error="OpenAI backend not configured",
+                    error_code="openai_not_configured",
+                    detail=detail,
                 )
             if msg.startswith("OPENAI_HTTP_429::"):
                 detail = msg.split("::", 1)[1]
-                return JSONResponse(
-                    {
-                        "error": "OpenAI quota/billing issue",
-                        "code": "openai_quota",
-                        "detail": detail,
-                        "session_id": sid,
-                        "user_id": uid,
-                        "crm_export_enabled": crm_export_user_enabled,
-                        "export_generated": False,
-                    },
+                return error_response(
                     status_code=429,
+                    error="OpenAI quota/billing issue",
+                    error_code="openai_quota",
+                    detail=detail,
                 )
-            return JSONResponse(
-                {
-                    "error": "LLM failed",
-                    "detail": msg,
-                    "session_id": sid,
-                    "user_id": uid,
-                    "crm_export_enabled": crm_export_user_enabled,
-                    "export_generated": False,
-                },
-                status_code=502,
-            )
+            return error_response(status_code=502, error="LLM failed", error_code="llm_failed", detail=msg)
 
         t3 = time.perf_counter()
-        stt_ms = max(0, int((t2 - t1) * 1000))
-        llm_ms = max(0, int((t3 - t2) * 1000))
-        tts_ms = 0
-        total_ms = max(0, int((t3 - t0) * 1000))
-        metrics = {
-            "audio_read_ms": max(0, int((t1 - t0) * 1000)),
-            "stt_ms": stt_ms,
-            "llm_ms": llm_ms,
-            "tts_ms": tts_ms,
-            "total_ms": total_ms,
-        }
+        metrics["llm_ms"] = max(0, int((t3 - t2) * 1000))
+        metrics["tts_ms"] = 0
+        metrics["total_ms"] = max(0, int((t3 - t0) * 1000))
 
         if return_audio == "1":
             t3_tts = time.perf_counter()
@@ -1295,21 +1353,14 @@ async def voice(
                     metrics=metrics,
                 )
                 mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
-                return JSONResponse(
-                    {
-                        "error": f"TTS failed: {str(e)}",
-                        "session_id": sid,
-                        "user_id": uid,
-                        "crm_export_enabled": crm_export_user_enabled,
-                        "export_generated": False,
-                    },
+                return error_response(
                     status_code=502,
+                    error=f"TTS failed: {str(e)}",
+                    error_code="tts_failed",
                 )
 
-            tts_ms = max(0, int((time.perf_counter() - t3_tts) * 1000))
-            total_ms = max(0, int((time.perf_counter() - t0) * 1000))
-            metrics["tts_ms"] = tts_ms
-            metrics["total_ms"] = total_ms
+            metrics["tts_ms"] = max(0, int((time.perf_counter() - t3_tts) * 1000))
+            metrics["total_ms"] = max(0, int((time.perf_counter() - t0) * 1000))
 
             append_message(
                 uid,
@@ -1327,6 +1378,17 @@ async def voice(
             os.close(fd2)
             with open(tts_wav_path, "wb") as wf:
                 wf.write(tts_resp.content)
+            log_telemetry(
+                user_id=uid,
+                session_id=sid,
+                backend=backend,
+                model=selected_model,
+                metrics=metrics,
+                lang=lang,
+                transcript=transcript,
+                answer=answer,
+                status="ok",
+            )
 
             return FileResponse(
                 tts_wav_path,
@@ -1353,18 +1415,32 @@ async def voice(
             metrics=metrics,
         )
         mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
+        log_telemetry(
+            user_id=uid,
+            session_id=sid,
+            backend=backend,
+            model=selected_model,
+            metrics=metrics,
+            lang=lang,
+            transcript=transcript,
+            answer=answer,
+            status="ok",
+        )
 
         return {
             "session_id": sid,
             "user_id": uid,
+            "backend": backend,
+            "model": selected_model,
             "transcript": transcript,
             "lang": lang,
             "answer": answer,
             "metrics": metrics,
-            "stt_ms": stt_ms,
-            "llm_ms": llm_ms,
-            "tts_ms": tts_ms,
-            "total_ms": total_ms,
+            "audio_read_ms": metrics["audio_read_ms"],
+            "stt_ms": metrics["stt_ms"],
+            "llm_ms": metrics["llm_ms"],
+            "tts_ms": metrics["tts_ms"],
+            "total_ms": metrics["total_ms"],
             "crm_export_enabled": crm_export_user_enabled,
             "export_generated": crm_export_user_enabled,
             "export_url": (
@@ -1372,7 +1448,19 @@ async def voice(
             ),
         }
 
-    except HTTPException:
-        raise
+    except HTTPException as exc:
+        return error_response(
+            status_code=exc.status_code,
+            error=str(exc.detail) if exc.detail else "Request failed",
+            error_code="http_exception",
+            detail=str(exc.detail) if exc.detail else None,
+        )
+    except Exception as exc:
+        return error_response(
+            status_code=500,
+            error="Internal server error",
+            error_code="internal_error",
+            detail=str(exc),
+        )
     finally:
         cleanup_paths(input_path, converted_wav_path)

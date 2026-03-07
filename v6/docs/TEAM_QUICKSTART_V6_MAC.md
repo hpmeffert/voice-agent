@@ -7,6 +7,7 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
 - TTL retention:
   - `MESSAGE_RETENTION_DAYS` (default `30`)
   - `SESSION_RETENTION_DAYS` (default `90`)
+  - `TELEMETRY_RETENTION_DAYS` (default `30`)
 - Delete endpoints:
   - `POST /api/session/delete`
   - `POST /api/user/delete`
@@ -169,6 +170,7 @@ curl -s "http://localhost:8080/api/user/prefs?user_id=test-user-1"
 
 ## V6.7 Performance Metrics
 - `/api/voice` JSON responses include:
+  - `audio_read_ms`
   - `stt_ms`, `llm_ms`, `tts_ms`, `total_ms`
   - `metrics` object with the same values
 - Recent metrics endpoint:
@@ -180,6 +182,19 @@ Quick verification:
 1. Send three voice requests from UI (same `user_id`).
 2. Check Result panel latency breakdown after each request.
 3. Run `/api/metrics/recent` and verify newest entries appear first.
+
+## V6.8.1 Telemetry logs (admin)
+- Mongo collection: `telemetry_logs`
+- Written on every `/api/voice` call (`ok` and `error`)
+- TTL controlled by `TELEMETRY_RETENTION_DAYS`
+
+Check recent telemetry:
+```bash
+docker compose -f v6/docker/compose.dev.yml exec mongo mongosh --eval 'use voice_agent; db.telemetry_logs.find().sort({created_at:-1}).limit(5).pretty()'
+```
+
+Detailed admin guide:
+- `v6/docs/ADMIN.md`
 
 Toggle smoke checks:
 ```bash
