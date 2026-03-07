@@ -49,6 +49,12 @@ SESSION_RETENTION_DAYS = int(os.getenv("SESSION_RETENTION_DAYS", "90"))
 MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
 MAX_TEXT_CHARS = int(os.getenv("MAX_TEXT_CHARS", "8000"))
 CRM_EXPORT_ENABLED = os.getenv("CRM_EXPORT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+CRM_EXPORT_DEFAULT_ENABLED = os.getenv("CRM_EXPORT_DEFAULT_ENABLED", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 CRM_EXPORT_FORMAT = os.getenv("CRM_EXPORT_FORMAT", "md").strip().lower()
 CRM_EXPORT_TEMPLATE_MD = os.getenv(
     "CRM_EXPORT_TEMPLATE_MD",
@@ -393,10 +399,53 @@ def upsert_user(user_id: str) -> None:
         {"_id": user_id},
         {
             "$set": {"updated_at": ts, "last_seen_at": ts},
+            "$setOnInsert": {
+                "_id": user_id,
+                "created_at": ts,
+                "prefs.crm_export_enabled": CRM_EXPORT_DEFAULT_ENABLED,
+            },
+        },
+        upsert=True,
+    )
+
+
+def get_user_crm_export_enabled(user_id: str) -> bool:
+    ensure_ready()
+    doc = users_col.find_one({"_id": user_id}, {"prefs.crm_export_enabled": 1})
+    if not doc:
+        upsert_user(user_id)
+        return CRM_EXPORT_DEFAULT_ENABLED
+
+    prefs = doc.get("prefs") or {}
+    value = prefs.get("crm_export_enabled")
+    if isinstance(value, bool):
+        return value
+
+    ts = now_utc()
+    users_col.update_one(
+        {"_id": user_id},
+        {"$set": {"updated_at": ts, "last_seen_at": ts, "prefs.crm_export_enabled": CRM_EXPORT_DEFAULT_ENABLED}},
+    )
+    return CRM_EXPORT_DEFAULT_ENABLED
+
+
+def set_user_crm_export_enabled(user_id: str, enabled: bool) -> None:
+    ensure_ready()
+    ts = now_utc()
+    users_col.update_one(
+        {"_id": user_id},
+        {
+            "$set": {"updated_at": ts, "last_seen_at": ts, "prefs.crm_export_enabled": bool(enabled)},
             "$setOnInsert": {"_id": user_id, "created_at": ts},
         },
         upsert=True,
     )
+
+
+def is_crm_export_enabled_for_user(user_id: str) -> bool:
+    if not CRM_EXPORT_ENABLED:
+        return False
+    return get_user_crm_export_enabled(user_id)
 
 
 def get_or_create_session(session_id: str | None, user_id: str, backend: str | None, model: str | None) -> str:
@@ -720,6 +769,11 @@ class UserDeleteRequest(BaseModel):
     user_id: str = Field(min_length=8)
 
 
+class UserPrefsRequest(BaseModel):
+    user_id: str = Field(min_length=8)
+    crm_export_enabled: bool
+
+
 # ----------------------------
 # Routes
 # ----------------------------
@@ -758,12 +812,25 @@ def models():
 def config():
     return {
         "crm_export_enabled": CRM_EXPORT_ENABLED,
+        "crm_export_default_enabled": CRM_EXPORT_DEFAULT_ENABLED,
         "crm_export_mode": CRM_EXPORT_MODE,
         "crm_export_format": CRM_EXPORT_FORMAT,
         "crm_export_include_timestamps": CRM_EXPORT_INCLUDE_TIMESTAMPS,
         "crm_protocol_enabled": CRM_PROTOCOL_ENABLED,
         "crm_protocol_format": CRM_PROTOCOL_FORMAT,
     }
+
+
+@app.get("/user/prefs")
+def get_user_prefs(user_id: str = Query(..., min_length=8)):
+    enabled = get_user_crm_export_enabled(user_id)
+    return {"user_id": user_id, "crm_export_enabled": enabled}
+
+
+@app.post("/user/prefs")
+def set_user_prefs(req: UserPrefsRequest):
+    set_user_crm_export_enabled(req.user_id, req.crm_export_enabled)
+    return {"ok": True, "user_id": req.user_id, "crm_export_enabled": bool(req.crm_export_enabled)}
 
 
 @app.get("/templates")
@@ -850,8 +917,8 @@ def export_session(
     user_id: str = Query(..., min_length=8),
     format: str = Query("", pattern="^(|md|json)$"),
 ):
-    if not CRM_EXPORT_ENABLED:
-        return JSONResponse({"status": "disabled"})
+    if not is_crm_export_enabled_for_user(user_id):
+        return JSONResponse({"status": "disabled", "reason": "crm_export_disabled_for_user"})
 
     export_format = (format or "").strip().lower()
     if export_format not in {"md", "json"}:
@@ -989,6 +1056,7 @@ async def voice(
     t0 = time.perf_counter()
     uid = normalize_user_id(user_id)
     upsert_user(uid)
+    crm_export_user_enabled = is_crm_export_enabled_for_user(uid)
 
     model_override = model.strip() if model and model.strip() else None
     selected_model = model_override or OLLAMA_MODEL
@@ -997,13 +1065,15 @@ async def voice(
     raw = await file.read()
     if len(raw) > MAX_AUDIO_BYTES:
         return JSONResponse(
-            {
-                "error": f"Audio too large (>{MAX_AUDIO_BYTES} bytes)",
-                "session_id": sid,
-                "user_id": uid,
-            },
-            status_code=413,
-        )
+                {
+                    "error": f"Audio too large (>{MAX_AUDIO_BYTES} bytes)",
+                    "session_id": sid,
+                    "user_id": uid,
+                    "crm_export_enabled": crm_export_user_enabled,
+                    "export_generated": False,
+                },
+                status_code=413,
+            )
 
     input_path = None
     converted_wav_path = None
@@ -1027,6 +1097,8 @@ async def voice(
                     "error": "Unsupported/invalid audio",
                     "session_id": sid,
                     "user_id": uid,
+                    "crm_export_enabled": crm_export_user_enabled,
+                    "export_generated": False,
                 },
                 status_code=400,
             )
@@ -1039,6 +1111,8 @@ async def voice(
                     "error": "No speech detected",
                     "session_id": sid,
                     "user_id": uid,
+                    "crm_export_enabled": crm_export_user_enabled,
+                    "export_generated": False,
                 },
                 status_code=400,
             )
@@ -1049,6 +1123,8 @@ async def voice(
                     "error": f"Transcript too long (>{MAX_TEXT_CHARS} chars)",
                     "session_id": sid,
                     "user_id": uid,
+                    "crm_export_enabled": crm_export_user_enabled,
+                    "export_generated": False,
                 },
                 status_code=400,
             )
@@ -1070,6 +1146,8 @@ async def voice(
                         "detail": detail,
                         "session_id": sid,
                         "user_id": uid,
+                        "crm_export_enabled": crm_export_user_enabled,
+                        "export_generated": False,
                     },
                     status_code=507,
                 )
@@ -1082,6 +1160,8 @@ async def voice(
                         "detail": detail,
                         "session_id": sid,
                         "user_id": uid,
+                        "crm_export_enabled": crm_export_user_enabled,
+                        "export_generated": False,
                     },
                     status_code=503,
                 )
@@ -1094,6 +1174,8 @@ async def voice(
                         "detail": detail,
                         "session_id": sid,
                         "user_id": uid,
+                        "crm_export_enabled": crm_export_user_enabled,
+                        "export_generated": False,
                     },
                     status_code=429,
                 )
@@ -1103,6 +1185,8 @@ async def voice(
                     "detail": msg,
                     "session_id": sid,
                     "user_id": uid,
+                    "crm_export_enabled": crm_export_user_enabled,
+                    "export_generated": False,
                 },
                 status_code=502,
             )
@@ -1132,6 +1216,8 @@ async def voice(
                         "error": f"TTS failed: {str(e)}",
                         "session_id": sid,
                         "user_id": uid,
+                        "crm_export_enabled": crm_export_user_enabled,
+                        "export_generated": False,
                     },
                     status_code=502,
                 )
@@ -1149,6 +1235,8 @@ async def voice(
                     "X-Session-Id": sid,
                     "X-User-Id": uid,
                     "X-Detected-Lang": (lang or ""),
+                    "X-Crm-Export-Enabled": "1" if crm_export_user_enabled else "0",
+                    "X-Export-Generated": "1" if crm_export_user_enabled else "0",
                 },
                 background=BackgroundTask(cleanup_paths, tts_wav_path),
             )
@@ -1160,6 +1248,11 @@ async def voice(
             "lang": lang,
             "answer": answer,
             "metrics": metrics,
+            "crm_export_enabled": crm_export_user_enabled,
+            "export_generated": crm_export_user_enabled,
+            "export_url": (
+                f"/api/session/{sid}/export?user_id={uid}&format=md" if crm_export_user_enabled else None
+            ),
         }
 
     except HTTPException:

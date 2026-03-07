@@ -6,6 +6,7 @@
 - `Send`: sends captured audio to `/api/voice`.
 - `Clear Session`: clears local `session_id` and starts a new conversation context.
 - `Download Transcript`: downloads the current session transcript as Markdown or JSON.
+- `CRM Export`: per-user toggle for transcript export availability (stored server-side in Mongo).
 - `Download Protocol`: downloads protocol export if enabled.
 
 ## Sessions and identities

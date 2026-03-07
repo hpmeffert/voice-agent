@@ -19,6 +19,7 @@
 - Ask the same question and compare speed/quality.
 
 ## 5) Transcript export
+- Ensure `CRM Export` toggle is ON for the current user.
 - Click `Download Transcript` and show generated file.
 - Optional API call:
   - `GET /api/session/<session_id>/export?user_id=<user_id>&format=md`
