@@ -3,7 +3,7 @@
 <!--
 MIT-owned template file.
 Placeholders:
-  {{date}}, {{time}}, {{weekday}}, {{user_id}}, {{session_id}}, {{messages}}
+  date, time, weekday, user_id, session_id, messages
 -->
 
 **Date:** {{date}}  
