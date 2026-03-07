@@ -21,7 +21,7 @@ curl -s "http://localhost:8081/api/whoami?user_id=test-user-700"
 curl -s "http://localhost:8081/api/user/test-user-700"
 curl -s -X POST http://localhost:8081/api/user/settings \
   -H 'Content-Type: application/json' \
-  -d '{"user_id":"test-user-700","listen_mode_default":true,"silence_ms":1100,"threshold":0.012}'
+  -d '{"user_id":"test-user-700","listen_mode_default":true,"silence_ms":1300,"threshold":0.012}'
 docker compose -f v7/docker/compose.dev.yml exec mongo mongosh --eval 'db.runCommand({ ping: 1 })'
 ```
 
@@ -53,6 +53,7 @@ curl -s "http://localhost:8081/api/session/<SESSION_ID>?user_id=<USER_ID>&limit=
   - `listen_mode_default`
   - `silence_ms`
   - `threshold`
+- Default `silence_ms` in V7.2 is `1300`.
 - API and nginx now normalize upstream failures as JSON for `/api/*` routes (no HTML error page in UI path).
 - Use V7 docs in Help menu:
   - `/docs/ui/HELP_USER.md`

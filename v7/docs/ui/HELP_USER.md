@@ -1,52 +1,71 @@
-# Voice Agent Help (V7.2.0)
+# Benutzer Dokumentation (V7.2.0)
 
-## What is new in V7
-- V7 runs fully isolated under `v7/` (no runtime overlap with V6).
-- Dedicated dev ports:
-  - Web: `http://localhost:8081`
-  - API: `http://localhost:8001` (proxied as `/api`)
-  - Piper: `:5003`
-  - Mongo: `:27018`
-- Demo users are created as `admin` by default in Mongo (testing mode).
+Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einstellung hat.
 
-## Main controls
-- `Record`: start microphone capture.
-- `Stop`: stop recording.
-- `Send`: send audio to `/api/voice`.
-- `Clear Session`: reset local session and start fresh.
+## Einstieg
+- URL: `http://localhost:8081`
+- Oben rechts im Help-Menue:
+  - `Admin Token speichern`
+  - `Help` (diese Benutzer Dokumentation)
+  - `Demo Guide`
+  - `Admin Docs` (nur sichtbar bei Admin)
+  - `Release Notes`
 
-## Listen Mode (hands-free)
-- Toggle `Listen Mode` ON for automatic turn-taking.
-- Behavior:
-  - recording starts automatically
-  - silence triggers auto-stop
-  - request is auto-sent
-  - after TTS reply ends, recording starts again
-- Tune quality with:
-  - `Silence threshold (ms)`
-  - `Voice threshold (RMS)`
-- Settings are persisted per user in Mongo and restored on reload.
+## Hauptfunktionen im UI
+- `Record`: startet die Mikrofonaufnahme manuell.
+- `Stop`: stoppt die laufende Aufnahme.
+- `Send`: sendet die letzte Aufnahme an `/api/voice`.
+- `Clear Session`: setzt lokale Session zurueck und startet neuen Konversationskontext.
 
-## Audio reliability (V7.2.0)
-- Browser audio is recorded with preferred Opus/WebM when supported.
-- Server converts uploaded audio with ffmpeg to stable `16kHz mono WAV` before Whisper STT.
-- This conversion avoids common decode issues such as `EOFError: End of file`.
+## Identitaet und Kontext
+- `User`: wird in localStorage gespeichert und identifiziert den Browser-Nutzer.
+- `Session`: wird in localStorage gespeichert und erhaelt den Gespraechsverlauf.
+- Wirkung:
+  - gleiche Session => Folgefragen mit Verlauf
+  - neue Session => frischer Kontext
 
-## Troubleshooting EOFError
-- Symptom: UI shows STT decode/conversion failure.
-- Action:
-  - retry with a fresh recording
-  - check microphone permission and input device
-  - avoid sending empty audio blobs
-- Why it works now:
-  - V7.2.0 normalizes browser formats via ffmpeg before transcription.
+## Einstellungen fuer Gespraechsfluss
+- `Listen Mode`:
+  - Wirkung: startet Aufnahme automatisch, stoppt bei Stille, sendet automatisch und startet nach TTS erneut.
+- `Auto-stop on silence`:
+  - Wirkung: Aufnahme stoppt automatisch nach Stillefenster.
+- `Auto-send after stop`:
+  - Wirkung: sendet automatisch nach Auto-Stop.
+- `Silence threshold (ms)`:
+  - Standard: `1300`
+  - Wirkung: hoeherer Wert = wartet laenger auf weitere Sprache, niedriger = reagiert frueher.
+- `Voice threshold (RMS)`:
+  - Wirkung: Empfindlichkeit fuer Sprachbeginn/Sprachende.
+  - Hoeher = weniger empfindlich gegen Hintergrundgeraeusche.
+- `Max recording seconds`:
+  - Wirkung: Sicherheitslimit fuer lange Aufnahmen.
 
-## Help menu
-- `Help`: this user guide.
-- `Demo Guide`: presenter flow for demos.
-- `Admin Docs`: visible for admins, loaded from server-gated endpoint.
-- `V7 Release Notes`: V7 release summary.
+## Ergebnisbereich
+- `Transcript`: erkannter gesprochener Text.
+- `Answer`: Antwort des Assistenten.
+- Metadaten: Session, User, Sprache, Backend, Modell.
+- Latenzpanel: Audio Read, STT, LLM, TTS, Total.
+- `Debug JSON`: technische Rohantwort fuer Analyse.
 
-## Security caveat
-- Admin visibility in V7 is for demo/testing convenience.
-- Full production auth/roles are planned for later major versions.
+## Exportfunktionen
+- `CRM Export` Toggle:
+  - Wirkung: aktiviert/deaktiviert Transcript-Export pro User.
+- `Download Transcript`:
+  - Format waehlbar (md/json je nach Serverkonfiguration).
+- `Download Protocol`:
+  - laedt strukturierten Protokoll-Export.
+
+## Audio-Zuverlaessigkeit (V7.2.0)
+- Browser nutzt bevorzugt `audio/webm;codecs=opus`.
+- Server konvertiert Uploads mit ffmpeg in stabiles `16kHz mono WAV` vor Whisper.
+- Wirkung: deutlich weniger STT-Decode-Fehler wie `EOFError: End of file`.
+
+## Fehlerverhalten
+- API-Fehler kommen als JSON.
+- Auch bei API-Upstream-Problemen liefert `/api/*` JSON statt HTML-Seite.
+
+## Hinweis fuer laufende Releases
+- Bei jeder neuen V7-Version werden drei Help-Menue-Dokumente aktualisiert:
+  - Benutzer Dokumentation
+  - Demo Guide
+  - Release Notes
