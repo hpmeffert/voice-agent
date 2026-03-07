@@ -69,6 +69,9 @@ CRM_EXPORT_INCLUDE_TIMESTAMPS = os.getenv("CRM_EXPORT_INCLUDE_TIMESTAMPS", "true
 CRM_EXPORT_TIMEZONE = os.getenv("CRM_EXPORT_TIMEZONE", "Europe/Berlin").strip() or "Europe/Berlin"
 MAX_EXPORT_MESSAGES = int(os.getenv("MAX_EXPORT_MESSAGES", "200"))
 MAX_EXPORT_BYTES = int(os.getenv("MAX_EXPORT_BYTES", str(1_500_000)))
+ADMIN_DEV_MODE = os.getenv("ADMIN_DEV_MODE", "0").strip() == "1"
+UI_VERSION = os.getenv("UI_VERSION", "v6.6.1").strip() or "v6.6.1"
+UI_BUILD = os.getenv("UI_BUILD", "").strip()
 CRM_EXPORT_MODE = os.getenv("CRM_EXPORT_MODE", "file").strip().lower()
 CRM_EXPORT_WEBHOOK_URL = os.getenv("CRM_EXPORT_WEBHOOK_URL", "").strip()
 CRM_PROTOCOL_ENABLED = os.getenv("CRM_PROTOCOL_ENABLED", "1").strip() == "1"
@@ -448,6 +451,13 @@ def is_crm_export_enabled_for_user(user_id: str) -> bool:
     return get_user_crm_export_enabled(user_id)
 
 
+def is_admin_user(user_id: str | None) -> bool:
+    if ADMIN_DEV_MODE:
+        return True
+    # Placeholder for real role model (planned for V9)
+    return False
+
+
 def get_or_create_session(session_id: str | None, user_id: str, backend: str | None, model: str | None) -> str:
     ensure_ready()
     sid = (session_id or "").strip() or str(uuid.uuid4())
@@ -809,7 +819,7 @@ def models():
 
 
 @app.get("/config")
-def config():
+def config(user_id: str | None = Query(None)):
     return {
         "crm_export_enabled": CRM_EXPORT_ENABLED,
         "crm_export_default_enabled": CRM_EXPORT_DEFAULT_ENABLED,
@@ -818,6 +828,11 @@ def config():
         "crm_export_include_timestamps": CRM_EXPORT_INCLUDE_TIMESTAMPS,
         "crm_protocol_enabled": CRM_PROTOCOL_ENABLED,
         "crm_protocol_format": CRM_PROTOCOL_FORMAT,
+        "ui": {
+            "admin": is_admin_user(user_id),
+            "version": UI_VERSION,
+            "build": UI_BUILD,
+        },
     }
 
 

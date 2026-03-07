@@ -136,13 +136,41 @@
     }
     audio { width:100%; margin-top:8px; }
 
-    .topRight { display:flex; gap:8px; align-items:center; }
-    .helpBtn {
-      width: 34px;
-      height: 34px;
-      border-radius: 999px;
-      font-weight: 700;
-      padding: 0;
+    .topRight { display:flex; gap:8px; align-items:center; position: relative; }
+    .menuBtn { font-weight: 600; }
+    .menuPanel {
+      position: absolute;
+      top: 44px;
+      right: 0;
+      min-width: 260px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      padding: 8px;
+      display: none;
+      z-index: 20;
+    }
+    .menuPanel.show { display: block; }
+    .menuHeader {
+      font-size: 12px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      padding: 6px 8px 8px 8px;
+      margin-bottom: 6px;
+    }
+    .menuItem {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 8px;
+      color: var(--text);
+    }
+    .menuItem:hover {
+      border-color: var(--border);
+      background: color-mix(in srgb, var(--card), var(--text) 4%);
     }
     .modalBackdrop {
       position: fixed;
@@ -174,7 +202,6 @@
       background: var(--card);
     }
     .modalBody { padding: 14px; }
-    .helpBlock { margin-bottom: 16px; }
     .helpTitle { margin: 0 0 8px 0; font-size: 15px; }
     .helpText {
       white-space: pre-wrap;
@@ -197,13 +224,21 @@
         <p class="sub">Auto conversation, robust browser audio STT, and transcript export.</p>
       </div>
       <div class="topRight">
-        <button id="helpBtn" class="helpBtn" title="Help / Demo Guide">?</button>
+        <button id="menuBtn" class="menuBtn" title="Help / Menu">Help</button>
         <label class="muted" for="themeMode">Theme</label>
         <select id="themeMode">
           <option value="auto">Auto</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
+        <div id="menuPanel" class="menuPanel">
+          <div id="menuVersion" class="menuHeader">Version: -</div>
+          <button class="menuItem" data-help-doc="/docs/HELP_USER.md" data-help-title="User Help">User Help</button>
+          <button class="menuItem" data-help-doc="/docs/HELP_DEMO_GUIDE.md" data-help-title="Demo Guide">Demo Guide</button>
+          <button id="adminGuideItem" class="menuItem" data-help-doc="/docs/HELP_ADMIN.md" data-help-title="Admin Guide" style="display:none;">Admin Guide</button>
+          <button id="adminTestingItem" class="menuItem" data-help-doc="/docs/HELP_ADMIN_TESTING.md" data-help-title="Admin Testing" style="display:none;">Admin Testing</button>
+          <button class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes / Version">Release Notes / Version</button>
+        </div>
       </div>
     </div>
 
@@ -313,18 +348,12 @@
   <div id="helpModalBackdrop" class="modalBackdrop">
     <div class="modal" role="dialog" aria-modal="true" aria-label="Help and Demo Guide">
       <div class="modalHeader">
-        <b>Help and Demo Guide</b>
+        <b id="helpModalTitle">Help</b>
         <button id="helpCloseBtn">Close</button>
       </div>
       <div class="modalBody">
-        <div class="helpBlock">
-          <h3 class="helpTitle">User Help</h3>
-          <div id="helpUserText" class="helpText">Loading...</div>
-        </div>
-        <div class="helpBlock">
-          <h3 class="helpTitle">Demo Guide</h3>
-          <div id="helpDemoText" class="helpText">Loading...</div>
-        </div>
+        <h3 id="helpDocTitle" class="helpTitle">Loading...</h3>
+        <div id="helpDocText" class="helpText">Loading...</div>
       </div>
     </div>
   </div>
@@ -366,11 +395,16 @@ const btnProtocol = el("btnProtocol");
 const backendSel = el("backend");
 const modelSel = el("model");
 const themeSel = el("themeMode");
-const helpBtn = el("helpBtn");
+const menuBtn = el("menuBtn");
+const menuPanel = el("menuPanel");
+const menuVersion = el("menuVersion");
+const adminGuideItem = el("adminGuideItem");
+const adminTestingItem = el("adminTestingItem");
 const helpModalBackdrop = el("helpModalBackdrop");
 const helpCloseBtn = el("helpCloseBtn");
-const helpUserText = el("helpUserText");
-const helpDemoText = el("helpDemoText");
+const helpModalTitle = el("helpModalTitle");
+const helpDocTitle = el("helpDocTitle");
+const helpDocText = el("helpDocText");
 const transcriptRow = el("transcriptRow");
 const exportFormatSel = el("exportFormat");
 const exportStatusEl = el("exportStatus");
@@ -398,7 +432,9 @@ let crmExportFormat = "md";
 let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
-let helpLoaded = false;
+let uiAdmin = false;
+let uiVersionText = "v6.6.1";
+const helpDocCache = {};
 
 function shortId(value) {
   if (!value) return "-";
@@ -536,13 +572,37 @@ themeSel.onchange = () => {
   applyTheme(themeSel.value);
 };
 
-helpBtn.onclick = openHelpModal;
+menuBtn.onclick = () => {
+  menuPanel.classList.toggle("show");
+};
+document.addEventListener("click", (ev) => {
+  if (!menuPanel.contains(ev.target) && ev.target !== menuBtn) {
+    menuPanel.classList.remove("show");
+  }
+});
+for (const item of document.querySelectorAll("[data-help-doc]")) {
+  item.addEventListener("click", async () => {
+    const docPath = item.getAttribute("data-help-doc");
+    const title = item.getAttribute("data-help-title") || "Help";
+    menuPanel.classList.remove("show");
+    openHelpModal(title);
+    helpDocText.textContent = "Loading...";
+    try {
+      helpDocText.textContent = await loadHelpDoc(docPath);
+    } catch (err) {
+      helpDocText.textContent = `Could not load ${docPath}\n${String(err)}`;
+    }
+  });
+}
 helpCloseBtn.onclick = closeHelpModal;
 helpModalBackdrop.onclick = (ev) => {
   if (ev.target === helpModalBackdrop) closeHelpModal();
 };
 document.addEventListener("keydown", (ev) => {
-  if (ev.key === "Escape") closeHelpModal();
+  if (ev.key === "Escape") {
+    closeHelpModal();
+    menuPanel.classList.remove("show");
+  }
 });
 
 conversationModeSel.onchange = () => {
@@ -579,29 +639,31 @@ async function fetchWithRetry(url, tries = 30, baseDelayMs = 500) {
   throw new Error(`Failed to load ${url} after ${tries} tries`);
 }
 
-async function loadHelpAndDemo() {
-  if (helpLoaded) return;
-  try {
-    const [helpResp, demoResp] = await Promise.all([
-      fetch("/docs/help_user.md", { cache: "no-store" }),
-      fetch("/docs/demo_guide.md", { cache: "no-store" }),
-    ]);
-    helpUserText.textContent = helpResp.ok ? await helpResp.text() : "Help content not found.";
-    helpDemoText.textContent = demoResp.ok ? await demoResp.text() : "Demo guide not found.";
-  } catch (_) {
-    helpUserText.textContent = "Help content could not be loaded.";
-    helpDemoText.textContent = "Demo guide could not be loaded.";
+async function loadHelpDoc(path) {
+  if (helpDocCache[path]) return helpDocCache[path];
+  const r = await fetch(path, { cache: "no-store" });
+  if (!r.ok) {
+    throw new Error(`Help document not found: ${path}`);
   }
-  helpLoaded = true;
+  const text = await r.text();
+  helpDocCache[path] = text;
+  return text;
 }
 
-function openHelpModal() {
+function openHelpModal(title) {
+  helpModalTitle.textContent = "Help";
+  helpDocTitle.textContent = title || "Help";
   helpModalBackdrop.classList.add("show");
-  loadHelpAndDemo();
 }
 
 function closeHelpModal() {
   helpModalBackdrop.classList.remove("show");
+}
+
+function updateMenuUi() {
+  adminGuideItem.style.display = uiAdmin ? "block" : "none";
+  adminTestingItem.style.display = uiAdmin ? "block" : "none";
+  menuVersion.textContent = `Version: ${uiVersionText}`;
 }
 
 async function loadModels() {
@@ -626,7 +688,7 @@ async function loadModels() {
 
 async function loadConfig() {
   try {
-    const r = await fetchWithRetry("/api/config", 20, 500);
+    const r = await fetchWithRetry(`/api/config?user_id=${encodeURIComponent(userId)}`, 20, 500);
     const cfg = await r.json();
     crmExportGlobalEnabled = !!cfg.crm_export_enabled;
     crmExportFormat = cfg.crm_export_format || "md";
@@ -638,15 +700,22 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
+    uiAdmin = !!cfg?.ui?.admin;
+    const ver = cfg?.ui?.version || "v6.6.1";
+    const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
+    uiVersionText = `${ver}${build}`;
   } catch (_) {
     crmExportGlobalEnabled = false;
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
+    uiAdmin = false;
+    uiVersionText = "v6.6.1";
   }
   recomputeCrmExportEnabled();
   updateExportUi();
   updateProtocolUi();
+  updateMenuUi();
 }
 
 async function loadUserPrefs() {

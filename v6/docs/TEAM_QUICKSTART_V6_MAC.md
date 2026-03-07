@@ -75,6 +75,7 @@ curl -s "http://localhost:8080/api/session/test-session-1?user_id=test-user-1&li
 Feature toggle envs for API:
 - `CRM_EXPORT_ENABLED` (`true|false`, default `true`)
 - `CRM_EXPORT_DEFAULT_ENABLED` (`true|false`, default `true`)
+- `ADMIN_DEV_MODE` (`0|1`, default `1` in dev compose for V6.6.1 testing)
 - `CRM_EXPORT_FORMAT` (`md|json|both`, default `md`)
 - `CRM_EXPORT_TEMPLATE_MD` (default `v6/templates/transcript_default.md.tpl`)
 - `CRM_EXPORT_INCLUDE_TIMESTAMPS` (`true|false`, default `true`)
@@ -99,8 +100,8 @@ curl -OJ "http://localhost:8080/api/session/test-session-1/export?user_id=test-u
 ## UI Help and Demo Guide (V6.5)
 - Result output now wraps long lines for demo readability (`pre-wrap` + `break-word`).
 - Open the `?` button in the top-right UI to view:
-  - User Help (`v6/docs/help_user.md`)
-  - Demo Guide (`v6/docs/demo_guide.md`)
+  - User Help (`v6/docs/HELP_USER.md`)
+  - Demo Guide (`v6/docs/HELP_DEMO_GUIDE.md`)
 
 Demo script tip:
 ```bash
@@ -109,11 +110,28 @@ curl -s http://localhost:8080/api/models
 ```
 
 Edit demo/help content here:
-- `v6/docs/help_user.md`
-- `v6/docs/demo_guide.md`
+- `v6/docs/HELP_USER.md`
+- `v6/docs/HELP_DEMO_GUIDE.md`
 
 Rule from V6.5 onward:
 - Every new feature must update both Help and Demo Guide content.
+
+## Help Menu Split (V6.6.1)
+- Top-right `Help` menu now has separate entries:
+  - User Help
+  - Demo Guide
+  - Admin Guide (admin-only)
+  - Admin Testing (admin-only)
+  - Release Notes / Version
+- Version line is shown in menu (from `/api/config -> ui.version/ui.build`).
+- In DEV mode (`ADMIN_DEV_MODE=1`) admin entries are visible for all users.
+
+Help source files:
+- `v6/docs/HELP_USER.md`
+- `v6/docs/HELP_DEMO_GUIDE.md`
+- `v6/docs/HELP_ADMIN.md`
+- `v6/docs/HELP_ADMIN_TESTING.md`
+- `v6/docs/RELEASE.md`
 
 ## V6.6 CRM Export Toggle (per user)
 - UI has a `CRM Export` toggle (stored per `user_id` in Mongo `users.prefs.crm_export_enabled`).
