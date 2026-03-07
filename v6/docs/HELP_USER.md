@@ -1,4 +1,4 @@
-# User Help (V6.8.1)
+# User Help (V6.9.0)
 
 ## Main controls
 - `Record`: starts microphone capture.
@@ -31,6 +31,17 @@
 - Toggle is persisted server-side in Mongo (`users.prefs.crm_export_enabled`).
 - `Download Transcript` works only when CRM export is enabled for this user.
 - `Download Protocol` works when protocol export is enabled.
+- New protocol v1 endpoint is available server-side:
+  - `GET /api/export/protocol?user_id=...&session_id=...`
+  - output is rendered from a configurable template.
+
+## Protocol template v1 (V6.9.0)
+- Default template: `v6/templates/protocol_template.md` (repo-owned MIT content).
+- Supported placeholders:
+  - `{{date}}`, `{{time}}`, `{{weekday}}`, `{{user_id}}`, `{{session_id}}`, `{{messages}}`
+- Admins can switch template path at runtime with:
+  - `PROTOCOL_TEMPLATE_PATH`
+  - no code changes required.
 
 ## Backends and models
 - `Ollama`: local backend on host machine.

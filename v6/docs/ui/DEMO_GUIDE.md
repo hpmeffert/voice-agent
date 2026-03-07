@@ -1,4 +1,4 @@
-# UI Demo Guide (V6.8.0)
+# UI Demo Guide (V6.9.0)
 
 ## Quick walkthrough
 1. Open UI: `http://localhost:8080`
@@ -6,6 +6,7 @@
 3. Run a follow-up to show session memory.
 4. Switch model (`qwen2.5:3b` vs `qwen2.5:7b`) and compare behavior.
 5. Show transcript export.
+6. Show protocol v1 export via API (`/api/export/protocol`).
 
 ## Hands-free recording (new in V6.8.0)
 - Controls in main panel:
@@ -42,3 +43,15 @@
 - Lower `OLLAMA_NUM_PREDICT` to reduce generation time.
 - Use smaller Whisper model (`WHISPER_MODEL`) for faster STT.
 - Warm up the stack before demo starts (`/api/health`, `/api/models`).
+
+## Story arc for live demos (recommended)
+1. Opening (trust):
+   - "This is a local-first voice agent with persistent memory and controllable exports."
+2. Experience (wow):
+   - hands-free auto-stop + auto-send in one smooth turn.
+3. Transparency (confidence):
+   - show readable transcript/answer and latency breakdown.
+4. Operational readiness (credibility):
+   - show protocol export endpoint and mention template override for team-specific formats.
+5. Close (action):
+   - "Same stack can be tailored per customer process without changing core code."

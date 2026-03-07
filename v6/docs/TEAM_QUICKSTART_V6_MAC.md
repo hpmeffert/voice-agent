@@ -15,6 +15,7 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
   - `GET /api/session/{session_id}?user_id=...&limit=20`
 - Session export endpoint:
   - `GET /api/session/{session_id}/export?user_id=...&format=md|json`
+  - `GET /api/export/protocol?user_id=...&session_id=...`
   - `GET /api/templates` (shows available file templates + active config)
   - `GET /api/user/prefs?user_id=...`
   - `POST /api/user/prefs` with `{user_id, crm_export_enabled}`
@@ -230,6 +231,28 @@ curl -i "http://localhost:8080/api/protocol/unknown-session?user_id=test-user-1&
 CRM_PROTOCOL_ENABLED=0 docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
 curl -i "http://localhost:8080/api/protocol/test-session-1?user_id=test-user-1&format=md"
 ```
+
+## Protocol template v1 (V6.9.0)
+Standardized export endpoint:
+```bash
+curl -L -o protocol_v1.md "http://localhost:8080/api/export/protocol?user_id=test-user-1&session_id=test-session-1"
+```
+
+Default template path:
+- `PROTOCOL_TEMPLATE_PATH=/app/templates/protocol_template.md`
+
+Template placeholders:
+- `{{date}}`, `{{time}}`, `{{weekday}}`, `{{user_id}}`, `{{session_id}}`, `{{messages}}`
+
+Runtime override without code changes (mounted template):
+1. Create custom file on host, for example:
+   - `v6/templates/protocol_template_custom.md`
+2. Start API with override path:
+```bash
+PROTOCOL_TEMPLATE_PATH=/runtime-templates/protocol_template_custom.md \
+docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
+```
+3. Call `/api/export/protocol` again and verify changed output.
 
 ## Delete API examples
 Delete one session:

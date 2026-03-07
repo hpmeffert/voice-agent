@@ -79,6 +79,7 @@ CRM_PROTOCOL_ENABLED = os.getenv("CRM_PROTOCOL_ENABLED", "1").strip() == "1"
 CRM_PROTOCOL_TEMPLATE = os.getenv("CRM_PROTOCOL_TEMPLATE", "crm_protocol_default.md.j2").strip() or "crm_protocol_default.md.j2"
 CRM_PROTOCOL_FORMAT = os.getenv("CRM_PROTOCOL_FORMAT", "md").strip().lower()
 CRM_PROTOCOL_TIMEZONE = os.getenv("CRM_PROTOCOL_TIMEZONE", "Europe/Berlin").strip() or "Europe/Berlin"
+PROTOCOL_TEMPLATE_PATH = os.getenv("PROTOCOL_TEMPLATE_PATH", "/app/templates/protocol_template.md").strip() or "/app/templates/protocol_template.md"
 
 if CRM_EXPORT_MODE not in {"file", "webhook", "both"}:
     CRM_EXPORT_MODE = "file"
@@ -295,11 +296,50 @@ def render_messages_markdown(docs: list[dict[str, Any]], tz: timezone | ZoneInfo
     return "\n".join(blocks).strip()
 
 
+def render_messages_protocol_block(docs: list[dict[str, Any]], tz: timezone | ZoneInfo) -> str:
+    lines: list[str] = []
+    for msg in docs:
+        ts = msg.get("t") or msg.get("created_at")
+        text = (msg.get("content") or "").strip()
+        role = format_role(msg.get("role"))
+        if isinstance(ts, datetime):
+            stamp = ts.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            stamp = ""
+        prefix = f"[{stamp}] {role}" if stamp else role
+        lines.append(f"{prefix}: {text}".strip())
+    return "\n".join(lines).strip()
+
+
 def safe_template_replace(template: str, mapping: dict[str, str]) -> str:
     rendered = template
     for key, value in mapping.items():
         rendered = rendered.replace(f"{{{{{key}}}}}", value)
     return rendered
+
+
+def load_protocol_template() -> str:
+    default_template = (
+        "# Conversation Protocol\n\n"
+        "**Date:** {{date}}  \n"
+        "**Weekday:** {{weekday}}  \n"
+        "**Time:** {{time}}  \n"
+        "**User ID:** {{user_id}}  \n"
+        "**Session ID:** {{session_id}}\n\n"
+        "## Messages\n\n"
+        "{{messages}}\n"
+    )
+    candidates = [
+        Path(PROTOCOL_TEMPLATE_PATH),
+        Path("/app/templates/protocol_template.md"),
+    ]
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate.read_text(encoding="utf-8")
+        except OSError:
+            continue
+    return default_template
 
 
 def build_export_payload(
@@ -908,6 +948,7 @@ def config(user_id: str | None = Query(None)):
         "crm_export_include_timestamps": CRM_EXPORT_INCLUDE_TIMESTAMPS,
         "crm_protocol_enabled": CRM_PROTOCOL_ENABLED,
         "crm_protocol_format": CRM_PROTOCOL_FORMAT,
+        "protocol_template_path": PROTOCOL_TEMPLATE_PATH,
         "telemetry_retention_days": TELEMETRY_RETENTION_DAYS,
         "ui": {
             "admin": is_admin_user(user_id),
@@ -1097,6 +1138,44 @@ def export_session(
         content=body,
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename_base}.md"'},
+    )
+
+
+@app.get("/export/protocol")
+def export_protocol(
+    user_id: str = Query(..., min_length=8),
+    session_id: str = Query(..., min_length=8),
+):
+    session = assert_session_owned_by_user(session_id, user_id)
+    docs = list(
+        messages_col.find({"session_id": session_id, "user_id": user_id})
+        .sort("t", ASCENDING)
+        .limit(500)
+    )
+
+    try:
+        tz = ZoneInfo(CRM_PROTOCOL_TIMEZONE)
+    except Exception:
+        tz = timezone.utc
+
+    created = session.get("created_at") if isinstance(session.get("created_at"), datetime) else now_utc()
+    local_created = created.astimezone(tz)
+    values = {
+        "date": local_created.strftime("%Y-%m-%d"),
+        "time": local_created.strftime("%H:%M:%S"),
+        "weekday": local_created.strftime("%A"),
+        "user_id": user_id,
+        "session_id": session_id,
+        "messages": render_messages_protocol_block(docs, tz),
+    }
+    body_text = safe_template_replace(load_protocol_template(), values)
+    if not body_text.endswith("\n"):
+        body_text += "\n"
+    filename = f"protocol_{session_id}.md"
+    return Response(
+        content=body_text.encode("utf-8"),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

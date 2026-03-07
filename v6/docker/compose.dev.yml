@@ -65,6 +65,9 @@ services:
       CRM_PROTOCOL_TEMPLATE: "${CRM_PROTOCOL_TEMPLATE:-crm_protocol_default.md.j2}"
       CRM_PROTOCOL_FORMAT: "${CRM_PROTOCOL_FORMAT:-md}"
       CRM_PROTOCOL_TIMEZONE: "${CRM_PROTOCOL_TIMEZONE:-Europe/Berlin}"
+      PROTOCOL_TEMPLATE_PATH: "${PROTOCOL_TEMPLATE_PATH:-/app/templates/protocol_template.md}"
+    volumes:
+      - ${PWD}/v6/templates:/runtime-templates:ro
     depends_on:
       - mongo
       - piper
