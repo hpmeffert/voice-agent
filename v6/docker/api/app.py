@@ -42,6 +42,12 @@ MESSAGE_RETENTION_DAYS = int(os.getenv("MESSAGE_RETENTION_DAYS", "30"))
 SESSION_RETENTION_DAYS = int(os.getenv("SESSION_RETENTION_DAYS", "90"))
 MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
 MAX_TEXT_CHARS = int(os.getenv("MAX_TEXT_CHARS", "8000"))
+CRM_EXPORT_ENABLED = os.getenv("CRM_EXPORT_ENABLED", "0").strip() == "1"
+CRM_EXPORT_MODE = os.getenv("CRM_EXPORT_MODE", "file").strip().lower()
+CRM_EXPORT_WEBHOOK_URL = os.getenv("CRM_EXPORT_WEBHOOK_URL", "").strip()
+
+if CRM_EXPORT_MODE not in {"file", "webhook", "both"}:
+    CRM_EXPORT_MODE = "file"
 
 SYSTEM_PROMPT = (
     "Du bist ein hilfreicher, präziser Assistent. Antworte kurz, klar und korrekt. "
@@ -491,6 +497,33 @@ def generate_crm_summary(
     return summary
 
 
+def should_export_file() -> bool:
+    return CRM_EXPORT_MODE in {"file", "both"}
+
+
+def should_export_webhook() -> bool:
+    return CRM_EXPORT_MODE in {"webhook", "both"}
+
+
+def post_to_crm_webhook(payload: dict[str, Any]) -> tuple[bool, str | None]:
+    if not should_export_webhook():
+        return True, None
+    if not CRM_EXPORT_WEBHOOK_URL:
+        return False, "CRM webhook URL is not configured"
+    try:
+        r = requests.post(
+            CRM_EXPORT_WEBHOOK_URL,
+            json=payload,
+            timeout=12,
+            headers={"Content-Type": "application/json"},
+        )
+        if r.status_code >= 400:
+            return False, f"CRM webhook HTTP {r.status_code}"
+        return True, None
+    except requests.RequestException:
+        return False, "CRM webhook request failed"
+
+
 # ----------------------------
 # Models
 # ----------------------------
@@ -534,6 +567,14 @@ def models():
             "available": bool(OPENAI_API_KEY),
             "default_model": OPENAI_MODEL,
         },
+    }
+
+
+@app.get("/config")
+def config():
+    return {
+        "crm_export_enabled": CRM_EXPORT_ENABLED,
+        "crm_export_mode": CRM_EXPORT_MODE,
     }
 
 
@@ -609,6 +650,9 @@ def export_session(
     include_meta: int = Query(1, ge=0, le=1),
     limit: int = Query(200, ge=1, le=500),
 ):
+    if not CRM_EXPORT_ENABLED:
+        return JSONResponse({"status": "disabled"})
+
     session = assert_session_owned_by_user(session_id, user_id)
     docs = list(
         messages_col.find({"session_id": session_id, "user_id": user_id})
@@ -708,6 +752,27 @@ def export_session(
                 },
             },
         }
+
+        ok, err = post_to_crm_webhook(crm_payload)
+        if not ok:
+            return JSONResponse(
+                {
+                    "error": "CRM webhook delivery failed",
+                    "detail": err,
+                },
+                status_code=502,
+            )
+
+        if not should_export_file():
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "delivery": "webhook",
+                    "schema_version": crm_payload["schema_version"],
+                    "session_id": session_id,
+                }
+            )
+
         if format == "md":
             lines = [
                 f"# CRM Note - Session {session_id}",
@@ -751,6 +816,16 @@ def export_session(
         return JSONResponse(
             crm_payload,
             headers={"Content-Disposition": f'attachment; filename="{filename_base}_crm.json"'},
+        )
+
+    if not should_export_file():
+        # For default template we only support file-style export.
+        return JSONResponse(
+            {
+                "status": "ok",
+                "delivery": "webhook",
+                "detail": "No default file export in webhook-only mode",
+            }
         )
 
     if format == "md":

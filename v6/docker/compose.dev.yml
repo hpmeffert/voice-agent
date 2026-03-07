@@ -11,7 +11,7 @@ services:
 
   piper:
     build:
-      context: ./piper
+      context: ${PWD}/v6/docker/piper
     restart: unless-stopped
     ports:
       - "5002:5002"
@@ -26,7 +26,7 @@ services:
 
   api:
     build:
-      context: ./api
+      context: ${PWD}/v6/docker/api
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -46,6 +46,9 @@ services:
       SESSION_RETENTION_DAYS: "${SESSION_RETENTION_DAYS:-90}"
       MAX_AUDIO_BYTES: "${MAX_AUDIO_BYTES:-26214400}"
       MAX_TEXT_CHARS: "${MAX_TEXT_CHARS:-8000}"
+      CRM_EXPORT_ENABLED: "${CRM_EXPORT_ENABLED:-0}"
+      CRM_EXPORT_MODE: "${CRM_EXPORT_MODE:-file}"
+      CRM_EXPORT_WEBHOOK_URL: "${CRM_EXPORT_WEBHOOK_URL:-}"
     depends_on:
       - mongo
       - piper
@@ -57,7 +60,7 @@ services:
 
   web:
     build:
-      context: ../..
+      context: ${PWD}
       dockerfile: v6/docker/web/Dockerfile
     restart: unless-stopped
     ports:

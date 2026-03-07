@@ -203,6 +203,23 @@
             <button id="btnClear">Clear Session</button>
           </div>
 
+          <div class="row" style="margin-top:10px;">
+            <label class="muted">Export template
+              <select id="exportTemplate">
+                <option value="crm" selected>CRM</option>
+                <option value="default">Default</option>
+              </select>
+            </label>
+            <label class="muted">Export format
+              <select id="exportFormat">
+                <option value="json" selected>JSON</option>
+                <option value="md">Markdown</option>
+              </select>
+            </label>
+            <button id="btnExport">Export</button>
+            <span class="muted" id="exportStatus">Loading export config...</span>
+          </div>
+
           <div class="errorBox" id="errorBox"></div>
 
           <h3>Captured audio</h3>
@@ -257,10 +274,14 @@ const btnRecord = el("btnRecord");
 const btnStop = el("btnStop");
 const btnSend = el("btnSend");
 const btnClear = el("btnClear");
+const btnExport = el("btnExport");
 
 const backendSel = el("backend");
 const modelSel = el("model");
 const themeSel = el("themeMode");
+const exportTemplateSel = el("exportTemplate");
+const exportFormatSel = el("exportFormat");
+const exportStatusEl = el("exportStatus");
 
 const conversationModeSel = el("conversationMode");
 const autoSendChk = el("autoSend");
@@ -274,6 +295,9 @@ const THEME_KEY = "voice_agent_theme_mode";
 let sessionId = localStorage.getItem(SESSION_KEY) || "";
 let userId = localStorage.getItem(USER_KEY) || "";
 let modelCatalog = null;
+let crmExportEnabled = false;
+let crmExportMode = "file";
+let uiBusy = false;
 
 function shortId(value) {
   if (!value) return "-";
@@ -283,6 +307,7 @@ function shortId(value) {
 function refreshIdentityPills() {
   sessionPill.textContent = `Session: ${shortId(sessionId)}`;
   userPill.textContent = `User: ${shortId(userId)}`;
+  updateExportUi();
 }
 
 function makeUuid() {
@@ -318,6 +343,7 @@ function setUserId(id) {
   refreshIdentityPills();
 }
 function setBusy(isBusy) {
+  uiBusy = isBusy;
   btnRecord.disabled = isBusy;
   btnStop.disabled = isBusy || !(mediaRecorder && mediaRecorder.state !== "inactive");
   btnSend.disabled = isBusy || !recordedBlob;
@@ -328,6 +354,27 @@ function setBusy(isBusy) {
   autoSendChk.disabled = isBusy && conversationModeSel.value === "auto";
   silenceMsInput.disabled = isBusy && conversationModeSel.value === "auto";
   maxRecordSecInput.disabled = isBusy && conversationModeSel.value === "auto";
+  updateExportUi();
+}
+
+function updateExportUi() {
+  const hasSession = !!sessionId;
+  if (!crmExportEnabled) {
+    btnExport.disabled = true;
+    exportTemplateSel.disabled = true;
+    exportFormatSel.disabled = true;
+    exportStatusEl.textContent = "CRM export disabled";
+    return;
+  }
+
+  exportTemplateSel.disabled = false;
+  exportFormatSel.disabled = false;
+  btnExport.disabled = !hasSession || uiBusy;
+  if (!hasSession) {
+    exportStatusEl.textContent = "Create a session first to export";
+  } else {
+    exportStatusEl.textContent = `CRM export enabled (${crmExportMode})`;
+  }
 }
 
 function applyTheme(mode) {
@@ -409,6 +456,19 @@ async function loadModels() {
   setStatus("Listening");
 }
 
+async function loadConfig() {
+  try {
+    const r = await fetchWithRetry("/api/config", 20, 500);
+    const cfg = await r.json();
+    crmExportEnabled = !!cfg.crm_export_enabled;
+    crmExportMode = cfg.crm_export_mode || "file";
+  } catch (_) {
+    crmExportEnabled = false;
+    crmExportMode = "file";
+  }
+  updateExportUi();
+}
+
 backendSel.onchange = () => {
   if (!modelCatalog) return;
 
@@ -437,6 +497,7 @@ loadModels().catch((err) => {
   setStatus("Listening");
   showError(String(err));
 });
+loadConfig();
 
 function stopMonitoring() {
   if (monitorTimer) {
@@ -623,6 +684,69 @@ btnClear.onclick = () => {
   setStatus("Listening");
   showError("");
   refreshIdentityPills();
+};
+
+btnExport.onclick = async () => {
+  if (!crmExportEnabled) {
+    exportStatusEl.textContent = "CRM export disabled";
+    return;
+  }
+  if (!sessionId || !userId) {
+    exportStatusEl.textContent = "No active session to export";
+    return;
+  }
+
+  const format = exportFormatSel.value;
+  const template = exportTemplateSel.value;
+  exportStatusEl.textContent = "Exporting...";
+
+  try {
+    const url =
+      `/api/session/${encodeURIComponent(sessionId)}/export` +
+      `?user_id=${encodeURIComponent(userId)}` +
+      `&format=${encodeURIComponent(format)}` +
+      `&template=${encodeURIComponent(template)}` +
+      `&include_meta=1&limit=200`;
+
+    const r = await fetch(url, { method: "GET" });
+    const contentType = r.headers.get("content-type") || "";
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`Export failed: ${r.status} ${txt}`);
+    }
+
+    if (contentType.includes("application/json")) {
+      const data = await r.json();
+      if (data?.status === "disabled") {
+        crmExportEnabled = false;
+        updateExportUi();
+        exportStatusEl.textContent = "CRM export disabled";
+        return;
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const name = template === "crm" ? `session_${sessionId}_crm.json` : `session_${sessionId}.json`;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      exportStatusEl.textContent = "Export successful";
+      return;
+    }
+
+    const text = await r.text();
+    const blob = new Blob([text], { type: "text/markdown" });
+    const name = template === "crm" ? `session_${sessionId}_crm.md` : `session_${sessionId}.md`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    exportStatusEl.textContent = "Export successful";
+  } catch (err) {
+    exportStatusEl.textContent = "Export failed";
+    showError(String(err));
+  }
 };
 
 async function sendRecording() {
