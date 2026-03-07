@@ -7,6 +7,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
@@ -38,6 +39,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5").strip()
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://mongo:27017/voice_agent").strip()
+MONGO_DB = os.getenv("MONGO_DB", "voice_agent").strip() or "voice_agent"
 MESSAGE_RETENTION_DAYS = int(os.getenv("MESSAGE_RETENTION_DAYS", "30"))
 SESSION_RETENTION_DAYS = int(os.getenv("SESSION_RETENTION_DAYS", "90"))
 MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
@@ -165,6 +167,14 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
     return None
 
 
+def resolve_mongo_db_name(mongo_url: str) -> str:
+    parsed = urlparse(mongo_url)
+    db_name = (parsed.path or "").lstrip("/")
+    if db_name:
+        return db_name.split("/")[0]
+    return MONGO_DB
+
+
 # ----------------------------
 # Startup / Shutdown
 # ----------------------------
@@ -176,7 +186,7 @@ def on_startup() -> None:
 
     mongo_client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=5000)
     mongo_client.admin.command("ping")
-    mongo_db = mongo_client.get_default_database()
+    mongo_db = mongo_client[resolve_mongo_db_name(MONGO_URL)]
 
     users_col = mongo_db["users"]
     sessions_col = mongo_db["sessions"]
