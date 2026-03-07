@@ -1,4 +1,4 @@
-# Admin Testing Guide (V6.8.1)
+# Admin Testing Guide (V6.9.0)
 
 ## 1) Start stack
 ```bash
@@ -104,3 +104,23 @@ Expected:
 - one telemetry entry per `/api/voice` call
 - `status` is `ok` or `error`
 - TTL index exists on `expires_at`
+
+## 12) Protocol template v1 checks (V6.9.0)
+Default export:
+```bash
+curl -L -o protocol_v1.md "http://localhost:8080/api/export/protocol?user_id=<USER_ID>&session_id=<SESSION_ID>"
+```
+
+Expected:
+- header placeholders are resolved (`date`, `time`, `weekday`, `user_id`, `session_id`)
+- messages appear in chronological order with timestamps
+
+Override export template:
+```bash
+PROTOCOL_TEMPLATE_PATH=/runtime-templates/protocol_template_custom.md \
+docker compose -f v6/docker/compose.dev.yml up -d --build api
+curl -L -o protocol_v1_custom.md "http://localhost:8080/api/export/protocol?user_id=<USER_ID>&session_id=<SESSION_ID>"
+```
+
+Expected:
+- output format changes to the custom template without any code changes
