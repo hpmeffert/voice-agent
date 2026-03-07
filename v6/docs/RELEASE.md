@@ -1,19 +1,21 @@
 # Release Notes (UI runtime)
 
 ## Current
-- Version: `v6.6.1`
+- Version: `v6.8.1`
 
-## Highlights in v6.6.1
-- Help menu split into dedicated sections:
-  - User Help
-  - Demo Guide
-  - Admin Guide (admin-only in menu)
-  - Admin Testing (admin-only in menu)
-  - Release Notes / Version
-- Version/build line shown in help menu.
-- DEV admin override:
-  - `ADMIN_DEV_MODE=1` exposes admin menu entries for all users in development.
+## Highlights in v6.8.1
+- Result panel now shows:
+  - Transcript (readable text)
+  - Answer (readable text)
+  - Metadata row
+  - Metrics panel (`audio_read`, `stt`, `llm`, `tts`, `total`)
+- Debug JSON moved to a collapsed section.
+- Backend telemetry logging added:
+  - Mongo collection `telemetry_logs`
+  - TTL via `TELEMETRY_RETENTION_DAYS`
+  - success/error logging for `/api/voice`
 
-## Previous
-- `v6.6.0`: per-user CRM export toggle + persisted preference.
-- `v6.5.0`: result wrap + initial help/demo foundation.
+## Previous releases (since v6.6.1)
+- `v6.8.0`: hands-free recording (`Auto-stop on silence`, optional auto-send).
+- `v6.7.0`: latency metrics in UI + `/api/metrics/recent`.
+- `v6.6.1`: help menu split + version label + admin testing docs.

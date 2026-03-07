@@ -1,4 +1,4 @@
-# Admin Testing Guide (V6.6.1)
+# Admin Testing Guide (V6.8.1)
 
 ## 1) Start stack
 ```bash
@@ -15,9 +15,16 @@ docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml exec mong
 ```
 
 ## 3) Conversation flow
-- In browser: `Record -> Stop -> Send`
-- Confirm result shows transcript, language, answer.
+- In browser: `Record -> Stop -> Send` (manual baseline).
+- Confirm result shows readable `Transcript` + `Answer` blocks.
 - Run a follow-up in the same session to confirm memory behavior.
+
+## 3b) Hands-free checks (V6.8.0)
+- Enable `Auto-stop on silence`.
+- Speak briefly and pause.
+- Expected: recording stops automatically after silence window.
+- Enable `Auto-send after stop`.
+- Expected: request is sent automatically after auto-stop.
 
 ## 4) Persistence checks
 - Verify history:
@@ -70,3 +77,30 @@ curl -s -X POST http://localhost:8080/api/user/prefs \
 ## 9) Startup warmup note
 - First startup can take longer due to model/container warmup.
 - Re-try requests for a few seconds if initial proxy returns temporary errors.
+
+## 10) Metrics checks (V6.7.0)
+```bash
+curl -s "http://localhost:8080/api/metrics/recent?user_id=<USER_ID>&limit=20"
+```
+
+Expected:
+- entries are scoped to requested `user_id`
+- each item contains `audio_read_ms`, `stt_ms`, `llm_ms`, `tts_ms`, `total_ms`
+
+## 11) Telemetry checks (V6.8.1)
+```bash
+docker compose -f v6/docker/compose.dev.yml exec mongo mongosh
+```
+
+In `mongosh`:
+```javascript
+use voice_agent
+db.telemetry_logs.find().sort({created_at:-1}).limit(5).pretty()
+db.telemetry_logs.find({status:"error"}).sort({created_at:-1}).limit(5).pretty()
+db.telemetry_logs.getIndexes()
+```
+
+Expected:
+- one telemetry entry per `/api/voice` call
+- `status` is `ok` or `error`
+- TTL index exists on `expires_at`
