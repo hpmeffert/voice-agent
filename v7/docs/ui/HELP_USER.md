@@ -1,4 +1,4 @@
-# Voice Agent Help (V7.0.0)
+# Voice Agent Help (V7.1.0)
 
 ## What is new in V7
 - V7 runs fully isolated under `v7/` (no runtime overlap with V6).
@@ -15,9 +15,17 @@
 - `Send`: send audio to `/api/voice`.
 - `Clear Session`: reset local session and start fresh.
 
-## Conversation mode
-- `Auto-stop on silence` + `Auto-send after stop` enable hands-free usage.
-- `Silence threshold` and `Max recording seconds` can be tuned in UI.
+## Listen Mode (hands-free)
+- Toggle `Listen Mode` ON for automatic turn-taking.
+- Behavior:
+  - recording starts automatically
+  - silence triggers auto-stop
+  - request is auto-sent
+  - after TTS reply ends, recording starts again
+- Tune quality with:
+  - `Silence threshold (ms)`
+  - `Voice threshold (RMS)`
+- Settings are persisted per user in Mongo and restored on reload.
 
 ## Help menu
 - `Help`: this user guide.

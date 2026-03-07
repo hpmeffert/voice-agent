@@ -22,7 +22,7 @@ from starlette.background import BackgroundTask
 
 from protocol_renderer import render_protocol
 
-app = FastAPI(title="Voice Agent API V7.0.0")
+app = FastAPI(title="Voice Agent API V7.1.0")
 
 # ----------------------------
 # Config / ENV
@@ -72,8 +72,11 @@ MAX_EXPORT_MESSAGES = int(os.getenv("MAX_EXPORT_MESSAGES", "200"))
 MAX_EXPORT_BYTES = int(os.getenv("MAX_EXPORT_BYTES", str(1_500_000)))
 ADMIN_DEV_MODE = os.getenv("ADMIN_DEV_MODE", "0").strip() == "1"
 ADMIN_UI_TOKEN = os.getenv("ADMIN_UI_TOKEN", "").strip()
-UI_VERSION = os.getenv("UI_VERSION", "v7.0.0").strip() or "v7.0.0"
+UI_VERSION = os.getenv("UI_VERSION", "v7.1.0").strip() or "v7.1.0"
 UI_BUILD = os.getenv("UI_BUILD", "").strip()
+LISTEN_MODE_DEFAULT = os.getenv("LISTEN_MODE_DEFAULT", "0").strip().lower() in {"1", "true", "yes", "on"}
+LISTEN_SILENCE_MS_DEFAULT = int(os.getenv("LISTEN_SILENCE_MS_DEFAULT", "1100"))
+LISTEN_THRESHOLD_DEFAULT = float(os.getenv("LISTEN_THRESHOLD_DEFAULT", "0.012"))
 CRM_EXPORT_MODE = os.getenv("CRM_EXPORT_MODE", "file").strip().lower()
 CRM_EXPORT_WEBHOOK_URL = os.getenv("CRM_EXPORT_WEBHOOK_URL", "").strip()
 CRM_PROTOCOL_ENABLED = os.getenv("CRM_PROTOCOL_ENABLED", "1").strip() == "1"
@@ -88,6 +91,8 @@ if CRM_EXPORT_FORMAT not in {"md", "json", "both"}:
     CRM_EXPORT_FORMAT = "md"
 if CRM_PROTOCOL_FORMAT not in {"md", "txt", "json"}:
     CRM_PROTOCOL_FORMAT = "md"
+LISTEN_SILENCE_MS_DEFAULT = max(300, min(5000, LISTEN_SILENCE_MS_DEFAULT))
+LISTEN_THRESHOLD_DEFAULT = max(0.001, min(0.2, LISTEN_THRESHOLD_DEFAULT))
 
 SYSTEM_PROMPT = (
     "Du bist ein hilfreicher, präziser Assistent. Antworte kurz, klar und korrekt. "
@@ -397,7 +402,7 @@ def build_export_payload(
     }
 
     json_payload = {
-        "version": "v7.0.0",
+        "version": "v7.1.0",
         "session": {
             "session_id": session.get("_id"),
             "user_id": session.get("user_id"),
@@ -417,6 +422,45 @@ def build_export_payload(
         },
     }
     return json_payload, template_values
+
+
+def default_listen_settings() -> dict[str, Any]:
+    return {
+        "listen_mode_default": bool(LISTEN_MODE_DEFAULT),
+        "silence_ms": int(LISTEN_SILENCE_MS_DEFAULT),
+        "threshold": float(LISTEN_THRESHOLD_DEFAULT),
+    }
+
+
+def normalized_listen_settings(raw: Any) -> dict[str, Any]:
+    defaults = default_listen_settings()
+    src = raw if isinstance(raw, dict) else {}
+
+    listen_mode_default = src.get("listen_mode_default")
+    if isinstance(listen_mode_default, bool):
+        mode = listen_mode_default
+    else:
+        mode = defaults["listen_mode_default"]
+
+    silence_ms = src.get("silence_ms")
+    try:
+        silence_ms_v = int(silence_ms)
+    except Exception:
+        silence_ms_v = defaults["silence_ms"]
+    silence_ms_v = max(300, min(5000, silence_ms_v))
+
+    threshold = src.get("threshold")
+    try:
+        threshold_v = float(threshold)
+    except Exception:
+        threshold_v = defaults["threshold"]
+    threshold_v = max(0.001, min(0.2, threshold_v))
+
+    return {
+        "listen_mode_default": mode,
+        "silence_ms": silence_ms_v,
+        "threshold": threshold_v,
+    }
 
 
 # ----------------------------
@@ -475,6 +519,7 @@ def upsert_user(user_id: str) -> None:
                 "created_at": ts,
                 "role": "admin",  # V7 demo default: all newly created users are admins.
                 "prefs.crm_export_enabled": CRM_EXPORT_DEFAULT_ENABLED,
+                "settings": default_listen_settings(),
             },
         },
         upsert=True,
@@ -521,6 +566,62 @@ def set_user_crm_export_enabled(user_id: str, enabled: bool) -> None:
         },
         upsert=True,
     )
+
+
+def get_user_settings(user_id: str) -> dict[str, Any]:
+    ensure_ready()
+    doc = users_col.find_one({"_id": user_id}, {"settings": 1})
+    if not doc:
+        upsert_user(user_id)
+        return default_listen_settings()
+
+    existing = doc.get("settings")
+    normalized = normalized_listen_settings(existing)
+    if existing != normalized:
+        ts = now_utc()
+        users_col.update_one(
+            {"_id": user_id},
+            {
+                "$set": {
+                    "updated_at": ts,
+                    "last_seen_at": ts,
+                    "settings": normalized,
+                }
+            },
+        )
+    return normalized
+
+
+def set_user_settings(user_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+    ensure_ready()
+    current = get_user_settings(user_id)
+    next_settings = dict(current)
+    if "listen_mode_default" in patch:
+        next_settings["listen_mode_default"] = bool(patch["listen_mode_default"])
+    if "silence_ms" in patch:
+        next_settings["silence_ms"] = max(300, min(5000, int(patch["silence_ms"])))
+    if "threshold" in patch:
+        next_settings["threshold"] = max(0.001, min(0.2, float(patch["threshold"])))
+
+    ts = now_utc()
+    users_col.update_one(
+        {"_id": user_id},
+        {
+            "$set": {
+                "updated_at": ts,
+                "last_seen_at": ts,
+                "settings": next_settings,
+            },
+            "$setOnInsert": {
+                "_id": user_id,
+                "created_at": ts,
+                "role": "admin",
+                "prefs.crm_export_enabled": CRM_EXPORT_DEFAULT_ENABLED,
+            },
+        },
+        upsert=True,
+    )
+    return next_settings
 
 
 def is_crm_export_enabled_for_user(user_id: str) -> bool:
@@ -923,6 +1024,13 @@ class UserPrefsRequest(BaseModel):
     crm_export_enabled: bool
 
 
+class UserSettingsUpdateRequest(BaseModel):
+    user_id: str = Field(min_length=8)
+    listen_mode_default: bool | None = None
+    silence_ms: int | None = Field(default=None, ge=300, le=5000)
+    threshold: float | None = Field(default=None, ge=0.001, le=0.2)
+
+
 # ----------------------------
 # Routes
 # ----------------------------
@@ -969,6 +1077,9 @@ def config(user_id: str | None = Query(None)):
         "crm_protocol_format": CRM_PROTOCOL_FORMAT,
         "protocol_template_path": PROTOCOL_TEMPLATE_PATH,
         "telemetry_retention_days": TELEMETRY_RETENTION_DAYS,
+        "listen_mode_default": LISTEN_MODE_DEFAULT,
+        "listen_silence_ms_default": LISTEN_SILENCE_MS_DEFAULT,
+        "listen_threshold_default": LISTEN_THRESHOLD_DEFAULT,
         "ui": {
             "admin": is_admin_user(user_id),
             "version": UI_VERSION,
@@ -1011,6 +1122,34 @@ def get_user_prefs(user_id: str = Query(..., min_length=8)):
 def set_user_prefs(req: UserPrefsRequest):
     set_user_crm_export_enabled(req.user_id, req.crm_export_enabled)
     return {"ok": True, "user_id": req.user_id, "crm_export_enabled": bool(req.crm_export_enabled)}
+
+
+@app.get("/user/{user_id}")
+def get_user(user_id: str):
+    if len((user_id or "").strip()) < 8:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    uid = user_id.strip()
+    settings = get_user_settings(uid)
+    return {
+        "user_id": uid,
+        "role": get_user_role(uid),
+        "prefs": {"crm_export_enabled": get_user_crm_export_enabled(uid)},
+        "settings": settings,
+    }
+
+
+@app.post("/user/settings")
+def update_user_settings(req: UserSettingsUpdateRequest):
+    patch: dict[str, Any]
+    if hasattr(req, "model_dump"):
+        patch = req.model_dump(exclude_none=True)
+    else:
+        patch = req.dict(exclude_none=True)
+    uid = patch.pop("user_id")
+    if not patch:
+        raise HTTPException(status_code=400, detail="No settings fields provided")
+    settings = set_user_settings(uid, patch)
+    return {"ok": True, "user_id": uid, "settings": settings}
 
 
 @app.get("/templates")
@@ -1251,7 +1390,7 @@ def download_protocol(
             "format": format or CRM_PROTOCOL_FORMAT,
             "template": CRM_PROTOCOL_TEMPLATE,
             "tz": tz,
-            "export_version": "v7.0.0",
+            "export_version": "v7.1.0",
         },
     )
 

@@ -1,4 +1,4 @@
-# TEAM QUICKSTART - V7 (macOS, isolated scaffold)
+# TEAM QUICKSTART - V7.1.0 (macOS, isolated scaffold)
 
 V7 is isolated under `v7/` and can run in parallel to V6.
 
@@ -18,14 +18,19 @@ docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml up -d --b
 curl -s http://localhost:8081/api/health
 curl -s http://localhost:8081/api/models
 curl -s "http://localhost:8081/api/whoami?user_id=test-user-700"
+curl -s "http://localhost:8081/api/user/test-user-700"
+curl -s -X POST http://localhost:8081/api/user/settings \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":"test-user-700","listen_mode_default":true,"silence_ms":1100,"threshold":0.012}'
 docker compose -f v7/docker/compose.dev.yml exec mongo mongosh --eval 'db.runCommand({ ping: 1 })'
 ```
 
 ## UI test
 1. Open `http://localhost:8081`.
-2. Record -> Stop -> Send.
-3. Verify transcript + answer appear.
-4. Verify audio reply playback.
+2. Enable `Listen Mode`.
+3. Speak, then stay silent.
+4. Verify: auto-stop -> auto-send -> reply plays -> recording auto-starts again.
+5. Disable `Listen Mode` and verify manual `Record -> Stop -> Send` still works.
 
 ## Persistence check
 ```bash
@@ -35,6 +40,10 @@ curl -s "http://localhost:8081/api/session/<SESSION_ID>?user_id=<USER_ID>&limit=
 ## Notes
 - V7 keeps Mongo schema concepts from V6.
 - Demo users are `admin` by default in this scaffold release.
+- Listen mode settings are persisted per user in `users.settings`:
+  - `listen_mode_default`
+  - `silence_ms`
+  - `threshold`
 - Use V7 docs in Help menu:
   - `/docs/ui/HELP_USER.md`
   - `/docs/ui/DEMO_GUIDE.md`
