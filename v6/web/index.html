@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent V6.1</title>
+  <title>Voice Agent V6.8</title>
   <style>
     :root {
       --bg:#f4f7fb;
@@ -240,8 +240,8 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V6.1</h1>
-        <p class="sub">Auto conversation, robust browser audio STT, and transcript export.</p>
+        <h1>Voice Agent V6.8</h1>
+        <p class="sub">Hands-free silence auto-stop with optional auto-send and transcript export.</p>
       </div>
       <div class="topRight">
         <button id="menuBtn" class="menuBtn" title="Help / Menu">Help</button>
@@ -292,11 +292,8 @@
           </div>
 
           <div class="controlGrid">
-            <label class="muted">Conversation Mode
-              <select id="conversationMode">
-                <option value="manual" selected>Manual</option>
-                <option value="auto">Auto</option>
-              </select>
+            <label class="muted">Auto-stop on silence
+              <input id="autoStop" type="checkbox" checked />
             </label>
 
             <label class="muted">Auto-send after stop
@@ -446,7 +443,7 @@ const crmExportHint = el("crmExportHint");
 const protocolFormatSel = el("protocolFormat");
 const protocolStatusEl = el("protocolStatus");
 
-const conversationModeSel = el("conversationMode");
+const autoStopChk = el("autoStop");
 const autoSendChk = el("autoSend");
 const silenceMsInput = el("silenceMs");
 const maxRecordSecInput = el("maxRecordSec");
@@ -536,10 +533,10 @@ function setBusy(isBusy) {
   backendSel.disabled = isBusy;
   modelSel.disabled = isBusy;
   crmExportToggle.disabled = isBusy || !crmExportGlobalEnabled;
-  conversationModeSel.disabled = isBusy;
-  autoSendChk.disabled = isBusy && conversationModeSel.value === "auto";
-  silenceMsInput.disabled = isBusy && conversationModeSel.value === "auto";
-  maxRecordSecInput.disabled = isBusy && conversationModeSel.value === "auto";
+  autoStopChk.disabled = isBusy;
+  autoSendChk.disabled = isBusy || !autoStopChk.checked;
+  silenceMsInput.disabled = isBusy || !autoStopChk.checked;
+  maxRecordSecInput.disabled = isBusy || !autoStopChk.checked;
   updateExportUi();
   updateProtocolUi();
 }
@@ -647,12 +644,18 @@ document.addEventListener("keydown", (ev) => {
   }
 });
 
-conversationModeSel.onchange = () => {
-  if (conversationModeSel.value === "manual") {
+function syncHandsfreeControls() {
+  const enabled = !!autoStopChk.checked;
+  autoSendChk.disabled = uiBusy || !enabled;
+  silenceMsInput.disabled = uiBusy || !enabled;
+  maxRecordSecInput.disabled = uiBusy || !enabled;
+}
+
+autoStopChk.onchange = () => {
+  if (!autoStopChk.checked) {
     autoSendChk.checked = false;
-  } else {
-    autoSendChk.checked = true;
   }
+  syncHandsfreeControls();
 };
 
 function setModelOptions(options, preferred) {
@@ -870,7 +873,7 @@ function computeRmsFromAnalyser() {
 }
 
 function handleAutoConversationMonitoring() {
-  if (conversationModeSel.value !== "auto") return;
+  if (!autoStopChk.checked) return;
 
   stopMonitoring();
   recordStartAt = Date.now();
@@ -960,7 +963,8 @@ async function startRecording() {
       showError("Max recording time reached. Recording stopped.");
     }
 
-    if (conversationModeSel.value === "auto" && autoSendChk.checked) {
+    const stoppedByAutomation = stopReason === "silence" || stopReason === "max_record";
+    if (autoStopChk.checked && autoSendChk.checked && stoppedByAutomation) {
       setBadge("warn", "Ready");
       setStatus("Transcribing");
       await sendRecording();
@@ -974,7 +978,7 @@ async function startRecording() {
   btnRecord.disabled = true;
   btnStop.disabled = false;
 
-  if (conversationModeSel.value === "auto") {
+  if (autoStopChk.checked) {
     handleAutoConversationMonitoring();
   }
 }
@@ -997,9 +1001,7 @@ btnStop.onclick = () => {
     mediaRecorder.stop();
     btnRecord.disabled = false;
     btnStop.disabled = true;
-    if (conversationModeSel.value === "manual") {
-      setStatus("Listening");
-    }
+    setStatus("Listening");
   }
 };
 
@@ -1231,6 +1233,8 @@ async function sendRecording() {
 btnSend.onclick = async () => {
   await sendRecording();
 };
+
+syncHandsfreeControls();
 </script>
 </body>
 </html>
