@@ -29,6 +29,12 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
 docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build
 ```
 
+Clean reset (recommended before demos):
+```bash
+docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml down --remove-orphans
+docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build
+```
+
 Open UI:
 - [http://localhost:8080](http://localhost:8080)
 
@@ -86,6 +92,25 @@ Export transcript Markdown:
 ```bash
 curl -OJ "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md"
 ```
+
+## UI Help and Demo Guide (V6.5)
+- Result output now wraps long lines for demo readability (`pre-wrap` + `break-word`).
+- Open the `?` button in the top-right UI to view:
+  - User Help (`v6/docs/help_user.md`)
+  - Demo Guide (`v6/docs/demo_guide.md`)
+
+Demo script tip:
+```bash
+curl -s http://localhost:8080/api/health
+curl -s http://localhost:8080/api/models
+```
+
+Edit demo/help content here:
+- `v6/docs/help_user.md`
+- `v6/docs/demo_guide.md`
+
+Rule from V6.5 onward:
+- Every new feature must update both Help and Demo Guide content.
 
 Toggle smoke checks:
 ```bash
