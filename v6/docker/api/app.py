@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import requests
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from faster_whisper import WhisperModel
 from pydantic import BaseModel, Field
@@ -71,7 +71,8 @@ CRM_EXPORT_TIMEZONE = os.getenv("CRM_EXPORT_TIMEZONE", "Europe/Berlin").strip() 
 MAX_EXPORT_MESSAGES = int(os.getenv("MAX_EXPORT_MESSAGES", "200"))
 MAX_EXPORT_BYTES = int(os.getenv("MAX_EXPORT_BYTES", str(1_500_000)))
 ADMIN_DEV_MODE = os.getenv("ADMIN_DEV_MODE", "0").strip() == "1"
-UI_VERSION = os.getenv("UI_VERSION", "v6.8.1").strip() or "v6.8.1"
+ADMIN_UI_TOKEN = os.getenv("ADMIN_UI_TOKEN", "").strip()
+UI_VERSION = os.getenv("UI_VERSION", "v6.10.0").strip() or "v6.10.0"
 UI_BUILD = os.getenv("UI_BUILD", "").strip()
 CRM_EXPORT_MODE = os.getenv("CRM_EXPORT_MODE", "file").strip().lower()
 CRM_EXPORT_WEBHOOK_URL = os.getenv("CRM_EXPORT_WEBHOOK_URL", "").strip()
@@ -519,10 +520,15 @@ def is_crm_export_enabled_for_user(user_id: str) -> bool:
 
 
 def is_admin_user(user_id: str | None) -> bool:
-    if ADMIN_DEV_MODE:
-        return True
-    # Placeholder for real role model (planned for V9)
-    return False
+    # Backward-compatible fallback (DEV mode), token gate is provided via /whoami.
+    return ADMIN_DEV_MODE
+
+
+def is_admin_token_valid(admin_token: str | None) -> bool:
+    token = (admin_token or "").strip()
+    if not ADMIN_UI_TOKEN:
+        return False
+    return token == ADMIN_UI_TOKEN
 
 
 def get_or_create_session(session_id: str | None, user_id: str, backend: str | None, model: str | None) -> str:
@@ -956,6 +962,28 @@ def config(user_id: str | None = Query(None)):
             "build": UI_BUILD,
         },
     }
+
+
+@app.get("/whoami")
+def whoami(
+    user_id: str = Query(..., min_length=8),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    return {"user_id": user_id, "is_admin": is_admin_token_valid(admin_token)}
+
+
+@app.get("/admin/docs/help")
+def admin_help_doc(admin_token: str | None = Header(default=None, alias="X-Admin-Token")):
+    if not is_admin_token_valid(admin_token):
+        raise HTTPException(status_code=403, detail="Admin docs require valid admin token")
+    doc_path = Path("/app/docs/admin/HELP_ADMIN.md")
+    if not doc_path.is_file():
+        raise HTTPException(status_code=404, detail="Admin help doc not found")
+    try:
+        content = doc_path.read_text(encoding="utf-8")
+    except OSError:
+        raise HTTPException(status_code=500, detail="Failed to read admin help doc")
+    return PlainTextResponse(content, media_type="text/markdown; charset=utf-8")
 
 
 @app.get("/user/prefs")

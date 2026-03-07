@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY v6/docker/api/app.py /app/app.py
 COPY v6/docker/api/protocol_renderer.py /app/protocol_renderer.py
 COPY v6/templates/ /app/templates/
+COPY v6/docs/admin/ /app/docs/admin/
 
 EXPOSE 8000
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
