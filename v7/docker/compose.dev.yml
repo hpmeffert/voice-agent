@@ -1,0 +1,93 @@
+name: voice-agent-v7
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  piper:
+    build:
+      context: ${PWD}/v7/docker/piper
+    restart: unless-stopped
+    ports:
+      - "5003:5002"
+    environment:
+      VOICE_DE: "/voices/de_DE-thorsten-medium.onnx"
+      VOICE_EN: "/voices/en_GB-northern_english_male-medium.onnx"
+      VOICE_SV: "/voices/sv_SE-nst-medium.onnx"
+      VOICE_NO: "/voices/no_NO-talesyntese-medium.onnx"
+      VOICE_FI: "/voices/fi_FI-harri-medium.onnx"
+    volumes:
+      - ${PIPER_VOICES_HOST_PATH:-$HOME/models/piper-voices}:/voices:ro
+
+  api:
+    build:
+      context: ${PWD}
+      dockerfile: v7/docker/api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen2.5:7b}"
+      PIPER_BASE_URL: "http://piper:5002"
+      WHISPER_MODEL: "${WHISPER_MODEL:-small}"
+      WHISPER_COMPUTE: "${WHISPER_COMPUTE:-int8}"
+      OLLAMA_NUM_PREDICT: "${OLLAMA_NUM_PREDICT:-160}"
+      OLLAMA_TEMPERATURE: "${OLLAMA_TEMPERATURE:-0.3}"
+      OLLAMA_NUM_CTX: "${OLLAMA_NUM_CTX:-2048}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5}"
+      MONGO_URL: "${MONGO_URL:-mongodb://mongo:27017/voice_agent}"
+      MESSAGE_RETENTION_DAYS: "${MESSAGE_RETENTION_DAYS:-30}"
+      SESSION_RETENTION_DAYS: "${SESSION_RETENTION_DAYS:-90}"
+      MAX_AUDIO_BYTES: "${MAX_AUDIO_BYTES:-26214400}"
+      MAX_TEXT_CHARS: "${MAX_TEXT_CHARS:-8000}"
+      TELEMETRY_RETENTION_DAYS: "${TELEMETRY_RETENTION_DAYS:-30}"
+      CRM_EXPORT_ENABLED: "${CRM_EXPORT_ENABLED:-true}"
+      CRM_EXPORT_DEFAULT_ENABLED: "${CRM_EXPORT_DEFAULT_ENABLED:-true}"
+      CRM_EXPORT_FORMAT: "${CRM_EXPORT_FORMAT:-md}"
+      CRM_EXPORT_TEMPLATE_MD: "${CRM_EXPORT_TEMPLATE_MD:-v7/templates/transcript_default.md.tpl}"
+      CRM_EXPORT_INCLUDE_TIMESTAMPS: "${CRM_EXPORT_INCLUDE_TIMESTAMPS:-true}"
+      CRM_EXPORT_TIMEZONE: "${CRM_EXPORT_TIMEZONE:-Europe/Berlin}"
+      MAX_EXPORT_MESSAGES: "${MAX_EXPORT_MESSAGES:-200}"
+      MAX_EXPORT_BYTES: "${MAX_EXPORT_BYTES:-1500000}"
+      CRM_EXPORT_MODE: "${CRM_EXPORT_MODE:-file}"
+      CRM_EXPORT_WEBHOOK_URL: "${CRM_EXPORT_WEBHOOK_URL:-}"
+      ADMIN_DEV_MODE: "${ADMIN_DEV_MODE:-1}"
+      ADMIN_UI_TOKEN: "${ADMIN_UI_TOKEN:-}"
+      UI_VERSION: "${UI_VERSION:-v7.0.0}"
+      UI_BUILD: "${UI_BUILD:-}"
+      CRM_PROTOCOL_ENABLED: "${CRM_PROTOCOL_ENABLED:-1}"
+      CRM_PROTOCOL_TEMPLATE: "${CRM_PROTOCOL_TEMPLATE:-crm_protocol_default.md.j2}"
+      CRM_PROTOCOL_FORMAT: "${CRM_PROTOCOL_FORMAT:-md}"
+      CRM_PROTOCOL_TIMEZONE: "${CRM_PROTOCOL_TIMEZONE:-Europe/Berlin}"
+      PROTOCOL_TEMPLATE_PATH: "${PROTOCOL_TEMPLATE_PATH:-/app/templates/protocol_template.md}"
+    volumes:
+      - ${PWD}/v7/templates:/runtime-templates:ro
+    depends_on:
+      - mongo
+      - piper
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  web:
+    build:
+      context: ${PWD}
+      dockerfile: v7/docker/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    depends_on:
+      - api
+      - piper
+
+volumes:
+  mongo_data:
