@@ -108,6 +108,7 @@ curl -OJ "http://localhost:8080/api/session/test-session-1/export?user_id=test-u
   - Help (`v6/docs/ui/HELP_USER.md`)
   - Demo Guide (`v6/docs/ui/DEMO_GUIDE.md`)
   - Admin Docs (`v6/docs/admin/HELP_ADMIN.md`, token-gated)
+  - V6 Release Notes (`v6/docs/RELEASE.md`, full V6.x timeline)
 
 Demo script tip:
 ```bash
