@@ -29,7 +29,7 @@ Short summary of the release goal and scope.
 
 ## How to Run
 ```bash
-docker compose -f v6/docker/compose.dev.yml up -d --build
+docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build
 curl -s http://localhost:8080/api/health
 curl -s http://localhost:8080/api/models
 ```
@@ -47,4 +47,3 @@ curl -s http://localhost:8080/api/models
 ## Known Limitations
 - Limitation 1
 - Limitation 2
-

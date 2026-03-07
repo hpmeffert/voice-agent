@@ -13,7 +13,7 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
 - Session history endpoint:
   - `GET /api/session/{session_id}?user_id=...&limit=20`
 - Session export endpoint:
-  - `GET /api/session/{session_id}/export?user_id=...&format=json|md`
+  - `GET /api/session/{session_id}/export?user_id=...&format=json|md&template=default|crm&include_meta=1|0&limit=200`
 - Auto conversation frontend mode:
   - silence-based auto-stop
   - optional auto-send after stop
@@ -64,12 +64,22 @@ curl -s "http://localhost:8080/api/session/test-session-1?user_id=test-user-1&li
 ## Transcript export
 Export JSON:
 ```bash
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&include_meta=1"
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=default&include_meta=1&limit=200"
 ```
 
 Export Markdown:
 ```bash
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md&include_meta=1"
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md&template=default&include_meta=1&limit=200"
+```
+
+Export CRM JSON payload:
+```bash
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=crm&include_meta=1&limit=200"
+```
+
+Export CRM Markdown note:
+```bash
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md&template=crm&include_meta=1&limit=200"
 ```
 
 ## Delete API examples

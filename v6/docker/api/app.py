@@ -1,10 +1,11 @@
 import os
+import json
+import re
 import subprocess
 import tempfile
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 import requests
@@ -130,6 +131,34 @@ def dt_iso(v: Any) -> str | None:
     return None
 
 
+def first_words(text: str, n: int = 8) -> str:
+    words = (text or "").strip().split()
+    return " ".join(words[:n]).strip()
+
+
+def extract_json_object(text: str) -> dict[str, Any] | None:
+    if not text:
+        return None
+    text = text.strip()
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        pass
+
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        return None
+    try:
+        parsed = json.loads(m.group(0))
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        return None
+    return None
+
+
 # ----------------------------
 # Startup / Shutdown
 # ----------------------------
@@ -154,6 +183,7 @@ def on_startup() -> None:
     sessions_col.create_index([("updated_at", DESCENDING)])
 
     messages_col.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
+    messages_col.create_index([("session_id", ASCENDING), ("t", ASCENDING)])
     messages_col.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
 
 
@@ -233,6 +263,7 @@ def append_message(
             "backend": backend,
             "model": model,
             "created_at": ts,
+            "t": ts,
             "expires_at": message_expiry(),
         }
     )
@@ -358,6 +389,108 @@ def llm_generate(backend: str, prompt: str, model_override: str | None) -> str:
     return ollama_generate(prompt, model_override=model_override)
 
 
+def generate_crm_summary(
+    transcript_lines: list[dict[str, Any]],
+    backend: str | None,
+    model: str | None,
+) -> dict[str, Any] | None:
+    if not transcript_lines:
+        return None
+
+    convo = []
+    for item in transcript_lines[:80]:
+        role = item.get("role") or "unknown"
+        text = (item.get("text") or "")[:500]
+        convo.append(f"[{role}] {text}")
+    convo_text = "\n".join(convo)[:8000]
+
+    prompt = (
+        "Create a compact CRM summary as JSON only.\n"
+        "Return keys exactly: title, short_summary, sentiment, action_items.\n"
+        "Rules:\n"
+        "- sentiment in: neutral|positive|negative|unknown\n"
+        "- short_summary: 3-6 concise sentences\n"
+        "- action_items: list of objects with keys text, owner(user|agent|unknown), due(null)\n"
+        "- Output valid JSON only, no markdown.\n\n"
+        f"Transcript:\n{convo_text}\n"
+    )
+
+    use_backend = (backend or "ollama").strip().lower()
+    use_model = (model or (OPENAI_MODEL if use_backend == "openai" else OLLAMA_MODEL)).strip()
+
+    try:
+        if use_backend == "openai":
+            if not OPENAI_API_KEY:
+                return None
+            headers = {
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": use_model,
+                "input": [
+                    {"role": "system", "content": "You are a strict JSON generator."},
+                    {"role": "user", "content": prompt},
+                ],
+                "store": False,
+            }
+            r = requests.post("https://api.openai.com/v1/responses", headers=headers, json=payload, timeout=60)
+            r.raise_for_status()
+            data = r.json()
+            text_out = ""
+            for item in data.get("output", []):
+                for c in item.get("content", []):
+                    if c.get("type") == "output_text":
+                        text_out += c.get("text", "")
+        else:
+            payload = {
+                "model": use_model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.2,
+                    "num_predict": 180,
+                    "num_ctx": 2048,
+                },
+            }
+            r = requests.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=90)
+            r.raise_for_status()
+            text_out = (r.json().get("response") or "").strip()
+    except Exception:
+        return None
+
+    parsed = extract_json_object(text_out)
+    if not parsed:
+        return None
+
+    summary = {
+        "title": str(parsed.get("title") or "").strip() or "Conversation Summary",
+        "short_summary": str(parsed.get("short_summary") or "").strip() or "",
+        "sentiment": str(parsed.get("sentiment") or "unknown").strip().lower(),
+        "action_items": [],
+    }
+    if summary["sentiment"] not in {"neutral", "positive", "negative", "unknown"}:
+        summary["sentiment"] = "unknown"
+
+    items = parsed.get("action_items")
+    if isinstance(items, list):
+        for it in items[:20]:
+            if not isinstance(it, dict):
+                continue
+            owner = str(it.get("owner") or "unknown").strip().lower()
+            if owner not in {"user", "agent", "unknown"}:
+                owner = "unknown"
+            summary["action_items"].append(
+                {
+                    "text": str(it.get("text") or "").strip(),
+                    "owner": owner,
+                    "due": None,
+                }
+            )
+
+    return summary
+
+
 # ----------------------------
 # Models
 # ----------------------------
@@ -434,7 +567,7 @@ def get_session(
 
     docs = list(
         messages_col.find({"session_id": session_id, "user_id": user_id})
-        .sort("created_at", DESCENDING)
+        .sort("t", DESCENDING)
         .limit(limit)
     )
     docs.reverse()
@@ -448,6 +581,7 @@ def get_session(
                 "lang": msg.get("lang"),
                 "backend": msg.get("backend"),
                 "model": msg.get("model"),
+                "t": dt_iso(msg.get("t") or msg.get("created_at")),
                 "created_at": dt_iso(msg.get("created_at")),
             }
         )
@@ -471,10 +605,16 @@ def export_session(
     session_id: str,
     user_id: str = Query(..., min_length=8),
     format: str = Query("json", pattern="^(json|md)$"),
+    template: str = Query("default", pattern="^(default|crm)$"),
     include_meta: int = Query(1, ge=0, le=1),
+    limit: int = Query(200, ge=1, le=500),
 ):
     session = assert_session_owned_by_user(session_id, user_id)
-    docs = list(messages_col.find({"session_id": session_id, "user_id": user_id}).sort("created_at", ASCENDING))
+    docs = list(
+        messages_col.find({"session_id": session_id, "user_id": user_id})
+        .sort("t", ASCENDING)
+        .limit(limit)
+    )
 
     messages_out = []
     chars_user = 0
@@ -491,7 +631,8 @@ def export_session(
             chars_assistant += len(text)
 
         entry = {
-            "ts": dt_iso(msg.get("created_at")),
+            "t": dt_iso(msg.get("t") or msg.get("created_at")),
+            "ts": dt_iso(msg.get("t") or msg.get("created_at")),
             "role": role,
             "text": text,
         }
@@ -512,8 +653,21 @@ def export_session(
         "lang": session.get("meta", {}).get("lang_last"),
     }
 
+    fallback_title = first_words(next((m["text"] for m in messages_out if m.get("role") == "user"), ""), 10) or "Conversation Summary"
+    fallback_summary = {
+        "title": fallback_title,
+        "short_summary": f"Session with {len(messages_out)} messages between user and assistant.",
+        "sentiment": "unknown",
+        "action_items": [],
+    }
+    crm_summary = generate_crm_summary(
+        transcript_lines=messages_out,
+        backend=session_payload.get("last_backend"),
+        model=session_payload.get("last_model"),
+    ) or fallback_summary
+
     payload = {
-        "version": "v6.1.0",
+        "version": "v6.2.0",
         "session": session_payload,
         "participants": [{"user_id": user_id}],
         "messages": messages_out,
@@ -525,6 +679,80 @@ def export_session(
     }
 
     filename_base = f"session_{session_id}"
+    if template == "crm":
+        crm_payload = {
+            "schema_version": "1.0",
+            "exported_at": now_utc().isoformat(),
+            "tenant": "default",
+            "user": {"user_id": user_id},
+            "session": {
+                "session_id": session_payload["session_id"],
+                "created_at": session_payload["created_at"],
+                "updated_at": session_payload["updated_at"],
+                "language": session_payload["lang"],
+                "backend": session_payload["last_backend"],
+                "model": session_payload["last_model"],
+                "tags": [],
+            },
+            "summary": crm_summary,
+            "transcript": [
+                {"t": m.get("t"), "role": m.get("role"), "text": m.get("text")}
+                for m in messages_out
+            ],
+            "raw": {
+                "messages_count": len(messages_out),
+                "audio": {
+                    "input_format": "unknown",
+                    "stt_model": WHISPER_MODEL_NAME,
+                    "stt_compute": WHISPER_COMPUTE,
+                },
+            },
+        }
+        if format == "md":
+            lines = [
+                f"# CRM Note - Session {session_id}",
+                "",
+                f"- user_id: {user_id}",
+                f"- created_at: {session_payload['created_at']}",
+                f"- updated_at: {session_payload['updated_at']}",
+                f"- backend: {session_payload['last_backend']}",
+                f"- model: {session_payload['last_model']}",
+                f"- language: {session_payload['lang']}",
+                "",
+                "## Summary",
+                "",
+                f"**Title:** {crm_summary.get('title', '')}",
+                "",
+                crm_summary.get("short_summary", ""),
+                "",
+                f"**Sentiment:** {crm_summary.get('sentiment', 'unknown')}",
+                "",
+                "## Action Items",
+            ]
+            action_items = crm_summary.get("action_items", [])
+            if not action_items:
+                lines.append("- None")
+            else:
+                for it in action_items:
+                    lines.append(f"- [{it.get('owner', 'unknown')}] {it.get('text', '')}")
+            lines.extend(["", "## Transcript", ""])
+            for m in crm_payload["transcript"]:
+                lines.append(f"### [{m.get('t')}] {m.get('role')}")
+                lines.append("")
+                lines.append(m.get("text") or "")
+                lines.append("")
+
+            return PlainTextResponse(
+                "\n".join(lines),
+                media_type="text/markdown",
+                headers={"Content-Disposition": f'attachment; filename="{filename_base}_crm.md"'},
+            )
+
+        return JSONResponse(
+            crm_payload,
+            headers={"Content-Disposition": f'attachment; filename="{filename_base}_crm.json"'},
+        )
+
     if format == "md":
         lines = [
             f"# Session Export {session_id}",
@@ -542,7 +770,7 @@ def export_session(
             "",
         ]
         for m in messages_out:
-            lines.append(f"### [{m.get('ts')}] {m.get('role')}")
+            lines.append(f"### [{m.get('t')}] {m.get('role')}")
             lines.append("")
             lines.append(m.get("text") or "")
             lines.append("")
