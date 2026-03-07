@@ -203,21 +203,15 @@
             <button id="btnClear">Clear Session</button>
           </div>
 
-          <div class="row" style="margin-top:10px;">
-            <label class="muted">Export template
-              <select id="exportTemplate">
-                <option value="crm" selected>CRM</option>
-                <option value="default">Default</option>
-              </select>
-            </label>
-            <label class="muted">Export format
+          <div class="row" id="transcriptRow" style="margin-top:10px;">
+            <label class="muted">Transcript format
               <select id="exportFormat">
-                <option value="json" selected>JSON</option>
-                <option value="md">Markdown</option>
+                <option value="md" selected>Markdown</option>
+                <option value="json">JSON</option>
               </select>
             </label>
-            <button id="btnExport">Export</button>
-            <span class="muted" id="exportStatus">Loading export config...</span>
+            <button id="btnExport">⬇️ Download Transcript</button>
+            <span class="muted" id="exportStatus">Waiting for session...</span>
           </div>
 
           <div class="row" style="margin-top:8px;">
@@ -292,7 +286,7 @@ const btnProtocol = el("btnProtocol");
 const backendSel = el("backend");
 const modelSel = el("model");
 const themeSel = el("themeMode");
-const exportTemplateSel = el("exportTemplate");
+const transcriptRow = el("transcriptRow");
 const exportFormatSel = el("exportFormat");
 const exportStatusEl = el("exportStatus");
 const protocolFormatSel = el("protocolFormat");
@@ -311,7 +305,7 @@ let sessionId = localStorage.getItem(SESSION_KEY) || "";
 let userId = localStorage.getItem(USER_KEY) || "";
 let modelCatalog = null;
 let crmExportEnabled = false;
-let crmExportMode = "file";
+let crmExportFormat = "md";
 let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
@@ -378,21 +372,23 @@ function setBusy(isBusy) {
 
 function updateExportUi() {
   const hasSession = !!sessionId;
+  transcriptRow.style.display = hasSession ? "flex" : "none";
   if (!crmExportEnabled) {
     btnExport.disabled = true;
-    exportTemplateSel.disabled = true;
     exportFormatSel.disabled = true;
-    exportStatusEl.textContent = "CRM export disabled";
+    exportStatusEl.textContent = "Transcript export disabled";
     return;
   }
 
-  exportTemplateSel.disabled = false;
-  exportFormatSel.disabled = false;
+  exportFormatSel.disabled = crmExportFormat !== "both";
+  if (crmExportFormat !== "both") {
+    exportFormatSel.value = crmExportFormat === "json" ? "json" : "md";
+  }
   btnExport.disabled = !hasSession || uiBusy;
   if (!hasSession) {
-    exportStatusEl.textContent = "Create a session first to export";
+    exportStatusEl.textContent = "Create a session first to export transcript";
   } else {
-    exportStatusEl.textContent = `CRM export enabled (${crmExportMode})`;
+    exportStatusEl.textContent = `Transcript export enabled (${crmExportFormat})`;
   }
 }
 
@@ -495,7 +491,10 @@ async function loadConfig() {
     const r = await fetchWithRetry("/api/config", 20, 500);
     const cfg = await r.json();
     crmExportEnabled = !!cfg.crm_export_enabled;
-    crmExportMode = cfg.crm_export_mode || "file";
+    crmExportFormat = cfg.crm_export_format || "md";
+    if (!["md", "json", "both"].includes(crmExportFormat)) {
+      crmExportFormat = "md";
+    }
     crmProtocolEnabled = cfg.crm_protocol_enabled !== false;
     crmProtocolFormat = cfg.crm_protocol_format || "md";
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
@@ -503,7 +502,7 @@ async function loadConfig() {
     }
   } catch (_) {
     crmExportEnabled = false;
-    crmExportMode = "file";
+    crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
   }
@@ -730,7 +729,7 @@ btnClear.onclick = () => {
 
 btnExport.onclick = async () => {
   if (!crmExportEnabled) {
-    exportStatusEl.textContent = "CRM export disabled";
+    exportStatusEl.textContent = "Transcript export disabled";
     return;
   }
   if (!sessionId || !userId) {
@@ -738,17 +737,14 @@ btnExport.onclick = async () => {
     return;
   }
 
-  const format = exportFormatSel.value;
-  const template = exportTemplateSel.value;
-  exportStatusEl.textContent = "Exporting...";
+  const format = crmExportFormat === "both" ? exportFormatSel.value : crmExportFormat;
+  exportStatusEl.textContent = "Downloading transcript...";
 
   try {
     const url =
       `/api/session/${encodeURIComponent(sessionId)}/export` +
       `?user_id=${encodeURIComponent(userId)}` +
-      `&format=${encodeURIComponent(format)}` +
-      `&template=${encodeURIComponent(template)}` +
-      `&include_meta=1&limit=200`;
+      `&format=${encodeURIComponent(format)}`;
 
     const r = await fetch(url, { method: "GET" });
     const contentType = r.headers.get("content-type") || "";
@@ -762,31 +758,31 @@ btnExport.onclick = async () => {
       if (data?.status === "disabled") {
         crmExportEnabled = false;
         updateExportUi();
-        exportStatusEl.textContent = "CRM export disabled";
+        exportStatusEl.textContent = "Transcript export disabled";
         return;
       }
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const name = template === "crm" ? `session_${sessionId}_crm.json` : `session_${sessionId}.json`;
+      const name = `transcript_${sessionId}.json`;
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = name;
       a.click();
       URL.revokeObjectURL(a.href);
-      exportStatusEl.textContent = "Export successful";
+      exportStatusEl.textContent = "Transcript download successful";
       return;
     }
 
     const text = await r.text();
     const blob = new Blob([text], { type: "text/markdown" });
-    const name = template === "crm" ? `session_${sessionId}_crm.md` : `session_${sessionId}.md`;
+    const name = `transcript_${sessionId}.md`;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = name;
     a.click();
     URL.revokeObjectURL(a.href);
-    exportStatusEl.textContent = "Export successful";
+    exportStatusEl.textContent = "Transcript download successful";
   } catch (err) {
-    exportStatusEl.textContent = "Export failed";
+    exportStatusEl.textContent = "Transcript download failed";
     showError(String(err));
   }
 };

@@ -13,7 +13,8 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
 - Session history endpoint:
   - `GET /api/session/{session_id}?user_id=...&limit=20`
 - Session export endpoint:
-  - `GET /api/session/{session_id}/export?user_id=...&format=json|md&template=default|crm&include_meta=1|0&limit=200`
+  - `GET /api/session/{session_id}/export?user_id=...&format=md|json`
+  - `GET /api/templates` (shows available file templates + active config)
 - Auto conversation frontend mode:
   - silence-based auto-stop
   - optional auto-send after stop
@@ -64,43 +65,37 @@ curl -s "http://localhost:8080/api/session/test-session-1?user_id=test-user-1&li
 
 ## Transcript export
 Feature toggle envs for API:
-- `CRM_EXPORT_ENABLED` (`0` or `1`, default `0`)
-- `CRM_EXPORT_MODE` (`file|webhook|both`, default `file`)
-- `CRM_EXPORT_WEBHOOK_URL` (required if mode includes webhook)
+- `CRM_EXPORT_ENABLED` (`true|false`, default `true`)
+- `CRM_EXPORT_FORMAT` (`md|json|both`, default `md`)
+- `CRM_EXPORT_TEMPLATE_MD` (default `v6/templates/transcript_default.md.tpl`)
+- `CRM_EXPORT_INCLUDE_TIMESTAMPS` (`true|false`, default `true`)
+- `CRM_EXPORT_TIMEZONE` (default `Europe/Berlin`)
+- `MAX_EXPORT_MESSAGES` (default `200`)
+- `MAX_EXPORT_BYTES` (default `1500000`)
 - `CRM_PROTOCOL_ENABLED` (`0` or `1`, default `1`)
 - `CRM_PROTOCOL_TEMPLATE` (default `crm_protocol_default.md.j2`)
 - `CRM_PROTOCOL_FORMAT` (`md|txt|json`, default `md`)
 - `CRM_PROTOCOL_TIMEZONE` (default `Europe/Berlin`)
 
-Export JSON:
+Export transcript JSON:
 ```bash
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=default&include_meta=1&limit=200"
+curl -OJ "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json"
 ```
 
-Export Markdown:
+Export transcript Markdown:
 ```bash
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md&template=default&include_meta=1&limit=200"
-```
-
-Export CRM JSON payload:
-```bash
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=crm&include_meta=1&limit=200"
-```
-
-Export CRM Markdown note:
-```bash
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md&template=crm&include_meta=1&limit=200"
+curl -OJ "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md"
 ```
 
 Toggle smoke checks:
 ```bash
 # disabled mode
-CRM_EXPORT_ENABLED=0 docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=crm"
+CRM_EXPORT_ENABLED=false docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json"
 
-# enabled mode
-CRM_EXPORT_ENABLED=1 CRM_EXPORT_MODE=file docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=crm&include_meta=1&limit=200"
+# enabled mode with custom template
+CRM_EXPORT_ENABLED=true CRM_EXPORT_TEMPLATE_MD=v6/templates/transcript_default.md.tpl docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
+curl -OJ "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md"
 ```
 
 ## Protocol download (V6.4)
