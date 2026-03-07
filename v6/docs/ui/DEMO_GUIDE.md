@@ -1,4 +1,4 @@
-# UI Demo Guide (V6.9.0)
+# UI Demo Guide (V6.10.0)
 
 ## Quick walkthrough
 1. Open UI: `http://localhost:8080`
@@ -55,3 +55,12 @@
    - show protocol export endpoint and mention template override for team-specific formats.
 5. Close (action):
    - "Same stack can be tailored per customer process without changing core code."
+
+## Help menu demo moment (V6.10.0)
+1. Open top-right `Help` menu.
+2. Open `Help` and show user guidance in-app.
+3. Open `Demo Guide` and show runbook consistency.
+4. Enter admin token, reload menu state, and show `Admin Docs` appears.
+5. Mention server gate:
+   - UI visibility is client convenience.
+   - actual access is verified by `/api/whoami` and protected admin docs endpoint.

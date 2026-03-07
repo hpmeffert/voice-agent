@@ -16,7 +16,8 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
 - Session export endpoint:
   - `GET /api/session/{session_id}/export?user_id=...&format=md|json`
   - `GET /api/export/protocol?user_id=...&session_id=...`
-  - `GET /api/templates` (shows available file templates + active config)
+  - `GET /api/whoami?user_id=...` (admin token gate check)
+- `GET /api/templates` (shows available file templates + active config)
   - `GET /api/user/prefs?user_id=...`
   - `POST /api/user/prefs` with `{user_id, crm_export_enabled}`
   - `GET /api/metrics/recent?user_id=...&limit=20`
@@ -48,6 +49,7 @@ Open UI:
 curl -s http://localhost:8080/api/health
 curl -s http://localhost:8080/api/models
 curl -s http://localhost:8080/api/config
+curl -s "http://localhost:8080/api/whoami?user_id=test-user-1"
 ```
 
 ## Mongo check
@@ -102,9 +104,10 @@ curl -OJ "http://localhost:8080/api/session/test-session-1/export?user_id=test-u
 
 ## UI Help and Demo Guide (V6.5)
 - Result output now wraps long lines for demo readability (`pre-wrap` + `break-word`).
-- Open the `?` button in the top-right UI to view:
-  - User Help (`v6/docs/HELP_USER.md`)
-  - Demo Guide (`v6/docs/HELP_DEMO_GUIDE.md`)
+- Open the top-right `Help` menu to view:
+  - Help (`v6/docs/ui/HELP_USER.md`)
+  - Demo Guide (`v6/docs/ui/DEMO_GUIDE.md`)
+  - Admin Docs (`v6/docs/admin/HELP_ADMIN.md`, token-gated)
 
 Demo script tip:
 ```bash
@@ -113,29 +116,25 @@ curl -s http://localhost:8080/api/models
 ```
 
 Edit demo/help content here:
-- `v6/docs/HELP_USER.md`
-- `v6/docs/HELP_DEMO_GUIDE.md`
+- `v6/docs/ui/HELP_USER.md`
+- `v6/docs/ui/DEMO_GUIDE.md`
+- `v6/docs/admin/HELP_ADMIN.md`
 
 Rule from V6.5 onward:
 - Every new feature must update both Help and Demo Guide content.
 
 ## Help Menu Split (V6.6.1)
 - Top-right `Help` menu now has separate entries:
-  - User Help
+  - Help
   - Demo Guide
-  - Admin Guide (admin-only)
-  - Admin Testing (admin-only)
-  - Release Notes / Version
+  - Admin Docs (admin-only)
 - Version line is shown in menu (from `/api/config -> ui.version/ui.build`).
-- In DEV mode (`ADMIN_DEV_MODE=1`) admin entries are visible for all users.
+- Admin visibility is token-based via `/api/whoami` + `X-Admin-Token`.
 
 Help source files:
-- `v6/docs/HELP_USER.md`
-- `v6/docs/HELP_DEMO_GUIDE.md`
-- `v6/docs/HELP_ADMIN.md`
-- `v6/docs/HELP_ADMIN_TESTING.md`
-- `v6/docs/RELEASE.md`
-- `v6/docs/ui/DEMO_GUIDE.md` (UI-focused demo flow + performance tips)
+- `v6/docs/ui/HELP_USER.md`
+- `v6/docs/ui/DEMO_GUIDE.md`
+- `v6/docs/admin/HELP_ADMIN.md`
 
 ## V6.6 CRM Export Toggle (per user)
 - UI has a `CRM Export` toggle (stored per `user_id` in Mongo `users.prefs.crm_export_enabled`).
@@ -196,6 +195,28 @@ docker compose -f v6/docker/compose.dev.yml exec mongo mongosh --eval 'use voice
 
 Detailed admin guide:
 - `v6/docs/ADMIN.md`
+
+## V6.10.0 Help menu + token gate
+- Top-right menu items:
+  - `Help` (`v6/docs/ui/HELP_USER.md`)
+  - `Demo Guide` (`v6/docs/ui/DEMO_GUIDE.md`)
+  - `Admin Docs` (`v6/docs/admin/HELP_ADMIN.md`, only when token is valid)
+- API gate:
+  - `GET /api/whoami?user_id=...`
+  - Header `X-Admin-Token: <token>`
+- UI stores optional token in localStorage and sends it to `/api/whoami` and admin docs endpoint.
+- Env:
+  - `ADMIN_UI_TOKEN` (empty = admin docs disabled for all)
+
+Token check examples:
+```bash
+# no token
+curl -s "http://localhost:8080/api/whoami?user_id=test-user-1"
+
+# with token
+curl -s "http://localhost:8080/api/whoami?user_id=test-user-1" \
+  -H "X-Admin-Token: YOUR_ADMIN_TOKEN"
+```
 
 Toggle smoke checks:
 ```bash
