@@ -214,6 +214,26 @@
       padding: 10px;
       background: color-mix(in srgb, var(--card), var(--text) 4%);
     }
+    .latencyBox {
+      margin-top: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: color-mix(in srgb, var(--card), var(--text) 3%);
+      font-size: 12px;
+    }
+    .latencyRow {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .latencyCell {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+    }
+    .latencyLabel { color: var(--muted); font-size: 11px; }
+    .latencyValue { font-weight: 700; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -340,6 +360,15 @@
         </div>
         <div class="bd">
           <pre id="result"></pre>
+          <div id="latencyBox" class="latencyBox">
+            <div class="muted">Latency breakdown (ms)</div>
+            <div class="latencyRow">
+              <div class="latencyCell"><div class="latencyLabel">STT</div><div id="latStt" class="latencyValue">-</div></div>
+              <div class="latencyCell"><div class="latencyLabel">LLM</div><div id="latLlm" class="latencyValue">-</div></div>
+              <div class="latencyCell"><div class="latencyLabel">TTS</div><div id="latTts" class="latencyValue">-</div></div>
+              <div class="latencyCell"><div class="latencyLabel">Total</div><div id="latTotal" class="latencyValue">-</div></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -380,6 +409,10 @@ const statusEl = el("status");
 const badgeEl = el("statusBadge");
 const errorBox = el("errorBox");
 const resultEl = el("result");
+const latSttEl = el("latStt");
+const latLlmEl = el("latLlm");
+const latTtsEl = el("latTts");
+const latTotalEl = el("latTotal");
 const previewAudio = el("audioPreview");
 const replyAudio = el("audioReply");
 const sessionPill = el("sessionPill");
@@ -466,6 +499,15 @@ if (!userId) {
 refreshIdentityPills();
 
 function setStatus(msg) { statusEl.textContent = msg; }
+function setLatency(stt, llm, tts, total) {
+  latSttEl.textContent = Number.isFinite(stt) ? String(Math.max(0, Math.round(stt))) : "-";
+  latLlmEl.textContent = Number.isFinite(llm) ? String(Math.max(0, Math.round(llm))) : "-";
+  latTtsEl.textContent = Number.isFinite(tts) ? String(Math.max(0, Math.round(tts))) : "-";
+  latTotalEl.textContent = Number.isFinite(total) ? String(Math.max(0, Math.round(total))) : "-";
+}
+function clearLatency() {
+  setLatency(NaN, NaN, NaN, NaN);
+}
 function setBadge(kind, text) {
   badgeEl.className = "badge" + (kind ? " " + kind : "");
   badgeEl.textContent = text || "Idle";
@@ -967,6 +1009,7 @@ btnClear.onclick = () => {
   previewAudio.src = "";
   replyAudio.src = "";
   resultEl.textContent = "";
+  clearLatency();
 
   localStorage.removeItem(SESSION_KEY);
   sessionId = "";
@@ -1144,6 +1187,13 @@ async function sendRecording() {
         recomputeCrmExportEnabled();
         updateExportUi();
       }
+      const m = data.metrics || {};
+      setLatency(
+        data.stt_ms ?? m.stt_ms,
+        data.llm_ms ?? m.llm_ms,
+        data.tts_ms ?? m.tts_ms,
+        data.total_ms ?? m.total_ms,
+      );
       resultEl.textContent = JSON.stringify(data, null, 2);
 
       setBadge("warn", "Think");
@@ -1171,6 +1221,7 @@ async function sendRecording() {
     console.error(err);
     setBadge("err", "Error");
     setStatus("Listening");
+    clearLatency();
     showError(String(err));
   } finally {
     setBusy(false);

@@ -21,6 +21,11 @@
 - Preference is persisted in Mongo and enforced server-side.
 - Help menu is split into separate entries with version display.
 
+## What's new in v6.7.0
+- Latency breakdown shown in UI result panel (STT/LLM/TTS/Total).
+- `/api/metrics/recent` endpoint for quick per-user timing history.
+- Additional demo/tuning notes in `v6/docs/ui/DEMO_GUIDE.md`.
+
 ## Maintenance rule
 - Every new feature in V6.x must update:
   1) `HELP_USER.md`
