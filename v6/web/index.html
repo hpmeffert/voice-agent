@@ -229,6 +229,11 @@
           <div class="row" style="margin-bottom:10px;">
             <span class="pill" id="sessionPill">Session: -</span>
             <span class="pill" id="userPill">User: -</span>
+            <label class="muted" title="Enable or disable transcript export for this user">
+              CRM Export
+              <input id="crmExportToggle" type="checkbox" />
+            </label>
+            <span class="muted" id="crmExportHint"></span>
           </div>
 
           <div class="controlGrid">
@@ -369,6 +374,8 @@ const helpDemoText = el("helpDemoText");
 const transcriptRow = el("transcriptRow");
 const exportFormatSel = el("exportFormat");
 const exportStatusEl = el("exportStatus");
+const crmExportToggle = el("crmExportToggle");
+const crmExportHint = el("crmExportHint");
 const protocolFormatSel = el("protocolFormat");
 const protocolStatusEl = el("protocolStatus");
 
@@ -385,6 +392,8 @@ let sessionId = localStorage.getItem(SESSION_KEY) || "";
 let userId = localStorage.getItem(USER_KEY) || "";
 let modelCatalog = null;
 let crmExportEnabled = false;
+let crmExportGlobalEnabled = false;
+let crmExportUserEnabled = true;
 let crmExportFormat = "md";
 let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
@@ -401,6 +410,10 @@ function refreshIdentityPills() {
   userPill.textContent = `User: ${shortId(userId)}`;
   updateExportUi();
   updateProtocolUi();
+}
+
+function recomputeCrmExportEnabled() {
+  crmExportEnabled = !!crmExportGlobalEnabled && !!crmExportUserEnabled;
 }
 
 function makeUuid() {
@@ -433,6 +446,7 @@ function setSessionId(id) {
 function setUserId(id) {
   userId = id || userId;
   if (userId) localStorage.setItem(USER_KEY, userId);
+  loadUserPrefs();
   refreshIdentityPills();
 }
 function setBusy(isBusy) {
@@ -443,6 +457,7 @@ function setBusy(isBusy) {
   btnClear.disabled = isBusy;
   backendSel.disabled = isBusy;
   modelSel.disabled = isBusy;
+  crmExportToggle.disabled = isBusy || !crmExportGlobalEnabled;
   conversationModeSel.disabled = isBusy;
   autoSendChk.disabled = isBusy && conversationModeSel.value === "auto";
   silenceMsInput.disabled = isBusy && conversationModeSel.value === "auto";
@@ -454,6 +469,14 @@ function setBusy(isBusy) {
 function updateExportUi() {
   const hasSession = !!sessionId;
   transcriptRow.style.display = hasSession ? "flex" : "none";
+  crmExportToggle.checked = !!crmExportUserEnabled;
+  if (!crmExportGlobalEnabled) {
+    crmExportHint.textContent = "Globally disabled by server";
+    crmExportToggle.disabled = true;
+  } else {
+    crmExportHint.textContent = crmExportUserEnabled ? "Enabled for this user" : "Disabled for this user";
+    crmExportToggle.disabled = uiBusy;
+  }
   if (!crmExportEnabled) {
     btnExport.disabled = true;
     exportFormatSel.disabled = true;
@@ -605,7 +628,7 @@ async function loadConfig() {
   try {
     const r = await fetchWithRetry("/api/config", 20, 500);
     const cfg = await r.json();
-    crmExportEnabled = !!cfg.crm_export_enabled;
+    crmExportGlobalEnabled = !!cfg.crm_export_enabled;
     crmExportFormat = cfg.crm_export_format || "md";
     if (!["md", "json", "both"].includes(crmExportFormat)) {
       crmExportFormat = "md";
@@ -616,13 +639,46 @@ async function loadConfig() {
       protocolFormatSel.value = crmProtocolFormat;
     }
   } catch (_) {
-    crmExportEnabled = false;
+    crmExportGlobalEnabled = false;
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
   }
+  recomputeCrmExportEnabled();
   updateExportUi();
   updateProtocolUi();
+}
+
+async function loadUserPrefs() {
+  if (!userId) return;
+  try {
+    const r = await fetchWithRetry(`/api/user/prefs?user_id=${encodeURIComponent(userId)}`, 12, 300);
+    const data = await r.json();
+    crmExportUserEnabled = data.crm_export_enabled !== false;
+  } catch (_) {
+    crmExportUserEnabled = true;
+  }
+  recomputeCrmExportEnabled();
+  updateExportUi();
+}
+
+async function saveUserPrefs(nextEnabled) {
+  if (!userId) return;
+  const resp = await fetch("/api/user/prefs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: userId,
+      crm_export_enabled: !!nextEnabled,
+    }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Failed to save user prefs: ${resp.status}`);
+  }
+  const data = await resp.json();
+  crmExportUserEnabled = data.crm_export_enabled !== false;
+  recomputeCrmExportEnabled();
+  updateExportUi();
 }
 
 backendSel.onchange = () => {
@@ -654,6 +710,17 @@ loadModels().catch((err) => {
   showError(String(err));
 });
 loadConfig();
+loadUserPrefs();
+
+crmExportToggle.onchange = async () => {
+  const nextValue = !!crmExportToggle.checked;
+  try {
+    await saveUserPrefs(nextValue);
+  } catch (err) {
+    crmExportToggle.checked = !nextValue;
+    showError(String(err));
+  }
+};
 
 function stopMonitoring() {
   if (monitorTimer) {
@@ -871,7 +938,8 @@ btnExport.onclick = async () => {
     if (contentType.includes("application/json")) {
       const data = await r.json();
       if (data?.status === "disabled") {
-        crmExportEnabled = false;
+        crmExportUserEnabled = false;
+        recomputeCrmExportEnabled();
         updateExportUi();
         exportStatusEl.textContent = "Transcript export disabled";
         return;
@@ -1002,6 +1070,11 @@ async function sendRecording() {
       const data = await r.json();
       if (data.session_id) setSessionId(data.session_id);
       if (data.user_id) setUserId(data.user_id);
+      if (typeof data.crm_export_enabled === "boolean") {
+        crmExportUserEnabled = data.crm_export_enabled;
+        recomputeCrmExportEnabled();
+        updateExportUi();
+      }
       resultEl.textContent = JSON.stringify(data, null, 2);
 
       setBadge("warn", "Think");

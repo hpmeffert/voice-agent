@@ -15,6 +15,8 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
 - Session export endpoint:
   - `GET /api/session/{session_id}/export?user_id=...&format=md|json`
   - `GET /api/templates` (shows available file templates + active config)
+  - `GET /api/user/prefs?user_id=...`
+  - `POST /api/user/prefs` with `{user_id, crm_export_enabled}`
 - Auto conversation frontend mode:
   - silence-based auto-stop
   - optional auto-send after stop
@@ -72,6 +74,7 @@ curl -s "http://localhost:8080/api/session/test-session-1?user_id=test-user-1&li
 ## Transcript export
 Feature toggle envs for API:
 - `CRM_EXPORT_ENABLED` (`true|false`, default `true`)
+- `CRM_EXPORT_DEFAULT_ENABLED` (`true|false`, default `true`)
 - `CRM_EXPORT_FORMAT` (`md|json|both`, default `md`)
 - `CRM_EXPORT_TEMPLATE_MD` (default `v6/templates/transcript_default.md.tpl`)
 - `CRM_EXPORT_INCLUDE_TIMESTAMPS` (`true|false`, default `true`)
@@ -111,6 +114,38 @@ Edit demo/help content here:
 
 Rule from V6.5 onward:
 - Every new feature must update both Help and Demo Guide content.
+
+## V6.6 CRM Export Toggle (per user)
+- UI has a `CRM Export` toggle (stored per `user_id` in Mongo `users.prefs.crm_export_enabled`).
+- Server enforces this preference on export routes.
+- `/api/voice` response includes:
+  - `crm_export_enabled` (effective per-user setting)
+  - `export_generated` (bool)
+
+Manual API checks:
+```bash
+# read prefs
+curl -s "http://localhost:8080/api/user/prefs?user_id=test-user-1"
+
+# disable prefs
+curl -s -X POST "http://localhost:8080/api/user/prefs" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"test-user-1","crm_export_enabled":false}'
+
+# verify export disabled
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md"
+
+# enable prefs again
+curl -s -X POST "http://localhost:8080/api/user/prefs" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"test-user-1","crm_export_enabled":true}'
+```
+
+Persistence check after restart:
+```bash
+docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml restart api web
+curl -s "http://localhost:8080/api/user/prefs?user_id=test-user-1"
+```
 
 Toggle smoke checks:
 ```bash
