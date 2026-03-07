@@ -563,7 +563,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v7.1.0";
+let uiVersionText = "v7.2.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 
@@ -951,7 +951,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v7.1.0";
+    const ver = cfg?.ui?.version || "v7.2.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
   } catch (_) {
@@ -959,7 +959,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v7.1.0";
+    uiVersionText = "v7.2.0";
   }
   await loadWhoAmI();
   recomputeCrmExportEnabled();
@@ -1202,6 +1202,22 @@ function computeRmsFromAnalyser() {
   return Math.sqrt(sum / data.length);
 }
 
+function preferredRecorderMimeType() {
+  if (!window.MediaRecorder || typeof window.MediaRecorder.isTypeSupported !== "function") {
+    return "";
+  }
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+  ];
+  for (const mime of candidates) {
+    if (window.MediaRecorder.isTypeSupported(mime)) return mime;
+  }
+  return "";
+}
+
 function handleAutoConversationMonitoring() {
   if (!autoStopChk.checked) return;
 
@@ -1268,9 +1284,12 @@ async function startRecording() {
 
   chunks = [];
   recordedBlob = null;
+  btnSend.disabled = true;
   stopReason = "manual";
 
-  mediaRecorder = new MediaRecorder(stream);
+  const preferredMime = preferredRecorderMimeType();
+  const recorderOptions = preferredMime ? { mimeType: preferredMime } : undefined;
+  mediaRecorder = new MediaRecorder(stream, recorderOptions);
   mediaRecorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
@@ -1278,14 +1297,20 @@ async function startRecording() {
   mediaRecorder.onstop = async () => {
     stopMonitoring();
 
-    recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
-    previewAudio.src = URL.createObjectURL(recordedBlob);
-    btnSend.disabled = false;
+    recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || preferredMime || "audio/webm" });
+    if (recordedBlob.size > 0) {
+      previewAudio.src = URL.createObjectURL(recordedBlob);
+      btnSend.disabled = false;
+    } else {
+      previewAudio.src = "";
+      btnSend.disabled = true;
+    }
 
     cleanupRecordingResources();
 
     if (stopReason === "no_speech") {
       recordedBlob = null;
+      previewAudio.src = "";
       btnSend.disabled = true;
       setBadge("warn", "Idle");
       setStatus("Listening");
@@ -1466,7 +1491,10 @@ btnProtocol.onclick = async () => {
 };
 
 async function sendRecording() {
-  if (!recordedBlob) return;
+  if (!recordedBlob || recordedBlob.size === 0) {
+    showError("No recorded audio available.");
+    return;
+  }
 
   setBusy(true);
   setBadge("warn", "Work");
@@ -1476,7 +1504,10 @@ async function sendRecording() {
   try {
     async function buildFormData() {
       const fd = new FormData();
-      const filename = recordedBlob.type.includes("ogg") ? "audio.ogg" : "audio.webm";
+      let filename = "audio.webm";
+      if (recordedBlob.type.includes("ogg")) filename = "audio.ogg";
+      if (recordedBlob.type.includes("wav")) filename = "audio.wav";
+      if (recordedBlob.type.includes("mp4") || recordedBlob.type.includes("m4a")) filename = "audio.m4a";
       fd.append("file", recordedBlob, filename);
       fd.append("return_audio", "0");
       fd.append("session_id", sessionId);

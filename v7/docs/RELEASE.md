@@ -1,7 +1,14 @@
 # Release Notes (V7.x)
 
 ## Current
-- Version: `v7.1.0`
+- Version: `v7.2.0`
+
+## Highlights in v7.2.0
+- Audio pipeline hardening for STT reliability:
+  - preferred browser capture mime `audio/webm;codecs=opus` when available
+  - server-side ffmpeg conversion to `16kHz mono WAV` before Whisper
+- Empty uploads and invalid audio now fail with clear structured JSON errors.
+- Added global JSON error normalization in API and nginx `/api` upstream fallback JSON.
 
 ## Highlights in v7.1.0
 - Added `Listen Mode` for continuous hands-free conversation.

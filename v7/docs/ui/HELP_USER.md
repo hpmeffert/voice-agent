@@ -1,4 +1,4 @@
-# Voice Agent Help (V7.1.0)
+# Voice Agent Help (V7.2.0)
 
 ## What is new in V7
 - V7 runs fully isolated under `v7/` (no runtime overlap with V6).
@@ -26,6 +26,20 @@
   - `Silence threshold (ms)`
   - `Voice threshold (RMS)`
 - Settings are persisted per user in Mongo and restored on reload.
+
+## Audio reliability (V7.2.0)
+- Browser audio is recorded with preferred Opus/WebM when supported.
+- Server converts uploaded audio with ffmpeg to stable `16kHz mono WAV` before Whisper STT.
+- This conversion avoids common decode issues such as `EOFError: End of file`.
+
+## Troubleshooting EOFError
+- Symptom: UI shows STT decode/conversion failure.
+- Action:
+  - retry with a fresh recording
+  - check microphone permission and input device
+  - avoid sending empty audio blobs
+- Why it works now:
+  - V7.2.0 normalizes browser formats via ffmpeg before transcription.
 
 ## Help menu
 - `Help`: this user guide.

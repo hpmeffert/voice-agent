@@ -1,4 +1,4 @@
-# UI Demo Guide (V7.1.0)
+# UI Demo Guide (V7.2.0)
 
 ## 5-minute demo flow
 1. Open `http://localhost:8081`.
@@ -8,8 +8,11 @@
    - speak
    - pause
    - show auto-stop + auto-send + auto-resume after speech playback
-5. Refresh browser and prove settings persisted (`Listen Mode` + thresholds restored).
-6. Show protocol/transcript export controls and result.
+5. Show reliability check:
+   - mention ffmpeg conversion to stable WAV before STT
+   - trigger an invalid upload once and show structured JSON error (no HTML page leak)
+6. Refresh browser and prove settings persisted (`Listen Mode` + thresholds restored).
+7. Show protocol/transcript export controls and result.
 
 ## Presenter narrative
 1. Hook:
@@ -18,6 +21,7 @@
    - live voice interaction with natural turn-taking and zero button clicks during the loop.
 3. Credibility:
    - Mongo persistence for sessions, messages, and per-user listen settings.
+   - hardened audio pipeline for browser formats (`webm/ogg`) with ffmpeg normalization.
 4. Close:
    - "V7.1.0 gives us a stable, demo-ready base for production conversation UX."
 
