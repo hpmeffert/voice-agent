@@ -6,16 +6,21 @@ import tempfile
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import requests
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from faster_whisper import WhisperModel
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.collection import Collection
 from starlette.background import BackgroundTask
+
+from protocol_renderer import render_protocol
 
 app = FastAPI(title="Voice Agent API V6.1")
 
@@ -38,10 +43,39 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5").strip()
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://mongo:27017/voice_agent").strip()
+MONGO_DB = os.getenv("MONGO_DB", "voice_agent").strip() or "voice_agent"
 MESSAGE_RETENTION_DAYS = int(os.getenv("MESSAGE_RETENTION_DAYS", "30"))
 SESSION_RETENTION_DAYS = int(os.getenv("SESSION_RETENTION_DAYS", "90"))
 MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
 MAX_TEXT_CHARS = int(os.getenv("MAX_TEXT_CHARS", "8000"))
+CRM_EXPORT_ENABLED = os.getenv("CRM_EXPORT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+CRM_EXPORT_FORMAT = os.getenv("CRM_EXPORT_FORMAT", "md").strip().lower()
+CRM_EXPORT_TEMPLATE_MD = os.getenv(
+    "CRM_EXPORT_TEMPLATE_MD",
+    "v6/templates/transcript_default.md.tpl",
+).strip()
+CRM_EXPORT_INCLUDE_TIMESTAMPS = os.getenv("CRM_EXPORT_INCLUDE_TIMESTAMPS", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+CRM_EXPORT_TIMEZONE = os.getenv("CRM_EXPORT_TIMEZONE", "Europe/Berlin").strip() or "Europe/Berlin"
+MAX_EXPORT_MESSAGES = int(os.getenv("MAX_EXPORT_MESSAGES", "200"))
+MAX_EXPORT_BYTES = int(os.getenv("MAX_EXPORT_BYTES", str(1_500_000)))
+CRM_EXPORT_MODE = os.getenv("CRM_EXPORT_MODE", "file").strip().lower()
+CRM_EXPORT_WEBHOOK_URL = os.getenv("CRM_EXPORT_WEBHOOK_URL", "").strip()
+CRM_PROTOCOL_ENABLED = os.getenv("CRM_PROTOCOL_ENABLED", "1").strip() == "1"
+CRM_PROTOCOL_TEMPLATE = os.getenv("CRM_PROTOCOL_TEMPLATE", "crm_protocol_default.md.j2").strip() or "crm_protocol_default.md.j2"
+CRM_PROTOCOL_FORMAT = os.getenv("CRM_PROTOCOL_FORMAT", "md").strip().lower()
+CRM_PROTOCOL_TIMEZONE = os.getenv("CRM_PROTOCOL_TIMEZONE", "Europe/Berlin").strip() or "Europe/Berlin"
+
+if CRM_EXPORT_MODE not in {"file", "webhook", "both"}:
+    CRM_EXPORT_MODE = "file"
+if CRM_EXPORT_FORMAT not in {"md", "json", "both"}:
+    CRM_EXPORT_FORMAT = "md"
+if CRM_PROTOCOL_FORMAT not in {"md", "txt", "json"}:
+    CRM_PROTOCOL_FORMAT = "md"
 
 SYSTEM_PROMPT = (
     "Du bist ein hilfreicher, präziser Assistent. Antworte kurz, klar und korrekt. "
@@ -159,6 +193,162 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
     return None
 
 
+def resolve_mongo_db_name(mongo_url: str) -> str:
+    parsed = urlparse(mongo_url)
+    db_name = (parsed.path or "").lstrip("/")
+    if db_name:
+        return db_name.split("/")[0]
+    return MONGO_DB
+
+
+def resolve_export_timezone() -> timezone | ZoneInfo:
+    try:
+        return ZoneInfo(CRM_EXPORT_TIMEZONE)
+    except Exception:
+        return timezone.utc
+
+
+def template_candidates(template_path: str) -> list[Path]:
+    p = Path((template_path or "").strip())
+    if not p.name:
+        p = Path("transcript_default.md.tpl")
+    return [
+        p,
+        Path("/app") / p,
+        Path("/app/templates") / p.name,
+        Path("v6/templates") / p.name,
+    ]
+
+
+def load_markdown_template() -> str:
+    default_template = (
+        "# Transcript Export\n\n"
+        "**Date:** {{date}} ({{weekday}})  \n"
+        "**Start:** {{start_time}}  \n"
+        "**End:** {{end_time}}  \n"
+        "**User:** {{user_id}}  \n"
+        "**Session:** {{session_id}}  \n"
+        "**Backend:** {{backend}}  \n"
+        "**Model:** {{model}}  \n"
+        "**Language:** {{lang}}\n\n"
+        "---\n\n"
+        "{{messages}}\n"
+    )
+    for candidate in template_candidates(CRM_EXPORT_TEMPLATE_MD):
+        try:
+            if candidate.is_file():
+                return candidate.read_text(encoding="utf-8")
+        except OSError:
+            continue
+    return default_template
+
+
+def format_role(role: str | None) -> str:
+    if role == "user":
+        return "User"
+    if role == "assistant":
+        return "Assistant"
+    return (role or "Unknown").title()
+
+
+def render_messages_markdown(docs: list[dict[str, Any]], tz: timezone | ZoneInfo, include_timestamps: bool) -> str:
+    blocks: list[str] = []
+    for msg in docs:
+        ts = msg.get("t") or msg.get("created_at")
+        text = (msg.get("content") or "").strip()
+        role = format_role(msg.get("role"))
+        if isinstance(ts, datetime):
+            stamp = ts.astimezone(tz).strftime("%H:%M:%S")
+        else:
+            stamp = ""
+        header = f"### {stamp} {role}".strip() if include_timestamps and stamp else f"### {role}"
+        blocks.extend([header, text, ""])
+    return "\n".join(blocks).strip()
+
+
+def safe_template_replace(template: str, mapping: dict[str, str]) -> str:
+    rendered = template
+    for key, value in mapping.items():
+        rendered = rendered.replace(f"{{{{{key}}}}}", value)
+    return rendered
+
+
+def build_export_payload(
+    session: dict[str, Any],
+    user_id: str,
+    docs: list[dict[str, Any]],
+    tz: timezone | ZoneInfo,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    chars_user = 0
+    chars_assistant = 0
+    turns = 0
+    messages: list[dict[str, Any]] = []
+
+    for msg in docs:
+        role = msg.get("role")
+        text = msg.get("content") or ""
+        if role == "user":
+            chars_user += len(text)
+            turns += 1
+        elif role == "assistant":
+            chars_assistant += len(text)
+
+        ts = msg.get("t") or msg.get("created_at")
+        ts_iso = dt_iso(ts) if isinstance(ts, datetime) else None
+        messages.append(
+            {
+                "ts": ts_iso,
+                "role": role,
+                "text": text,
+                "lang": msg.get("lang"),
+                "backend": msg.get("backend"),
+                "model": msg.get("model"),
+            }
+        )
+
+    session_meta = session.get("meta", {})
+    created_dt = session.get("created_at") if isinstance(session.get("created_at"), datetime) else now_utc()
+    end_dt = docs[-1].get("t") if docs and isinstance(docs[-1].get("t"), datetime) else created_dt
+    local_created = created_dt.astimezone(tz)
+    local_end = end_dt.astimezone(tz)
+    weekday = local_created.strftime("%A")
+
+    template_values = {
+        "date": local_created.strftime("%Y-%m-%d"),
+        "weekday": weekday,
+        "start_time": local_created.strftime("%H:%M:%S"),
+        "end_time": local_end.strftime("%H:%M:%S"),
+        "user_id": user_id,
+        "session_id": str(session.get("_id") or ""),
+        "backend": str(session_meta.get("backend_last") or "n/a"),
+        "model": str(session_meta.get("model_last") or "n/a"),
+        "lang": str(session_meta.get("lang_last") or "n/a"),
+        "messages": render_messages_markdown(docs, tz, CRM_EXPORT_INCLUDE_TIMESTAMPS),
+    }
+
+    json_payload = {
+        "version": "v6.4.1",
+        "session": {
+            "session_id": session.get("_id"),
+            "user_id": session.get("user_id"),
+            "created_at": dt_iso(session.get("created_at")),
+            "updated_at": dt_iso(session.get("updated_at")),
+            "expires_at": dt_iso(session.get("expires_at")),
+            "last_backend": session_meta.get("backend_last"),
+            "last_model": session_meta.get("model_last"),
+            "lang": session_meta.get("lang_last"),
+        },
+        "participants": [{"user_id": user_id}],
+        "messages": messages,
+        "stats": {
+            "turns": turns,
+            "chars_user": chars_user,
+            "chars_assistant": chars_assistant,
+        },
+    }
+    return json_payload, template_values
+
+
 # ----------------------------
 # Startup / Shutdown
 # ----------------------------
@@ -170,7 +360,7 @@ def on_startup() -> None:
 
     mongo_client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=5000)
     mongo_client.admin.command("ping")
-    mongo_db = mongo_client.get_default_database()
+    mongo_db = mongo_client[resolve_mongo_db_name(MONGO_URL)]
 
     users_col = mongo_db["users"]
     sessions_col = mongo_db["sessions"]
@@ -491,6 +681,33 @@ def generate_crm_summary(
     return summary
 
 
+def should_export_file() -> bool:
+    return CRM_EXPORT_MODE in {"file", "both"}
+
+
+def should_export_webhook() -> bool:
+    return CRM_EXPORT_MODE in {"webhook", "both"}
+
+
+def post_to_crm_webhook(payload: dict[str, Any]) -> tuple[bool, str | None]:
+    if not should_export_webhook():
+        return True, None
+    if not CRM_EXPORT_WEBHOOK_URL:
+        return False, "CRM webhook URL is not configured"
+    try:
+        r = requests.post(
+            CRM_EXPORT_WEBHOOK_URL,
+            json=payload,
+            timeout=12,
+            headers={"Content-Type": "application/json"},
+        )
+        if r.status_code >= 400:
+            return False, f"CRM webhook HTTP {r.status_code}"
+        return True, None
+    except requests.RequestException:
+        return False, "CRM webhook request failed"
+
+
 # ----------------------------
 # Models
 # ----------------------------
@@ -534,6 +751,33 @@ def models():
             "available": bool(OPENAI_API_KEY),
             "default_model": OPENAI_MODEL,
         },
+    }
+
+
+@app.get("/config")
+def config():
+    return {
+        "crm_export_enabled": CRM_EXPORT_ENABLED,
+        "crm_export_mode": CRM_EXPORT_MODE,
+        "crm_export_format": CRM_EXPORT_FORMAT,
+        "crm_export_include_timestamps": CRM_EXPORT_INCLUDE_TIMESTAMPS,
+        "crm_protocol_enabled": CRM_PROTOCOL_ENABLED,
+        "crm_protocol_format": CRM_PROTOCOL_FORMAT,
+    }
+
+
+@app.get("/templates")
+def templates():
+    available = []
+    tpl_dir = Path("/app/templates")
+    if tpl_dir.exists():
+        for p in tpl_dir.glob("*.tpl"):
+            available.append(p.name)
+    available.sort()
+    return {
+        "active_md_template": Path(CRM_EXPORT_TEMPLATE_MD).name,
+        "available_md_templates": available,
+        "crm_export_format": CRM_EXPORT_FORMAT,
     }
 
 
@@ -604,11 +848,57 @@ def get_session(
 def export_session(
     session_id: str,
     user_id: str = Query(..., min_length=8),
-    format: str = Query("json", pattern="^(json|md)$"),
-    template: str = Query("default", pattern="^(default|crm)$"),
-    include_meta: int = Query(1, ge=0, le=1),
+    format: str = Query("", pattern="^(|md|json)$"),
+):
+    if not CRM_EXPORT_ENABLED:
+        return JSONResponse({"status": "disabled"})
+
+    export_format = (format or "").strip().lower()
+    if export_format not in {"md", "json"}:
+        export_format = "json" if CRM_EXPORT_FORMAT == "json" else "md"
+    session = assert_session_owned_by_user(session_id, user_id)
+    limit = max(1, min(MAX_EXPORT_MESSAGES, 500))
+    docs = list(
+        messages_col.find({"session_id": session_id, "user_id": user_id})
+        .sort("t", ASCENDING)
+        .limit(limit)
+    )
+    tz = resolve_export_timezone()
+    payload, template_values = build_export_payload(session, user_id, docs, tz)
+    filename_base = f"transcript_{session_id}"
+
+    if export_format == "json":
+        body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        if len(body) > MAX_EXPORT_BYTES:
+            raise HTTPException(status_code=400, detail="Export exceeds size limit")
+        return Response(
+            content=body,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename_base}.json"'},
+        )
+
+    md_template = load_markdown_template()
+    body_text = safe_template_replace(md_template, template_values)
+    body = body_text.encode("utf-8")
+    if len(body) > MAX_EXPORT_BYTES:
+        raise HTTPException(status_code=400, detail="Export exceeds size limit")
+    return Response(
+        content=body,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename_base}.md"'},
+    )
+
+
+@app.get("/protocol/{session_id}")
+def download_protocol(
+    session_id: str,
+    user_id: str = Query(..., min_length=8),
+    format: str = Query("", pattern="^(|md|txt|json)$"),
     limit: int = Query(200, ge=1, le=500),
 ):
+    if not CRM_PROTOCOL_ENABLED:
+        raise HTTPException(status_code=409, detail="CRM protocol export is disabled")
+
     session = assert_session_owned_by_user(session_id, user_id)
     docs = list(
         messages_col.find({"session_id": session_id, "user_id": user_id})
@@ -616,175 +906,37 @@ def export_session(
         .limit(limit)
     )
 
-    messages_out = []
-    chars_user = 0
-    chars_assistant = 0
-    turns = 0
+    try:
+        tz = ZoneInfo(CRM_PROTOCOL_TIMEZONE)
+    except Exception:
+        tz = timezone.utc
 
-    for msg in docs:
-        role = msg.get("role")
-        text = (msg.get("content") or "")
-        if role == "user":
-            chars_user += len(text)
-            turns += 1
-        elif role == "assistant":
-            chars_assistant += len(text)
-
-        entry = {
-            "t": dt_iso(msg.get("t") or msg.get("created_at")),
-            "ts": dt_iso(msg.get("t") or msg.get("created_at")),
-            "role": role,
-            "text": text,
-        }
-        if include_meta == 1:
-            entry["lang"] = msg.get("lang")
-            entry["backend"] = msg.get("backend")
-            entry["model"] = msg.get("model")
-        messages_out.append(entry)
-
-    session_payload = {
-        "session_id": session.get("_id"),
-        "user_id": session.get("user_id"),
-        "created_at": dt_iso(session.get("created_at")),
-        "updated_at": dt_iso(session.get("updated_at")),
-        "expires_at": dt_iso(session.get("expires_at")),
-        "last_backend": session.get("meta", {}).get("backend_last"),
-        "last_model": session.get("meta", {}).get("model_last"),
-        "lang": session.get("meta", {}).get("lang_last"),
-    }
-
-    fallback_title = first_words(next((m["text"] for m in messages_out if m.get("role") == "user"), ""), 10) or "Conversation Summary"
-    fallback_summary = {
-        "title": fallback_title,
-        "short_summary": f"Session with {len(messages_out)} messages between user and assistant.",
-        "sentiment": "unknown",
-        "action_items": [],
-    }
-    crm_summary = generate_crm_summary(
-        transcript_lines=messages_out,
-        backend=session_payload.get("last_backend"),
-        model=session_payload.get("last_model"),
-    ) or fallback_summary
-
-    payload = {
-        "version": "v6.2.0",
-        "session": session_payload,
-        "participants": [{"user_id": user_id}],
-        "messages": messages_out,
-        "stats": {
-            "turns": turns,
-            "chars_user": chars_user,
-            "chars_assistant": chars_assistant,
+    content, filename, content_type = render_protocol(
+        session_doc=session,
+        messages=docs,
+        meta={
+            "format": format or CRM_PROTOCOL_FORMAT,
+            "template": CRM_PROTOCOL_TEMPLATE,
+            "tz": tz,
+            "export_version": "v6.4.0",
         },
-    }
+    )
 
-    filename_base = f"session_{session_id}"
-    if template == "crm":
-        crm_payload = {
-            "schema_version": "1.0",
-            "exported_at": now_utc().isoformat(),
-            "tenant": "default",
-            "user": {"user_id": user_id},
-            "session": {
-                "session_id": session_payload["session_id"],
-                "created_at": session_payload["created_at"],
-                "updated_at": session_payload["updated_at"],
-                "language": session_payload["lang"],
-                "backend": session_payload["last_backend"],
-                "model": session_payload["last_model"],
-                "tags": [],
-            },
-            "summary": crm_summary,
-            "transcript": [
-                {"t": m.get("t"), "role": m.get("role"), "text": m.get("text")}
-                for m in messages_out
-            ],
-            "raw": {
-                "messages_count": len(messages_out),
-                "audio": {
-                    "input_format": "unknown",
-                    "stt_model": WHISPER_MODEL_NAME,
-                    "stt_compute": WHISPER_COMPUTE,
-                },
-            },
-        }
-        if format == "md":
-            lines = [
-                f"# CRM Note - Session {session_id}",
-                "",
-                f"- user_id: {user_id}",
-                f"- created_at: {session_payload['created_at']}",
-                f"- updated_at: {session_payload['updated_at']}",
-                f"- backend: {session_payload['last_backend']}",
-                f"- model: {session_payload['last_model']}",
-                f"- language: {session_payload['lang']}",
-                "",
-                "## Summary",
-                "",
-                f"**Title:** {crm_summary.get('title', '')}",
-                "",
-                crm_summary.get("short_summary", ""),
-                "",
-                f"**Sentiment:** {crm_summary.get('sentiment', 'unknown')}",
-                "",
-                "## Action Items",
-            ]
-            action_items = crm_summary.get("action_items", [])
-            if not action_items:
-                lines.append("- None")
-            else:
-                for it in action_items:
-                    lines.append(f"- [{it.get('owner', 'unknown')}] {it.get('text', '')}")
-            lines.extend(["", "## Transcript", ""])
-            for m in crm_payload["transcript"]:
-                lines.append(f"### [{m.get('t')}] {m.get('role')}")
-                lines.append("")
-                lines.append(m.get("text") or "")
-                lines.append("")
+    sessions_col.update_one(
+        {"_id": session_id, "user_id": user_id},
+        {
+            "$set": {
+                "updated_at": now_utc(),
+                "meta.last_exported_at": now_utc(),
+                "meta.last_protocol_template": CRM_PROTOCOL_TEMPLATE,
+            }
+        },
+    )
 
-            return PlainTextResponse(
-                "\n".join(lines),
-                media_type="text/markdown",
-                headers={"Content-Disposition": f'attachment; filename="{filename_base}_crm.md"'},
-            )
-
-        return JSONResponse(
-            crm_payload,
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}_crm.json"'},
-        )
-
-    if format == "md":
-        lines = [
-            f"# Session Export {session_id}",
-            "",
-            f"- user_id: {user_id}",
-            f"- created_at: {session_payload['created_at']}",
-            f"- updated_at: {session_payload['updated_at']}",
-            f"- expires_at: {session_payload['expires_at']}",
-            f"- backend_last: {session_payload['last_backend']}",
-            f"- model_last: {session_payload['last_model']}",
-            f"- lang_last: {session_payload['lang']}",
-            f"- turns: {turns}",
-            "",
-            "## Messages",
-            "",
-        ]
-        for m in messages_out:
-            lines.append(f"### [{m.get('t')}] {m.get('role')}")
-            lines.append("")
-            lines.append(m.get("text") or "")
-            lines.append("")
-
-        body = "\n".join(lines)
-        return PlainTextResponse(
-            body,
-            media_type="text/markdown",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.md"'},
-        )
-
-    return JSONResponse(
-        payload,
-        headers={"Content-Disposition": f'attachment; filename="{filename_base}.json"'},
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

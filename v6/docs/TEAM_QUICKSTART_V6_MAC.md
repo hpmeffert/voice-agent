@@ -13,7 +13,8 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
 - Session history endpoint:
   - `GET /api/session/{session_id}?user_id=...&limit=20`
 - Session export endpoint:
-  - `GET /api/session/{session_id}/export?user_id=...&format=json|md&template=default|crm&include_meta=1|0&limit=200`
+  - `GET /api/session/{session_id}/export?user_id=...&format=md|json`
+  - `GET /api/templates` (shows available file templates + active config)
 - Auto conversation frontend mode:
   - silence-based auto-stop
   - optional auto-send after stop
@@ -25,7 +26,7 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
 
 ## Run V6
 ```bash
-docker compose -f v6/docker/compose.dev.yml up -d --build
+docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build
 ```
 
 Open UI:
@@ -35,6 +36,7 @@ Open UI:
 ```bash
 curl -s http://localhost:8080/api/health
 curl -s http://localhost:8080/api/models
+curl -s http://localhost:8080/api/config
 ```
 
 ## Mongo check
@@ -62,24 +64,62 @@ curl -s "http://localhost:8080/api/session/test-session-1?user_id=test-user-1&li
 ```
 
 ## Transcript export
-Export JSON:
+Feature toggle envs for API:
+- `CRM_EXPORT_ENABLED` (`true|false`, default `true`)
+- `CRM_EXPORT_FORMAT` (`md|json|both`, default `md`)
+- `CRM_EXPORT_TEMPLATE_MD` (default `v6/templates/transcript_default.md.tpl`)
+- `CRM_EXPORT_INCLUDE_TIMESTAMPS` (`true|false`, default `true`)
+- `CRM_EXPORT_TIMEZONE` (default `Europe/Berlin`)
+- `MAX_EXPORT_MESSAGES` (default `200`)
+- `MAX_EXPORT_BYTES` (default `1500000`)
+- `CRM_PROTOCOL_ENABLED` (`0` or `1`, default `1`)
+- `CRM_PROTOCOL_TEMPLATE` (default `crm_protocol_default.md.j2`)
+- `CRM_PROTOCOL_FORMAT` (`md|txt|json`, default `md`)
+- `CRM_PROTOCOL_TIMEZONE` (default `Europe/Berlin`)
+
+Export transcript JSON:
 ```bash
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=default&include_meta=1&limit=200"
+curl -OJ "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json"
 ```
 
-Export Markdown:
+Export transcript Markdown:
 ```bash
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md&template=default&include_meta=1&limit=200"
+curl -OJ "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md"
 ```
 
-Export CRM JSON payload:
+Toggle smoke checks:
 ```bash
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json&template=crm&include_meta=1&limit=200"
+# disabled mode
+CRM_EXPORT_ENABLED=false docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
+curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=json"
+
+# enabled mode with custom template
+CRM_EXPORT_ENABLED=true CRM_EXPORT_TEMPLATE_MD=v6/templates/transcript_default.md.tpl docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
+curl -OJ "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md"
 ```
 
-Export CRM Markdown note:
+## Protocol download (V6.4)
+Download protocol as Markdown:
 ```bash
-curl -s "http://localhost:8080/api/session/test-session-1/export?user_id=test-user-1&format=md&template=crm&include_meta=1&limit=200"
+curl -L -o protocol.md "http://localhost:8080/api/protocol/test-session-1?user_id=test-user-1&format=md"
+```
+
+Download protocol as JSON:
+```bash
+curl -L -o protocol.json "http://localhost:8080/api/protocol/test-session-1?user_id=test-user-1&format=json"
+```
+
+Protocol negative checks:
+```bash
+# wrong owner -> 403
+curl -i "http://localhost:8080/api/protocol/test-session-1?user_id=wrong-user&format=md"
+
+# unknown session -> 404
+curl -i "http://localhost:8080/api/protocol/unknown-session?user_id=test-user-1&format=md"
+
+# protocol disabled -> 409
+CRM_PROTOCOL_ENABLED=0 docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml up -d --build api
+curl -i "http://localhost:8080/api/protocol/test-session-1?user_id=test-user-1&format=md"
 ```
 
 ## Delete API examples
