@@ -17,6 +17,7 @@ This V6 stack is isolated under `v6/` and does not modify V5 runtime files.
   - `GET /api/templates` (shows available file templates + active config)
   - `GET /api/user/prefs?user_id=...`
   - `POST /api/user/prefs` with `{user_id, crm_export_enabled}`
+  - `GET /api/metrics/recent?user_id=...&limit=20`
 - Auto conversation frontend mode:
   - silence-based auto-stop
   - optional auto-send after stop
@@ -132,6 +133,7 @@ Help source files:
 - `v6/docs/HELP_ADMIN.md`
 - `v6/docs/HELP_ADMIN_TESTING.md`
 - `v6/docs/RELEASE.md`
+- `v6/docs/ui/DEMO_GUIDE.md` (UI-focused demo flow + performance tips)
 
 ## V6.6 CRM Export Toggle (per user)
 - UI has a `CRM Export` toggle (stored per `user_id` in Mongo `users.prefs.crm_export_enabled`).
@@ -164,6 +166,20 @@ Persistence check after restart:
 docker compose --project-directory "$PWD" -f v6/docker/compose.dev.yml restart api web
 curl -s "http://localhost:8080/api/user/prefs?user_id=test-user-1"
 ```
+
+## V6.7 Performance Metrics
+- `/api/voice` JSON responses include:
+  - `stt_ms`, `llm_ms`, `tts_ms`, `total_ms`
+  - `metrics` object with the same values
+- Recent metrics endpoint:
+```bash
+curl -s "http://localhost:8080/api/metrics/recent?user_id=test-user-1&limit=20"
+```
+
+Quick verification:
+1. Send three voice requests from UI (same `user_id`).
+2. Check Result panel latency breakdown after each request.
+3. Run `/api/metrics/recent` and verify newest entries appear first.
 
 Toggle smoke checks:
 ```bash

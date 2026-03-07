@@ -382,6 +382,7 @@ def on_startup() -> None:
     sessions_col.create_index([("updated_at", DESCENDING)])
 
     messages_col.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
+    messages_col.create_index([("user_id", ASCENDING), ("t", DESCENDING)])
     messages_col.create_index([("session_id", ASCENDING), ("t", ASCENDING)])
     messages_col.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
 
@@ -496,26 +497,33 @@ def append_message(
     lang: str | None,
     backend: str | None,
     model: str | None,
+    metrics: dict[str, int] | None = None,
 ) -> None:
     ensure_ready()
     if len(content) > MAX_TEXT_CHARS:
         raise HTTPException(status_code=400, detail=f"Text too long (>{MAX_TEXT_CHARS} chars)")
 
     ts = now_utc()
-    messages_col.insert_one(
-        {
-            "user_id": user_id,
-            "session_id": session_id,
-            "role": role,
-            "content": content,
-            "lang": lang,
-            "backend": backend,
-            "model": model,
-            "created_at": ts,
-            "t": ts,
-            "expires_at": message_expiry(),
+    doc: dict[str, Any] = {
+        "user_id": user_id,
+        "session_id": session_id,
+        "role": role,
+        "content": content,
+        "lang": lang,
+        "backend": backend,
+        "model": model,
+        "created_at": ts,
+        "t": ts,
+        "expires_at": message_expiry(),
+    }
+    if metrics:
+        doc["metrics"] = {
+            "stt_ms": max(0, int(metrics.get("stt_ms", 0))),
+            "llm_ms": max(0, int(metrics.get("llm_ms", 0))),
+            "tts_ms": max(0, int(metrics.get("tts_ms", 0))),
+            "total_ms": max(0, int(metrics.get("total_ms", 0))),
         }
-    )
+    messages_col.insert_one(doc)
 
 
 def mark_session_activity(session_id: str, backend: str, model: str | None, lang: str | None) -> None:
@@ -926,6 +934,53 @@ def get_session(
     }
 
 
+@app.get("/metrics/recent")
+def metrics_recent(
+    user_id: str = Query(..., min_length=8),
+    limit: int = Query(20, ge=1, le=100),
+):
+    ensure_ready()
+    docs = list(
+        messages_col.find(
+            {
+                "user_id": user_id,
+                "role": "assistant",
+                "metrics.total_ms": {"$exists": True},
+            },
+            {
+                "session_id": 1,
+                "t": 1,
+                "created_at": 1,
+                "backend": 1,
+                "model": 1,
+                "lang": 1,
+                "metrics": 1,
+            },
+        )
+        .sort("t", DESCENDING)
+        .limit(limit)
+    )
+
+    out = []
+    for d in docs:
+        m = d.get("metrics") or {}
+        out.append(
+            {
+                "session_id": d.get("session_id"),
+                "ts": dt_iso(d.get("t") or d.get("created_at")),
+                "backend": d.get("backend"),
+                "model": d.get("model"),
+                "lang": d.get("lang"),
+                "stt_ms": max(0, int(m.get("stt_ms", 0))),
+                "llm_ms": max(0, int(m.get("llm_ms", 0))),
+                "tts_ms": max(0, int(m.get("tts_ms", 0))),
+                "total_ms": max(0, int(m.get("total_ms", 0))),
+            }
+        )
+
+    return {"user_id": user_id, "count": len(out), "items": out}
+
+
 @app.get("/session/{session_id}/export")
 def export_session(
     session_id: str,
@@ -1206,18 +1261,21 @@ async def voice(
                 status_code=502,
             )
 
-        append_message(uid, sid, role="assistant", content=answer, lang=lang, backend=backend, model=selected_model)
-        mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
-
         t3 = time.perf_counter()
+        stt_ms = max(0, int((t2 - t1) * 1000))
+        llm_ms = max(0, int((t3 - t2) * 1000))
+        tts_ms = 0
+        total_ms = max(0, int((t3 - t0) * 1000))
         metrics = {
-            "audio_read_ms": int((t1 - t0) * 1000),
-            "stt_ms": int((t2 - t1) * 1000),
-            "llm_ms": int((t3 - t2) * 1000),
-            "total_ms": int((t3 - t0) * 1000),
+            "audio_read_ms": max(0, int((t1 - t0) * 1000)),
+            "stt_ms": stt_ms,
+            "llm_ms": llm_ms,
+            "tts_ms": tts_ms,
+            "total_ms": total_ms,
         }
 
         if return_audio == "1":
+            t3_tts = time.perf_counter()
             try:
                 tts_resp = requests.post(
                     f"{PIPER_BASE_URL}/tts",
@@ -1226,6 +1284,17 @@ async def voice(
                 )
                 tts_resp.raise_for_status()
             except Exception as e:
+                append_message(
+                    uid,
+                    sid,
+                    role="assistant",
+                    content=answer,
+                    lang=lang,
+                    backend=backend,
+                    model=selected_model,
+                    metrics=metrics,
+                )
+                mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
                 return JSONResponse(
                     {
                         "error": f"TTS failed: {str(e)}",
@@ -1236,6 +1305,23 @@ async def voice(
                     },
                     status_code=502,
                 )
+
+            tts_ms = max(0, int((time.perf_counter() - t3_tts) * 1000))
+            total_ms = max(0, int((time.perf_counter() - t0) * 1000))
+            metrics["tts_ms"] = tts_ms
+            metrics["total_ms"] = total_ms
+
+            append_message(
+                uid,
+                sid,
+                role="assistant",
+                content=answer,
+                lang=lang,
+                backend=backend,
+                model=selected_model,
+                metrics=metrics,
+            )
+            mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
 
             fd2, tts_wav_path = tempfile.mkstemp(suffix=".wav")
             os.close(fd2)
@@ -1256,6 +1342,18 @@ async def voice(
                 background=BackgroundTask(cleanup_paths, tts_wav_path),
             )
 
+        append_message(
+            uid,
+            sid,
+            role="assistant",
+            content=answer,
+            lang=lang,
+            backend=backend,
+            model=selected_model,
+            metrics=metrics,
+        )
+        mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
+
         return {
             "session_id": sid,
             "user_id": uid,
@@ -1263,6 +1361,10 @@ async def voice(
             "lang": lang,
             "answer": answer,
             "metrics": metrics,
+            "stt_ms": stt_ms,
+            "llm_ms": llm_ms,
+            "tts_ms": tts_ms,
+            "total_ms": total_ms,
             "crm_export_enabled": crm_export_user_enabled,
             "export_generated": crm_export_user_enabled,
             "export_url": (
