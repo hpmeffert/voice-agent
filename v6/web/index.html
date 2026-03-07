@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent V6</title>
+  <title>Voice Agent V6.1</title>
   <style>
     :root {
       --bg:#f4f7fb;
@@ -40,11 +40,11 @@
         radial-gradient(900px 500px at 95% -10%, rgba(59,130,246,.10), transparent 62%),
         var(--bg);
     }
-    .wrap { max-width: 1040px; margin: 24px auto; padding: 0 16px; }
+    .wrap { max-width: 1080px; margin: 24px auto; padding: 0 16px; }
     h1 { margin: 0 0 6px 0; font-size: 24px; }
     .sub { margin: 0 0 14px 0; color: var(--muted); }
     .grid { display:grid; grid-template-columns: 1fr; gap:14px; }
-    @media (min-width: 920px) { .grid { grid-template-columns: 1.15fr .85fr; } }
+    @media (min-width: 920px) { .grid { grid-template-columns: 1.2fr .8fr; } }
 
     .card {
       background: var(--card);
@@ -73,7 +73,7 @@
       background: color-mix(in srgb, var(--card), var(--text) 4%);
     }
 
-    select, button {
+    select, button, input[type="number"], input[type="range"] {
       border:1px solid var(--border);
       background: color-mix(in srgb, var(--card), var(--text) 3%);
       color: var(--text);
@@ -81,6 +81,8 @@
       padding: 8px 10px;
       outline: none;
     }
+    input[type="range"] { padding: 0; }
+
     button { cursor:pointer; }
     button:disabled { opacity: .45; cursor:not-allowed; }
     button.primary { background: linear-gradient(90deg, var(--brand), #2563eb); color: #fff; border-color: transparent; }
@@ -110,12 +112,19 @@
     }
     .errorBox.show { display:block; }
 
+    .controlGrid {
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap:10px;
+      margin: 12px 0;
+    }
+
     pre {
       border:1px solid var(--border);
       border-radius: 10px;
       padding: 10px;
       margin: 0;
-      max-height: 360px;
+      max-height: 380px;
       overflow: auto;
       background: color-mix(in srgb, var(--card), var(--text) 4%);
       font-size: 12px;
@@ -129,8 +138,8 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V6</h1>
-        <p class="sub">STT -> LLM (Ollama/OpenAI) -> TTS (Piper) with Mongo persistence.</p>
+        <h1>Voice Agent V6.1</h1>
+        <p class="sub">Auto conversation, robust browser audio STT, and transcript export.</p>
       </div>
       <div class="topRight">
         <label class="muted" for="themeMode">Theme</label>
@@ -147,7 +156,7 @@
         <div class="hd">
           <div class="row">
             <span class="badge" id="statusBadge">Idle</span>
-            <span class="muted" id="status">Ready.</span>
+            <span class="muted" id="status">Listening</span>
           </div>
           <div class="row">
             <label class="muted">Backend</label>
@@ -164,6 +173,27 @@
           <div class="row" style="margin-bottom:10px;">
             <span class="pill" id="sessionPill">Session: -</span>
             <span class="pill" id="userPill">User: -</span>
+          </div>
+
+          <div class="controlGrid">
+            <label class="muted">Conversation Mode
+              <select id="conversationMode">
+                <option value="manual" selected>Manual</option>
+                <option value="auto">Auto</option>
+              </select>
+            </label>
+
+            <label class="muted">Auto-send after stop
+              <input id="autoSend" type="checkbox" checked />
+            </label>
+
+            <label class="muted">Silence threshold (ms)
+              <input id="silenceMs" type="number" min="300" max="5000" step="100" value="1100" />
+            </label>
+
+            <label class="muted">Max recording seconds
+              <input id="maxRecordSec" type="number" min="5" max="120" step="1" value="45" />
+            </label>
           </div>
 
           <div class="row">
@@ -200,6 +230,18 @@
 let mediaRecorder;
 let chunks = [];
 let recordedBlob = null;
+let currentStream = null;
+let currentAudioCtx = null;
+let analyserNode = null;
+let monitorTimer = null;
+let recordStartAt = 0;
+let speechStartedAt = 0;
+let lastVoiceAt = 0;
+let stopReason = "manual";
+
+const VOICE_RMS_THRESHOLD = 0.012;
+const MIN_SPEECH_MS = 250;
+const NO_SPEECH_TIMEOUT_MS = 8000;
 
 const el = (id) => document.getElementById(id);
 const statusEl = el("status");
@@ -219,6 +261,11 @@ const btnClear = el("btnClear");
 const backendSel = el("backend");
 const modelSel = el("model");
 const themeSel = el("themeMode");
+
+const conversationModeSel = el("conversationMode");
+const autoSendChk = el("autoSend");
+const silenceMsInput = el("silenceMs");
+const maxRecordSecInput = el("maxRecordSec");
 
 const SESSION_KEY = "voice_agent_session_id";
 const USER_KEY = "voice_agent_user_id";
@@ -277,6 +324,10 @@ function setBusy(isBusy) {
   btnClear.disabled = isBusy;
   backendSel.disabled = isBusy;
   modelSel.disabled = isBusy;
+  conversationModeSel.disabled = isBusy;
+  autoSendChk.disabled = isBusy && conversationModeSel.value === "auto";
+  silenceMsInput.disabled = isBusy && conversationModeSel.value === "auto";
+  maxRecordSecInput.disabled = isBusy && conversationModeSel.value === "auto";
 }
 
 function applyTheme(mode) {
@@ -304,6 +355,14 @@ themeSel.onchange = () => {
   applyTheme(themeSel.value);
 };
 
+conversationModeSel.onchange = () => {
+  if (conversationModeSel.value === "manual") {
+    autoSendChk.checked = false;
+  } else {
+    autoSendChk.checked = true;
+  }
+};
+
 function setModelOptions(options, preferred) {
   modelSel.innerHTML = "";
   for (const name of options) {
@@ -323,9 +382,7 @@ async function fetchWithRetry(url, tries = 30, baseDelayMs = 500) {
     try {
       const r = await fetch(url, { cache: "no-store" });
       if (r.ok) return r;
-    } catch (_) {
-      // ignore and retry
-    }
+    } catch (_) {}
     await sleep(delay);
     delay = Math.min(4000, Math.floor(delay * 1.3));
   }
@@ -334,7 +391,7 @@ async function fetchWithRetry(url, tries = 30, baseDelayMs = 500) {
 
 async function loadModels() {
   setBadge("warn", "Loading");
-  setStatus("Loading models...");
+  setStatus("Listening");
   showError("");
 
   const r = await fetchWithRetry("/api/models", 30, 500);
@@ -349,7 +406,7 @@ async function loadModels() {
   if (openaiOpt) openaiOpt.disabled = !data?.openai?.available;
 
   setBadge("", "Idle");
-  setStatus("Ready.");
+  setStatus("Listening");
 }
 
 backendSel.onchange = () => {
@@ -359,11 +416,11 @@ backendSel.onchange = () => {
     const openaiAvailable = !!modelCatalog?.openai?.available;
     if (!openaiAvailable) {
       backendSel.value = "ollama";
-      setStatus("OpenAI not available. Using Ollama.");
+      setStatus("Listening");
     } else {
       const defaultOpenAI = modelCatalog?.openai?.default_model || "gpt-5";
       setModelOptions([defaultOpenAI], defaultOpenAI);
-      setStatus("OpenAI selected.");
+      setStatus("Listening");
       return;
     }
   }
@@ -371,15 +428,185 @@ backendSel.onchange = () => {
   const ollamaModels = modelCatalog?.ollama?.models || [];
   const defaultOllama = modelCatalog?.ollama?.default_model || "qwen2.5:7b";
   setModelOptions(ollamaModels.length ? ollamaModels : [defaultOllama], defaultOllama);
-  setStatus("Ready.");
+  setStatus("Listening");
 };
 
 loadModels().catch((err) => {
   console.error(err);
   setBadge("err", "Error");
-  setStatus("Model load failed.");
+  setStatus("Listening");
   showError(String(err));
 });
+
+function stopMonitoring() {
+  if (monitorTimer) {
+    clearInterval(monitorTimer);
+    monitorTimer = null;
+  }
+}
+
+function cleanupRecordingResources() {
+  stopMonitoring();
+
+  if (currentStream) {
+    currentStream.getTracks().forEach((t) => t.stop());
+    currentStream = null;
+  }
+
+  if (currentAudioCtx) {
+    currentAudioCtx.close().catch(() => {});
+    currentAudioCtx = null;
+  }
+
+  analyserNode = null;
+}
+
+function computeRmsFromAnalyser() {
+  if (!analyserNode) return 0;
+  const data = new Uint8Array(analyserNode.fftSize);
+  analyserNode.getByteTimeDomainData(data);
+
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) {
+    const sample = (data[i] - 128) / 128;
+    sum += sample * sample;
+  }
+  return Math.sqrt(sum / data.length);
+}
+
+function handleAutoConversationMonitoring() {
+  if (conversationModeSel.value !== "auto") return;
+
+  stopMonitoring();
+  recordStartAt = Date.now();
+  speechStartedAt = 0;
+  lastVoiceAt = 0;
+
+  const silenceMs = Math.max(300, Number(silenceMsInput.value || 1100));
+  const maxRecordMs = Math.max(5000, Number(maxRecordSecInput.value || 45) * 1000);
+
+  monitorTimer = setInterval(() => {
+    if (!mediaRecorder || mediaRecorder.state === "inactive") {
+      stopMonitoring();
+      return;
+    }
+
+    const now = Date.now();
+    const rms = computeRmsFromAnalyser();
+
+    if (rms > VOICE_RMS_THRESHOLD) {
+      if (!speechStartedAt) {
+        speechStartedAt = now;
+      }
+      lastVoiceAt = now;
+    }
+
+    if (!speechStartedAt && (now - recordStartAt) > NO_SPEECH_TIMEOUT_MS) {
+      stopReason = "no_speech";
+      mediaRecorder.stop();
+      return;
+    }
+
+    if ((now - recordStartAt) > maxRecordMs) {
+      stopReason = "max_record";
+      mediaRecorder.stop();
+      return;
+    }
+
+    if (speechStartedAt && (now - speechStartedAt) >= MIN_SPEECH_MS && lastVoiceAt && (now - lastVoiceAt) >= silenceMs) {
+      stopReason = "silence";
+      mediaRecorder.stop();
+    }
+  }, 120);
+}
+
+async function startRecording() {
+  showError("");
+  setBadge("live", "Rec");
+  setStatus("Recording");
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  currentStream = stream;
+
+  currentAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = currentAudioCtx.createMediaStreamSource(stream);
+  analyserNode = currentAudioCtx.createAnalyser();
+  analyserNode.fftSize = 2048;
+  source.connect(analyserNode);
+
+  chunks = [];
+  recordedBlob = null;
+  stopReason = "manual";
+
+  mediaRecorder = new MediaRecorder(stream);
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = async () => {
+    stopMonitoring();
+
+    recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
+    previewAudio.src = URL.createObjectURL(recordedBlob);
+    btnSend.disabled = false;
+
+    cleanupRecordingResources();
+
+    if (stopReason === "no_speech") {
+      recordedBlob = null;
+      btnSend.disabled = true;
+      setBadge("warn", "Idle");
+      setStatus("Listening");
+      showError("No speech detected within timeout. Try again.");
+      return;
+    }
+
+    if (stopReason === "max_record") {
+      showError("Max recording time reached. Recording stopped.");
+    }
+
+    if (conversationModeSel.value === "auto" && autoSendChk.checked) {
+      setBadge("warn", "Ready");
+      setStatus("Transcribing");
+      await sendRecording();
+    } else {
+      setBadge("warn", "Ready");
+      setStatus("Listening");
+    }
+  };
+
+  mediaRecorder.start();
+  btnRecord.disabled = true;
+  btnStop.disabled = false;
+
+  if (conversationModeSel.value === "auto") {
+    handleAutoConversationMonitoring();
+  }
+}
+
+btnRecord.onclick = async () => {
+  try {
+    await startRecording();
+  } catch (err) {
+    console.error(err);
+    setBadge("err", "Error");
+    setStatus("Listening");
+    showError(`Mic error: ${err?.name || ""} ${err?.message || err}`);
+    cleanupRecordingResources();
+  }
+};
+
+btnStop.onclick = () => {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    stopReason = "manual";
+    mediaRecorder.stop();
+    btnRecord.disabled = false;
+    btnStop.disabled = true;
+    if (conversationModeSel.value === "manual") {
+      setStatus("Listening");
+    }
+  }
+};
 
 btnClear.onclick = () => {
   chunks = [];
@@ -393,60 +620,17 @@ btnClear.onclick = () => {
 
   btnSend.disabled = true;
   setBadge("", "Idle");
-  setStatus("Idle (session reset)");
+  setStatus("Listening");
   showError("");
   refreshIdentityPills();
 };
 
-btnRecord.onclick = async () => {
-  try {
-    showError("");
-    setBadge("live", "Rec");
-    setStatus("Requesting microphone...");
-
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    chunks = [];
-    recordedBlob = null;
-
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-
-    mediaRecorder.onstop = () => {
-      recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || "audio/webm" });
-      previewAudio.src = URL.createObjectURL(recordedBlob);
-      btnSend.disabled = false;
-
-      setBadge("warn", "Ready");
-      setStatus("Recorded. Ready to send.");
-      stream.getTracks().forEach((t) => t.stop());
-    };
-
-    mediaRecorder.start();
-    btnRecord.disabled = true;
-    btnStop.disabled = false;
-    setStatus("Recording...");
-  } catch (err) {
-    console.error(err);
-    setBadge("err", "Error");
-    setStatus("Mic permission / recording error.");
-    showError(`Mic error: ${err?.name || ""} ${err?.message || err}`);
-  }
-};
-
-btnStop.onclick = () => {
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    mediaRecorder.stop();
-    btnRecord.disabled = false;
-    btnStop.disabled = true;
-  }
-};
-
-btnSend.onclick = async () => {
+async function sendRecording() {
   if (!recordedBlob) return;
 
   setBusy(true);
   setBadge("warn", "Work");
-  setStatus("Uploading...");
+  setStatus("Transcribing");
   showError("");
 
   try {
@@ -466,7 +650,7 @@ btnSend.onclick = async () => {
 
     while (true) {
       const fd = await buildFormData();
-      setStatus("Transcribing + Thinking...");
+      setStatus("Transcribing");
       const r = await fetch("/api/voice", { method: "POST", body: fd });
 
       if (!r.ok) {
@@ -478,7 +662,7 @@ btnSend.onclick = async () => {
           backendSel.value = "ollama";
           backendSel.onchange?.();
           showError("OpenAI quota/billing missing. Switched to Ollama.");
-          throw new Error("OpenAI quota/billing missing (HTTP 429). ");
+          throw new Error("OpenAI quota/billing missing (HTTP 429).");
         }
 
         const code = errObj?.code || "";
@@ -487,7 +671,7 @@ btnSend.onclick = async () => {
           backendSel.value = "ollama";
           backendSel.onchange?.();
           modelSel.value = "qwen2.5:3b";
-          setStatus("Model too large for RAM. Switching to qwen2.5:3b and retrying...");
+          setStatus("Thinking");
           continue;
         }
 
@@ -499,8 +683,8 @@ btnSend.onclick = async () => {
       if (data.user_id) setUserId(data.user_id);
       resultEl.textContent = JSON.stringify(data, null, 2);
 
-      setBadge("live", "Speak");
-      setStatus("Speaking...");
+      setBadge("warn", "Think");
+      setStatus("Thinking");
 
       const tts = await fetch("/tts/tts", {
         method: "POST",
@@ -511,21 +695,27 @@ btnSend.onclick = async () => {
 
       const wavBlob = await tts.blob();
       replyAudio.src = URL.createObjectURL(wavBlob);
+      setBadge("live", "Speak");
+      setStatus("Speaking");
       try { await replyAudio.play(); } catch (_) {}
 
-      setBadge("warn", "Ready");
-      setStatus(`Done (session ${shortId(sessionId)} / user ${shortId(userId)})`);
+      setBadge("", "Idle");
+      setStatus("Listening");
       showError("");
       break;
     }
   } catch (err) {
     console.error(err);
     setBadge("err", "Error");
-    setStatus("Error");
+    setStatus("Listening");
     showError(String(err));
   } finally {
     setBusy(false);
   }
+}
+
+btnSend.onclick = async () => {
+  await sendRecording();
 };
 </script>
 </body>

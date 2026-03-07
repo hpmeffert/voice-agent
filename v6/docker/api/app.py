@@ -1,19 +1,22 @@
 import os
+import subprocess
 import tempfile
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 import requests
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from faster_whisper import WhisperModel
 from pydantic import BaseModel, Field
 from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.collection import Collection
+from starlette.background import BackgroundTask
 
-app = FastAPI(title="Voice Agent API V6")
+app = FastAPI(title="Voice Agent API V6.1")
 
 # ----------------------------
 # Config / ENV
@@ -56,6 +59,9 @@ sessions_col: Collection | None = None
 messages_col: Collection | None = None
 
 
+# ----------------------------
+# Helpers
+# ----------------------------
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -75,6 +81,58 @@ def ensure_ready() -> None:
         raise RuntimeError("MongoDB not initialized")
 
 
+def normalize_user_id(user_id: str | None) -> str:
+    if user_id and user_id.strip():
+        return user_id.strip()
+    return str(uuid.uuid4())
+
+
+def normalize_ext(filename: str | None) -> str:
+    ext = os.path.splitext(filename or "audio.webm")[1].lower()
+    if ext not in [".wav", ".webm", ".ogg", ".mp3", ".m4a"]:
+        ext = ".webm"
+    return ext
+
+
+def cleanup_paths(*paths: str | None) -> None:
+    for path in paths:
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+def run_ffmpeg_to_wav_16k_mono(input_path: str) -> str:
+    fd, output_path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        input_path,
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        output_path,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        cleanup_paths(output_path)
+        raise HTTPException(status_code=400, detail="Unsupported/invalid audio")
+    return output_path
+
+
+def dt_iso(v: Any) -> str | None:
+    if isinstance(v, datetime):
+        return v.isoformat()
+    return None
+
+
+# ----------------------------
+# Startup / Shutdown
+# ----------------------------
 @app.on_event("startup")
 def on_startup() -> None:
     global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col
@@ -105,12 +163,9 @@ def on_shutdown() -> None:
         mongo_client.close()
 
 
-def normalize_user_id(user_id: str | None) -> str:
-    if user_id and user_id.strip():
-        return user_id.strip()
-    return str(uuid.uuid4())
-
-
+# ----------------------------
+# Persistence helpers
+# ----------------------------
 def upsert_user(user_id: str) -> None:
     ensure_ready()
     ts = now_utc()
@@ -151,7 +206,6 @@ def get_or_create_session(session_id: str | None, user_id: str, backend: str | N
         },
         upsert=True,
     )
-
     return sid
 
 
@@ -161,6 +215,8 @@ def append_message(
     role: str,
     content: str,
     lang: str | None,
+    backend: str | None,
+    model: str | None,
 ) -> None:
     ensure_ready()
     if len(content) > MAX_TEXT_CHARS:
@@ -174,6 +230,8 @@ def append_message(
             "role": role,
             "content": content,
             "lang": lang,
+            "backend": backend,
+            "model": model,
             "created_at": ts,
             "expires_at": message_expiry(),
         }
@@ -228,6 +286,9 @@ def assert_session_owned_by_user(session_id: str, user_id: str) -> dict[str, Any
     return session
 
 
+# ----------------------------
+# LLM backends
+# ----------------------------
 def ollama_generate(prompt: str, model_override: str | None = None) -> str:
     use_model = (model_override or OLLAMA_MODEL).strip()
     payload = {
@@ -297,6 +358,9 @@ def llm_generate(backend: str, prompt: str, model_override: str | None) -> str:
     return ollama_generate(prompt, model_override=model_override)
 
 
+# ----------------------------
+# Models
+# ----------------------------
 class SessionDeleteRequest(BaseModel):
     user_id: str = Field(min_length=8)
     session_id: str = Field(min_length=8)
@@ -306,6 +370,9 @@ class UserDeleteRequest(BaseModel):
     user_id: str = Field(min_length=8)
 
 
+# ----------------------------
+# Routes
+# ----------------------------
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -379,7 +446,9 @@ def get_session(
                 "role": msg.get("role"),
                 "content": msg.get("content"),
                 "lang": msg.get("lang"),
-                "created_at": msg.get("created_at").isoformat() if msg.get("created_at") else None,
+                "backend": msg.get("backend"),
+                "model": msg.get("model"),
+                "created_at": dt_iso(msg.get("created_at")),
             }
         )
 
@@ -387,20 +456,113 @@ def get_session(
         "session": {
             "session_id": session.get("_id"),
             "user_id": session.get("user_id"),
-            "created_at": session.get("created_at").isoformat() if session.get("created_at") else None,
-            "updated_at": session.get("updated_at").isoformat() if session.get("updated_at") else None,
-            "last_activity_at": session.get("last_activity_at").isoformat() if session.get("last_activity_at") else None,
+            "created_at": dt_iso(session.get("created_at")),
+            "updated_at": dt_iso(session.get("updated_at")),
+            "expires_at": dt_iso(session.get("expires_at")),
+            "last_activity_at": dt_iso(session.get("last_activity_at")),
             "meta": session.get("meta", {}),
         },
         "messages": messages,
     }
 
 
+@app.get("/session/{session_id}/export")
+def export_session(
+    session_id: str,
+    user_id: str = Query(..., min_length=8),
+    format: str = Query("json", pattern="^(json|md)$"),
+    include_meta: int = Query(1, ge=0, le=1),
+):
+    session = assert_session_owned_by_user(session_id, user_id)
+    docs = list(messages_col.find({"session_id": session_id, "user_id": user_id}).sort("created_at", ASCENDING))
+
+    messages_out = []
+    chars_user = 0
+    chars_assistant = 0
+    turns = 0
+
+    for msg in docs:
+        role = msg.get("role")
+        text = (msg.get("content") or "")
+        if role == "user":
+            chars_user += len(text)
+            turns += 1
+        elif role == "assistant":
+            chars_assistant += len(text)
+
+        entry = {
+            "ts": dt_iso(msg.get("created_at")),
+            "role": role,
+            "text": text,
+        }
+        if include_meta == 1:
+            entry["lang"] = msg.get("lang")
+            entry["backend"] = msg.get("backend")
+            entry["model"] = msg.get("model")
+        messages_out.append(entry)
+
+    session_payload = {
+        "session_id": session.get("_id"),
+        "user_id": session.get("user_id"),
+        "created_at": dt_iso(session.get("created_at")),
+        "updated_at": dt_iso(session.get("updated_at")),
+        "expires_at": dt_iso(session.get("expires_at")),
+        "last_backend": session.get("meta", {}).get("backend_last"),
+        "last_model": session.get("meta", {}).get("model_last"),
+        "lang": session.get("meta", {}).get("lang_last"),
+    }
+
+    payload = {
+        "version": "v6.1.0",
+        "session": session_payload,
+        "participants": [{"user_id": user_id}],
+        "messages": messages_out,
+        "stats": {
+            "turns": turns,
+            "chars_user": chars_user,
+            "chars_assistant": chars_assistant,
+        },
+    }
+
+    filename_base = f"session_{session_id}"
+    if format == "md":
+        lines = [
+            f"# Session Export {session_id}",
+            "",
+            f"- user_id: {user_id}",
+            f"- created_at: {session_payload['created_at']}",
+            f"- updated_at: {session_payload['updated_at']}",
+            f"- expires_at: {session_payload['expires_at']}",
+            f"- backend_last: {session_payload['last_backend']}",
+            f"- model_last: {session_payload['last_model']}",
+            f"- lang_last: {session_payload['lang']}",
+            f"- turns: {turns}",
+            "",
+            "## Messages",
+            "",
+        ]
+        for m in messages_out:
+            lines.append(f"### [{m.get('ts')}] {m.get('role')}")
+            lines.append("")
+            lines.append(m.get("text") or "")
+            lines.append("")
+
+        body = "\n".join(lines)
+        return PlainTextResponse(
+            body,
+            media_type="text/markdown",
+            headers={"Content-Disposition": f'attachment; filename="{filename_base}.md"'},
+        )
+
+    return JSONResponse(
+        payload,
+        headers={"Content-Disposition": f'attachment; filename="{filename_base}.json"'},
+    )
+
+
 @app.post("/session/delete")
 def delete_session(req: SessionDeleteRequest):
-    session = assert_session_owned_by_user(req.session_id, req.user_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    assert_session_owned_by_user(req.session_id, req.user_id)
 
     msg_res = messages_col.delete_many({"session_id": req.session_id, "user_id": req.user_id})
     sess_res = sessions_col.delete_one({"_id": req.session_id, "user_id": req.user_id})
@@ -449,7 +611,8 @@ async def voice(
     upsert_user(uid)
 
     model_override = model.strip() if model and model.strip() else None
-    sid = get_or_create_session(session_id, uid, backend=backend, model=(model_override or OLLAMA_MODEL))
+    selected_model = model_override or OLLAMA_MODEL
+    sid = get_or_create_session(session_id, uid, backend=backend, model=selected_model)
 
     raw = await file.read()
     if len(raw) > MAX_AUDIO_BYTES:
@@ -462,146 +625,164 @@ async def voice(
             status_code=413,
         )
 
-    filename = file.filename or "audio.webm"
-    ext = os.path.splitext(filename)[1].lower()
-    if ext not in [".wav", ".mp3", ".m4a", ".webm", ".ogg"]:
-        ext = ".webm"
+    input_path = None
+    converted_wav_path = None
+    tts_wav_path = None
 
-    fd, path = tempfile.mkstemp(suffix=ext)
-    os.close(fd)
-    with open(path, "wb") as handle:
-        handle.write(raw)
-
-    t1 = time.perf_counter()
-    segments, info = whisper.transcribe(path, language=None, vad_filter=True)
-    transcript = "".join(seg.text for seg in segments).strip()
-    lang = getattr(info, "language", None)
-
-    if not transcript:
-        return JSONResponse(
-            {
-                "error": "No speech detected",
-                "session_id": sid,
-                "user_id": uid,
-            },
-            status_code=400,
-        )
-
-    if len(transcript) > MAX_TEXT_CHARS:
-        return JSONResponse(
-            {
-                "error": f"Transcript too long (>{MAX_TEXT_CHARS} chars)",
-                "session_id": sid,
-                "user_id": uid,
-            },
-            status_code=400,
-        )
-
-    prompt = build_prompt_with_history(sid, transcript, SYSTEM_PROMPT)
-
-    append_message(uid, sid, role="user", content=transcript, lang=lang)
-
-    t2 = time.perf_counter()
     try:
-        answer = llm_generate(backend=backend, prompt=prompt, model_override=model_override)
-    except Exception as e:
-        msg = str(e)
-        if msg.startswith("OLLAMA_INSUFFICIENT_MEMORY::"):
-            detail = msg.split("::", 1)[1]
-            return JSONResponse(
-                {
-                    "error": "LLM failed: insufficient memory for selected model",
-                    "code": "insufficient_memory",
-                    "detail": detail,
-                    "session_id": sid,
-                    "user_id": uid,
-                },
-                status_code=507,
-            )
-        if msg.startswith("OPENAI_NOT_CONFIGURED::"):
-            detail = msg.split("::", 1)[1]
-            return JSONResponse(
-                {
-                    "error": "OpenAI backend not configured",
-                    "code": "openai_not_configured",
-                    "detail": detail,
-                    "session_id": sid,
-                    "user_id": uid,
-                },
-                status_code=503,
-            )
-        if msg.startswith("OPENAI_HTTP_429::"):
-            detail = msg.split("::", 1)[1]
-            return JSONResponse(
-                {
-                    "error": "OpenAI quota/billing issue",
-                    "code": "openai_quota",
-                    "detail": detail,
-                    "session_id": sid,
-                    "user_id": uid,
-                },
-                status_code=429,
-            )
-        return JSONResponse(
-            {
-                "error": "LLM failed",
-                "detail": msg,
-                "session_id": sid,
-                "user_id": uid,
-            },
-            status_code=502,
-        )
+        ext = normalize_ext(file.filename)
+        fd, input_path = tempfile.mkstemp(suffix=ext)
+        os.close(fd)
+        with open(input_path, "wb") as handle:
+            handle.write(raw)
 
-    append_message(uid, sid, role="assistant", content=answer, lang=lang)
-    mark_session_activity(sid, backend=backend, model=(model_override or OLLAMA_MODEL), lang=lang)
+        converted_wav_path = run_ffmpeg_to_wav_16k_mono(input_path)
 
-    t3 = time.perf_counter()
-    metrics = {
-        "audio_read_ms": int((t1 - t0) * 1000),
-        "stt_ms": int((t2 - t1) * 1000),
-        "llm_ms": int((t3 - t2) * 1000),
-        "total_ms": int((t3 - t0) * 1000),
-    }
-
-    if return_audio == "1":
+        t1 = time.perf_counter()
         try:
-            tts_resp = requests.post(
-                f"{PIPER_BASE_URL}/tts",
-                json={"text": answer, "lang": lang},
-                timeout=180,
-            )
-            tts_resp.raise_for_status()
-        except Exception as e:
+            segments, info = whisper.transcribe(converted_wav_path, language=None, vad_filter=True)
+        except Exception:
             return JSONResponse(
                 {
-                    "error": f"TTS failed: {str(e)}",
+                    "error": "Unsupported/invalid audio",
+                    "session_id": sid,
+                    "user_id": uid,
+                },
+                status_code=400,
+            )
+        transcript = "".join(seg.text for seg in segments).strip()
+        lang = getattr(info, "language", None)
+
+        if not transcript:
+            return JSONResponse(
+                {
+                    "error": "No speech detected",
+                    "session_id": sid,
+                    "user_id": uid,
+                },
+                status_code=400,
+            )
+
+        if len(transcript) > MAX_TEXT_CHARS:
+            return JSONResponse(
+                {
+                    "error": f"Transcript too long (>{MAX_TEXT_CHARS} chars)",
+                    "session_id": sid,
+                    "user_id": uid,
+                },
+                status_code=400,
+            )
+
+        prompt = build_prompt_with_history(sid, transcript, SYSTEM_PROMPT)
+        append_message(uid, sid, role="user", content=transcript, lang=lang, backend=backend, model=selected_model)
+
+        t2 = time.perf_counter()
+        try:
+            answer = llm_generate(backend=backend, prompt=prompt, model_override=model_override)
+        except Exception as e:
+            msg = str(e)
+            if msg.startswith("OLLAMA_INSUFFICIENT_MEMORY::"):
+                detail = msg.split("::", 1)[1]
+                return JSONResponse(
+                    {
+                        "error": "LLM failed: insufficient memory for selected model",
+                        "code": "insufficient_memory",
+                        "detail": detail,
+                        "session_id": sid,
+                        "user_id": uid,
+                    },
+                    status_code=507,
+                )
+            if msg.startswith("OPENAI_NOT_CONFIGURED::"):
+                detail = msg.split("::", 1)[1]
+                return JSONResponse(
+                    {
+                        "error": "OpenAI backend not configured",
+                        "code": "openai_not_configured",
+                        "detail": detail,
+                        "session_id": sid,
+                        "user_id": uid,
+                    },
+                    status_code=503,
+                )
+            if msg.startswith("OPENAI_HTTP_429::"):
+                detail = msg.split("::", 1)[1]
+                return JSONResponse(
+                    {
+                        "error": "OpenAI quota/billing issue",
+                        "code": "openai_quota",
+                        "detail": detail,
+                        "session_id": sid,
+                        "user_id": uid,
+                    },
+                    status_code=429,
+                )
+            return JSONResponse(
+                {
+                    "error": "LLM failed",
+                    "detail": msg,
                     "session_id": sid,
                     "user_id": uid,
                 },
                 status_code=502,
             )
 
-        fd2, wav_path = tempfile.mkstemp(suffix=".wav")
-        os.close(fd2)
-        with open(wav_path, "wb") as wf:
-            wf.write(tts_resp.content)
+        append_message(uid, sid, role="assistant", content=answer, lang=lang, backend=backend, model=selected_model)
+        mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
 
-        return FileResponse(
-            wav_path,
-            media_type="audio/wav",
-            filename="reply.wav",
-            headers={
-                "X-Session-Id": sid,
-                "X-User-Id": uid,
-                "X-Detected-Lang": (lang or ""),
-            },
-        )
+        t3 = time.perf_counter()
+        metrics = {
+            "audio_read_ms": int((t1 - t0) * 1000),
+            "stt_ms": int((t2 - t1) * 1000),
+            "llm_ms": int((t3 - t2) * 1000),
+            "total_ms": int((t3 - t0) * 1000),
+        }
 
-    return {
-        "session_id": sid,
-        "user_id": uid,
-        "transcript": transcript,
-        "lang": lang,
-        "answer": answer,
-        "metrics": metrics,
-    }
+        if return_audio == "1":
+            try:
+                tts_resp = requests.post(
+                    f"{PIPER_BASE_URL}/tts",
+                    json={"text": answer, "lang": lang},
+                    timeout=180,
+                )
+                tts_resp.raise_for_status()
+            except Exception as e:
+                return JSONResponse(
+                    {
+                        "error": f"TTS failed: {str(e)}",
+                        "session_id": sid,
+                        "user_id": uid,
+                    },
+                    status_code=502,
+                )
+
+            fd2, tts_wav_path = tempfile.mkstemp(suffix=".wav")
+            os.close(fd2)
+            with open(tts_wav_path, "wb") as wf:
+                wf.write(tts_resp.content)
+
+            return FileResponse(
+                tts_wav_path,
+                media_type="audio/wav",
+                filename="reply.wav",
+                headers={
+                    "X-Session-Id": sid,
+                    "X-User-Id": uid,
+                    "X-Detected-Lang": (lang or ""),
+                },
+                background=BackgroundTask(cleanup_paths, tts_wav_path),
+            )
+
+        return {
+            "session_id": sid,
+            "user_id": uid,
+            "transcript": transcript,
+            "lang": lang,
+            "answer": answer,
+            "metrics": metrics,
+        }
+
+    except HTTPException:
+        raise
+    finally:
+        cleanup_paths(input_path, converted_wav_path)
