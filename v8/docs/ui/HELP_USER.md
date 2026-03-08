@@ -1,24 +1,28 @@
-# Benutzer Dokumentation (V8.3.0)
+# Benutzer Dokumentation (V8.4.0)
 
 ## Oberflaechen
 - Admin UI: `http://localhost:8082`
 - Customer UI: `http://localhost:8083`
 - Agent UI: `http://localhost:8084`
 
-## Session im Agent-Client finden (neu)
-Im Agent UI gibt es jetzt Suche direkt im Header:
-- Feld `Suche`: Session-ID oder User-ID eingeben.
-- `Typ`:
-  - `Alle` = freie Suche ueber Session-ID und User-ID
-  - `Session ID` = exakte Session-Suche
-  - `User ID` = Sessions eines Users
-- `Suchen` startet den Filter.
-- `Reset` zeigt wieder alle aktiven Sessions.
+## Neu: Hands-free Listen Mode (Customer UI)
+- Schalter `Listen Mode` aktiviert den kontinuierlichen Ablauf:
+  - aufnehmen -> senden -> Antwort abspielen -> erneut aufnehmen
+- Stoppen mit:
+  - `End Conversation`
+  - oder `Stop`
+- Schutz gegen Endlosschleifen:
+  - bei Fehlern wird Listen Mode automatisch beendet
 
-## Customer UI
-- Kunde kann Audio oder Text senden.
-- Agent-Antworten kommen live in die Session.
-- Option `Speak to customer` aus Agent-UI triggert Sprachausgabe beim Kunden.
+## Sprache / Stille
+- Silence Threshold Standard bleibt `1300 ms`.
+- Die Erkennung stoppt automatisch nach Sprechende.
+
+## Agent-Suche
+Im Agent UI:
+- Suche nach `session_id` oder `user_id`
+- Typ: `Alle`, `Session ID`, `User ID`
+- `Suchen` / `Reset`
 
 ## Help-Menue (fix)
 1. Admin Token speichern
@@ -26,6 +30,3 @@ Im Agent UI gibt es jetzt Suche direkt im Header:
 3. Demo Guide
 4. Admin Docs
 5. Release Notes
-
-## Standardwerte
-- Silence Threshold: `1300 ms`

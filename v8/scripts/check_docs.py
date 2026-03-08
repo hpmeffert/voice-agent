@@ -39,8 +39,13 @@ for pattern, msg in checks:
         print(f"[V8-DOC-CHECK][FAIL] {msg}")
         sys.exit(1)
 
+customer_html = (ROOT / "v8/web-customer/index.html").read_text(encoding="utf-8", errors="ignore")
+if re.search(r"Listen Mode", customer_html) is None:
+    print("[V8-DOC-CHECK][FAIL] customer ui missing Listen Mode")
+    sys.exit(1)
+
 release = (ROOT / "v8/docs/RELEASE.md").read_text(encoding="utf-8", errors="ignore")
-for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0", "V8.3.0"]:
+for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0", "V8.3.0", "V8.4.0"]:
     if tag not in release:
         print(f"[V8-DOC-CHECK][FAIL] release history missing {tag}")
         sys.exit(1)
