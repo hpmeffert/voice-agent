@@ -20,17 +20,37 @@ for p in required:
     if not p.exists():
         print(f"[V8-DOC-CHECK][FAIL] missing file: {p}")
         sys.exit(1)
-    if p.stat().st_size < 80:
+    if p.stat().st_size < 120:
         print(f"[V8-DOC-CHECK][FAIL] file seems empty: {p}")
         sys.exit(1)
 
 html = (ROOT / "v8/web/index.html").read_text(encoding="utf-8", errors="ignore")
+
+menu_order_ids = [
+    "adminTokenSave",
+    "menuUserDocs",
+    "menuDemoGuide",
+    "adminGuideItem",
+    "menuReleaseNotes",
+]
+positions = []
+for element_id in menu_order_ids:
+    marker = f'id="{element_id}"'
+    idx = html.find(marker)
+    if idx < 0:
+        print(f"[V8-DOC-CHECK][FAIL] missing menu element id: {element_id}")
+        sys.exit(1)
+    positions.append(idx)
+if positions != sorted(positions):
+    print("[V8-DOC-CHECK][FAIL] help menu order is invalid")
+    sys.exit(1)
+
+for label in ["Admin Token speichern", "Help", "Demo Guide", "Admin Docs", "Release Notes"]:
+    if label not in html:
+        print(f"[V8-DOC-CHECK][FAIL] missing menu label: {label}")
+        sys.exit(1)
+
 checks = [
-    (r"Admin Token speichern", "missing 'Admin Token speichern'"),
-    (r"Benutzer Dokumentation", "missing 'Benutzer Dokumentation' menu item"),
-    (r"Demo Guide", "missing 'Demo Guide' menu item"),
-    (r"Admin Docs", "missing 'Admin Docs' menu item"),
-    (r"Release Notes", "missing 'Release Notes' menu item"),
     (r"id=\"silenceMs\"[^\n]*value=\"1300\"", "silence default must be 1300"),
     (r"Voice Agent V8\.", "header/title must show V8.x version"),
 ]
@@ -39,13 +59,26 @@ for pattern, msg in checks:
         print(f"[V8-DOC-CHECK][FAIL] {msg}")
         sys.exit(1)
 
+doc_rules = [
+    (ROOT / "v8/docs/ui/HELP_USER.md", [r"^# .*V8\.6\.0", r"Help-Menue Struktur"], "help user"),
+    (ROOT / "v8/docs/ui/DEMO_GUIDE.md", [r"Story-Flow 1", r"Story-Flow 2"], "demo guide"),
+    (ROOT / "v8/docs/admin/HELP_ADMIN.md", [r"## 2\) Start / Stop", r"Whisper", r"Ollama", r"Piper", r"Mongo", r"Valkey"], "admin docs"),
+    (ROOT / "v8/docs/RELEASE.md", [r"V7\.0\.0", r"V8\.6\.0"], "release notes"),
+]
+for path, patterns, label in doc_rules:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    for pattern in patterns:
+        if re.search(pattern, text, flags=re.MULTILINE) is None:
+            print(f"[V8-DOC-CHECK][FAIL] {label} missing pattern: {pattern}")
+            sys.exit(1)
+
 customer_html = (ROOT / "v8/web-customer/index.html").read_text(encoding="utf-8", errors="ignore")
 if re.search(r"Listen Mode", customer_html) is None:
     print("[V8-DOC-CHECK][FAIL] customer ui missing Listen Mode")
     sys.exit(1)
 
 release = (ROOT / "v8/docs/RELEASE.md").read_text(encoding="utf-8", errors="ignore")
-for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0", "V8.3.0", "V8.4.0"]:
+for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0", "V8.3.0", "V8.4.0", "V8.5.0", "V8.6.0"]:
     if tag not in release:
         print(f"[V8-DOC-CHECK][FAIL] release history missing {tag}")
         sys.exit(1)

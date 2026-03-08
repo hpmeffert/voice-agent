@@ -5,6 +5,7 @@ Pflicht bei JEDEM V8-Release:
 - `v8/docs/ui/DEMO_GUIDE.md`
 - `v8/docs/admin/HELP_ADMIN.md`
 - `v8/docs/RELEASE.md`
+- `v8/docs/TEAM_QUICKSTART_V8_MAC.md`
 
 ## Help-Menue Vertrag
 1. Admin Token speichern
@@ -17,3 +18,22 @@ Zusatz:
 - Version muss in Header und Help sichtbar sein.
 - Silence Threshold Default ist 1300 ms.
 - Doku-Checks duerfen keine leeren Seiten erlauben.
+- Release Notes muessen den Verlauf ab `V7.0.0` bis zur aktuellen Version enthalten.
+
+## Admin-Doku Pflichtinhalt
+- Wo liegen API/UI/Compose/Docs-Verzeichnisse?
+- Wie startet/stoppt man den Stack als Admin?
+- Welche Testreihenfolge gilt fuer Komponenten (`api`, `whisper`, `ollama`, `eventbus/valkey`, `piper`, `mongo`, UIs)?
+- Welche Admin-Parameter sind konfigurierbar?
+- Wo liegt die Uebersetzungstabelle und wie fuegt man Sprachen hinzu?
+- Welche Admin-Features sind in der aktuellen Version neu?
+
+## V8.5.x Zusatzvertrag
+- Admin-Konversationssuche muss dokumentiert und testbar sein:
+  - Suche nach `search_user_id`
+  - Suche nach `session_id`
+  - Volltextsuche `q` (Wort oder Textausschnitt)
+- API-Vertrag:
+  - `GET /api/admin/conversations/search`
+  - Admin-Token erforderlich
+  - Ohne Filter muss die API 400 liefern

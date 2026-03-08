@@ -1,20 +1,27 @@
-# Demo Guide (V8.4.0)
+# Demo Guide - V8.6.0
 
-## Story: Vollautomatische Kundenrunde ohne Klick-Stress
-"Stell dir vor, dein Kunde spricht frei und die Anwendung fuehrt ihn automatisch durch das Gespraech."
+## Story-Flow 1: Self-Service mit Wow-Effekt
+Stell dir vor, ein Kunde spricht einfach los. Keine Klick-Orgie, kein Bruch. Der Assistent reagiert automatisch wie in einem echten Gespraech.
 
 1. Customer UI (`8083`) oeffnen.
 2. `Listen Mode` aktivieren.
-3. Kunde spricht drei Runden hintereinander.
-4. System erkennt Stille, sendet automatisch und spielt Antwort ab.
-5. Nach Audio-Ende startet Aufnahme wieder selbst.
+3. Kunde spricht 2-3 kurze Anliegen.
+4. Zeigen, dass bei Stille (`1300 ms`) automatisch gesendet wird.
+5. Antwort wird abgespielt, danach geht es automatisch weiter.
 
-## Mit Agent-Handoff kombinieren
+## Story-Flow 2: Call-Center Handoff mit Nachvollziehbarkeit
+Jetzt kommt der spannende Teil: der Agent uebernimmt ohne Informationsverlust.
+
 1. Agent UI (`8084`) oeffnen.
-2. Session in Inbox suchen und uebernehmen.
-3. Agent antwortet live; Kunde bleibt im Hands-free-Loop.
+2. Session ueber `user_id` oder Stichwort finden.
+3. Session uebernehmen und live antworten.
+4. Admin UI (`8082`) oeffnen und dieselbe Konversation suchen:
+   - mit `search_user_id`
+   - mit `session_id`
+   - mit `q` (z. B. Schluesselwort aus dem Gespraech)
+5. Ergebnis zeigen: vom Kundendialog bis zum Admin-Audit alles durchgaengig nachvollziehbar.
 
-## Wirkung in der Praesentation
-- Start: Kunde spricht frei, keine Technikbarriere.
-- Mitte: automatische Turn-Taking-Logik arbeitet sichtbar.
-- Ende: Agent uebernimmt nahtlos denselben Dialog.
+## Praesentationsbogen
+- Einstieg: "Kunde spricht frei, das System fuehrt sauber durch den Turn."
+- Mitte: "Agent steigt nahtlos ein, ohne neue Session."
+- Finale: "Admin findet jede relevante Passage sofort wieder."

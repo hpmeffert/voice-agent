@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent V8.4.0</title>
+  <title>Voice Agent V8.6.0</title>
   <style>
     :root {
       --bg:#f4f7fb;
@@ -296,7 +296,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V8.4.0</h1>
+        <h1>Voice Agent V8.6.0</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
@@ -319,11 +319,11 @@
           <div id="menuVersion" class="menuHeader">Version: -</div>
           <input id="adminTokenInput" type="password" placeholder="Admin token (optional)" />
           <button id="adminTokenSave" class="menuItem" data-i18n="menu.admin_token">Admin Token speichern</button>
-          <button id="menuUserDocs" class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Benutzer Dokumentation" data-i18n="menu.user_docs">Benutzer Dokumentation</button>
+          <button id="menuUserDocs" class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Help" data-i18n="menu.user_docs">Help</button>
           <button id="menuDemoGuide" class="menuItem" data-help-doc="/docs/ui/DEMO_GUIDE.md" data-help-title="Demo Guide" data-i18n="menu.demo_guide">Demo Guide</button>
           <button id="adminGuideItem" class="menuItem" data-help-doc="/docs/admin/HELP_ADMIN.md" data-help-title="Admin Docs" data-i18n="menu.admin_docs">Admin Docs</button>
           <button id="adminSettingsMenuItem" class="menuItem" data-i18n="menu.admin_settings">Admin Settings</button>
-          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V8.4.0" data-i18n="menu.release_notes">Release Notes</button>
+          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V8.6.0" data-i18n="menu.release_notes">Release Notes</button>
         </div>
       </div>
     </div>
@@ -523,6 +523,30 @@
             <pre id="adminMetricsRecent" style="margin-top:8px; max-height:220px; overflow:auto;">-</pre>
           </div>
 
+          <div id="adminConversationSearchPanel" class="latencyBox" style="display:none;">
+            <div class="muted" style="margin-bottom:6px;">Admin Conversation Search</div>
+            <div class="controlGrid">
+              <label class="muted">Search User ID
+                <input id="adminSearchUserId" type="text" placeholder="target user id" />
+              </label>
+              <label class="muted">Search Session ID
+                <input id="adminSearchSessionId" type="text" placeholder="session id" />
+              </label>
+              <label class="muted">Content (word/text)
+                <input id="adminSearchQuery" type="text" placeholder="word or text section" />
+              </label>
+              <label class="muted">Limit
+                <input id="adminSearchLimit" type="number" min="1" max="500" step="1" value="80" />
+              </label>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button id="adminSearchRun">Search Conversations</button>
+              <button id="adminSearchClear">Clear</button>
+              <span id="adminSearchStatus" class="muted">-</span>
+            </div>
+            <pre id="adminSearchResult" style="margin-top:8px; max-height:240px; overflow:auto;">-</pre>
+          </div>
+
           <details id="debugBox" class="debugBox">
             <summary>Debug JSON</summary>
             <pre id="debugJson">-</pre>
@@ -601,6 +625,15 @@ const autoplayBanner = el("autoplayBanner");
 const adminMetricsPanel = el("adminMetricsPanel");
 const adminMetricsSummary = el("adminMetricsSummary");
 const adminMetricsRecent = el("adminMetricsRecent");
+const adminConversationSearchPanel = el("adminConversationSearchPanel");
+const adminSearchUserId = el("adminSearchUserId");
+const adminSearchSessionId = el("adminSearchSessionId");
+const adminSearchQuery = el("adminSearchQuery");
+const adminSearchLimit = el("adminSearchLimit");
+const adminSearchRun = el("adminSearchRun");
+const adminSearchClear = el("adminSearchClear");
+const adminSearchStatus = el("adminSearchStatus");
+const adminSearchResult = el("adminSearchResult");
 const btnMetricsRefresh = el("btnMetricsRefresh");
 const adminSettingsCard = el("adminSettingsCard");
 const adminRetentionDays = el("adminRetentionDays");
@@ -978,6 +1011,7 @@ function updateAdminControls() {
   demoModeHint.style.display = showAdmin ? "inline" : "none";
   debugPanelLabel.style.display = showAdmin ? "inline-flex" : "none";
   adminMetricsPanel.style.display = showAdmin ? "block" : "none";
+  adminConversationSearchPanel.style.display = showAdmin ? "block" : "none";
   adminSettingsMenuItem.style.display = showAdmin ? "block" : "none";
   if (!showAdmin) {
     demoModeEnabled = false;
@@ -989,6 +1023,8 @@ function updateAdminControls() {
     applyDebugPanelVisibility();
     adminMetricsSummary.textContent = "-";
     adminMetricsRecent.textContent = "-";
+    adminSearchStatus.textContent = "-";
+    adminSearchResult.textContent = "-";
     adminSettingsCard.style.display = "none";
     adminSettingsStatus.textContent = "-";
   }
@@ -1198,6 +1234,39 @@ async function loadAdminMetrics() {
   } catch (err) {
     adminMetricsSummary.textContent = "Metrics unavailable";
     adminMetricsRecent.textContent = String(err);
+  }
+}
+
+async function runAdminConversationSearch() {
+  if (!uiAdmin) return;
+  adminSearchStatus.textContent = "Searching...";
+  adminSearchResult.textContent = "-";
+  try {
+    const targetUser = (adminSearchUserId.value || "").trim();
+    const targetSession = (adminSearchSessionId.value || "").trim();
+    const targetText = (adminSearchQuery.value || "").trim();
+    const limit = Math.max(1, Math.min(500, Number(adminSearchLimit.value || 80)));
+    if (!targetUser && !targetSession && !targetText) {
+      adminSearchStatus.textContent = "Enter at least one filter";
+      return;
+    }
+    const qs = new URLSearchParams();
+    qs.set("user_id", userId);
+    qs.set("limit", String(limit));
+    if (targetUser) qs.set("search_user_id", targetUser);
+    if (targetSession) qs.set("session_id", targetSession);
+    if (targetText) qs.set("q", targetText);
+    const r = await fetch(`/api/admin/conversations/search?${qs.toString()}`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error || `search failed: ${r.status}`);
+    adminSearchStatus.textContent = `Found ${data.count} messages in ${data.session_count} sessions`;
+    adminSearchResult.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    adminSearchStatus.textContent = "Search failed";
+    adminSearchResult.textContent = String(err);
   }
 }
 
@@ -1873,6 +1942,19 @@ btnProtocol.onclick = async () => {
 
 btnMetricsRefresh.onclick = async () => {
   await loadAdminMetrics();
+};
+
+adminSearchRun.onclick = async () => {
+  await runAdminConversationSearch();
+};
+
+adminSearchClear.onclick = () => {
+  adminSearchUserId.value = "";
+  adminSearchSessionId.value = "";
+  adminSearchQuery.value = "";
+  adminSearchLimit.value = "80";
+  adminSearchStatus.textContent = "-";
+  adminSearchResult.textContent = "-";
 };
 
 async function sendRecording() {

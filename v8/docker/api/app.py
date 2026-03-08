@@ -28,7 +28,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v8.4.0"
+APP_VERSION = "v8.6.0"
 
 app = FastAPI(title=f"Voice Agent API {APP_VERSION}")
 
@@ -959,7 +959,7 @@ def seed_ui_translations() -> None:
     docs = [
         {"_id": "app.title", "de": "Voice Agent", "en": "Voice Agent", "fr": "Agent Vocal", "it": "Agente Vocale", "es": "Agente de Voz"},
         {"_id": "menu.admin_token", "de": "Admin-Token speichern", "en": "Save Admin Token", "fr": "Enregistrer Token Admin", "it": "Salva Token Admin", "es": "Guardar Token Admin"},
-        {"_id": "menu.user_docs", "de": "Benutzer Dokumentation", "en": "User Documentation", "fr": "Documentation Utilisateur", "it": "Documentazione Utente", "es": "Documentacion de Usuario"},
+        {"_id": "menu.user_docs", "de": "Help", "en": "Help", "fr": "Aide", "it": "Aiuto", "es": "Ayuda"},
         {"_id": "menu.demo_guide", "de": "Demo-Leitfaden", "en": "Demo Guide", "fr": "Guide Demo", "it": "Guida Demo", "es": "Guia Demo"},
         {"_id": "menu.admin_docs", "de": "Admin-Dokumentation", "en": "Admin Docs", "fr": "Docs Admin", "it": "Documenti Admin", "es": "Docs Admin"},
         {"_id": "menu.admin_settings", "de": "Admin-Einstellungen", "en": "Admin Settings", "fr": "Parametres Admin", "it": "Impostazioni Admin", "es": "Configuracion Admin"},
@@ -2132,6 +2132,96 @@ def admin_metrics_summary(
         "ok_count": ok_count,
         "error_count": err_count,
         "avg_ms": avg,
+    }
+
+
+@app.get("/admin/conversations/search")
+def admin_conversation_search(
+    user_id: str = Query(..., min_length=8),
+    search_user_id: str | None = Query(None),
+    session_id: str | None = Query(None),
+    q: str | None = Query(None),
+    limit: int = Query(80, ge=1, le=500),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    ensure_ready()
+    assert_admin_access(user_id, admin_token)
+
+    query: dict[str, Any] = {}
+    if search_user_id and search_user_id.strip():
+        query["user_id"] = search_user_id.strip()
+    if session_id and session_id.strip():
+        query["session_id"] = session_id.strip()
+    if q and q.strip():
+        query["content"] = {"$regex": re.escape(q.strip()), "$options": "i"}
+    if not query:
+        raise HTTPException(status_code=400, detail="Provide at least one filter: search_user_id, session_id, q")
+
+    docs = list(
+        messages_col.find(
+            query,
+            {
+                "_id": 0,
+                "session_id": 1,
+                "user_id": 1,
+                "role": 1,
+                "content": 1,
+                "t": 1,
+                "created_at": 1,
+                "backend": 1,
+                "model": 1,
+                "lang": 1,
+            },
+        )
+        .sort("t", DESCENDING)
+        .limit(limit)
+    )
+
+    items: list[dict[str, Any]] = []
+    sessions_map: dict[str, dict[str, Any]] = {}
+    for d in docs:
+        sid = str(d.get("session_id") or "")
+        ts = dt_iso(d.get("t") or d.get("created_at"))
+        content = str(d.get("content") or "")
+        items.append(
+            {
+                "session_id": sid,
+                "user_id": d.get("user_id"),
+                "role": d.get("role"),
+                "content": content,
+                "ts": ts,
+                "backend": d.get("backend"),
+                "model": d.get("model"),
+                "lang": d.get("lang"),
+            }
+        )
+        if sid not in sessions_map:
+            sessions_map[sid] = {
+                "session_id": sid,
+                "user_id": d.get("user_id"),
+                "last_ts": ts,
+                "hits": 0,
+                "preview": first_words(content, 18),
+            }
+        sessions_map[sid]["hits"] += 1
+
+    sessions = sorted(
+        sessions_map.values(),
+        key=lambda s: str(s.get("last_ts") or ""),
+        reverse=True,
+    )
+
+    return {
+        "count": len(items),
+        "session_count": len(sessions),
+        "filters": {
+            "search_user_id": search_user_id or "",
+            "session_id": session_id or "",
+            "q": q or "",
+            "limit": limit,
+        },
+        "sessions": sessions,
+        "items": items,
     }
 
 
