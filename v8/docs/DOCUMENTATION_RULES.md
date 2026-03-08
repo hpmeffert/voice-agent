@@ -19,6 +19,34 @@ Zusatz:
 - Silence Threshold Default ist 1300 ms.
 - Doku-Checks duerfen keine leeren Seiten erlauben.
 - Release Notes muessen den Verlauf ab `V7.0.0` bis zur aktuellen Version enthalten.
+- Help/Hilfe bedeutet immer: **Benutzer Handbuch**.
+- Im Benutzer Handbuch muss jede Funktion mit **Funktionsweise + Beispiel** beschrieben werden.
+- Release Notes Inhalte duerfen nicht im Benutzer Handbuch stehen.
+
+## Benutzer Handbuch Pflichtformat (permanent)
+- Pro Funktion:
+  - Zweck / was macht die Funktion?
+  - Bedienung (Schritte)
+  - Beispiel (konkreter Ablauf)
+  - Wenn neu: Verweis auf Release (z. B. `eingefuehrt in V8.7.0`)
+
+## Admin Handbuch Pflichtformat (permanent)
+- Pro Admin-Funktion:
+  - Wofuer ist sie gut?
+  - Welche Parameter werden erwartet?
+  - Wie testet man die Funktion?
+  - Wenn neu: Verweis auf Release (z. B. `eingefuehrt in V8.7.0`)
+
+## Release Notes Pflichtformat (permanent)
+- Jede neue Funktion beschreibt:
+  - Was ist neu?
+  - Wofuer ist es gut? (Admin/Agent/Kunde)
+  - Welcher Vorteil entsteht im Betrieb oder in der Demo?
+
+## Agent UI Hilfe (permanent)
+- Agent-Client enthaelt ein eigenes Help.
+- Dort wird **nur** das Benutzer Handbuch geladen.
+- Keine Demo/Admin/Release-Seiten im Agent-Help.
 
 ## Admin-Doku Pflichtinhalt
 - Wo liegen API/UI/Compose/Docs-Verzeichnisse?

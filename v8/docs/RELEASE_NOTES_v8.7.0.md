@@ -1,21 +1,31 @@
 # V8.7.0 - Valkey channels design + conversation handoff workflow
 
-## Was wurde umgesetzt
+## Neue Funktionalitaet
 - Neues Spezifikationsdokument:
   - `v8/docs/transport_channels.md`
-  - Channel-Naming + Event-Typen fuer customer/agent/system
-- API erweitert:
+  - klares Channel-Naming und Event-Envelope fuer customer/agent/system
+- Neue Handoff-API:
   - `POST /api/handoff/request`
   - `POST /api/handoff/accept`
   - Session-Events: `handoff.request`, `handoff.accept`
-  - Persistenz in `sessions.meta` (requested/accepted + Zeitstempel + Actor)
-  - Responses liefern `handoff_requested` / `handoff_state` Flag
-- Customer UI:
-  - Button `Menschlichen Agenten anfordern`
-  - Handoff-Statusanzeige
-- Agent UI:
-  - Badge `handoff requested` in Inbox
-  - Aktion `Handoff annehmen`
+- Persistenter Handoff-Status in `sessions.meta`:
+  - bleibt nach Refresh und Reconnect erhalten
+- UI-Erweiterungen:
+  - Customer: `Menschlichen Agenten anfordern`
+  - Agent: Badge `handoff requested` + `Handoff annehmen`
+
+## Wofuer ist das gut?
+- Fuer Kunden:
+  - schnelle Uebergabe an einen Menschen bei komplexen Anliegen
+- Fuer Agenten:
+  - offene Uebergaben sofort sichtbar, weniger Suchaufwand
+- Fuer Admin/Betrieb:
+  - klar spezifizierter Event-Transport, besser testbar und nachvollziehbar
+
+## Konkreter Vorteil
+- Kein Medienbruch zwischen Self-Service und Human Support.
+- Session bleibt dieselbe, Kontext bleibt erhalten.
+- Handoff-Zustand ist robust und auditierbar.
 
 ## Verifikation
 ```bash
@@ -26,7 +36,7 @@ make v8-lint
 Manuell:
 1. Kunde fordert Handoff an.
 2. Agent akzeptiert Handoff.
-3. Beide UIs zeigen Status-Update und Zustand bleibt nach Refresh erhalten.
+3. Beide UIs zeigen Status-Update, Refresh behaelt den Zustand.
 
 ## Lizenzhinweis
 - Keine neuen Dependencies eingefuehrt.
