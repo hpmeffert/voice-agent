@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import re
@@ -13,7 +14,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import requests
-from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from faster_whisper import WhisperModel
@@ -25,7 +26,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v8.1.0"
+APP_VERSION = "v8.2.0"
 
 app = FastAPI(title=f"Voice Agent API {APP_VERSION}")
 
@@ -222,6 +223,21 @@ def detect_lang_from_text(text: str) -> str:
     # Default to English for ASCII-like answers if no explicit signal is found.
     candidate = "en"
     return candidate if candidate in SUPPORTED_UI_LANGS else DEFAULT_UI_LANG
+
+
+def normalize_role_for_history(role: str | None) -> str:
+    role_in = (role or "").strip().lower()
+    if role_in in {"user", "customer"}:
+        return "User"
+    if role_in in {"assistant", "agent"}:
+        return "Assistant"
+    if role_in == "system":
+        return "System"
+    return "Unknown"
+
+
+def session_channel_key(session_id: str) -> str:
+    return f"session.{(session_id or '').strip()}"
 
 
 def normalize_user_id(user_id: str | None) -> str:
@@ -1031,6 +1047,7 @@ def append_message(
     backend: str | None,
     model: str | None,
     metrics: dict[str, int] | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> None:
     ensure_ready()
     if len(content) > MAX_TEXT_CHARS:
@@ -1057,7 +1074,32 @@ def append_message(
             "tts_ms": max(0, int(metrics.get("tts_ms", 0))),
             "total_ms": max(0, int(metrics.get("total_ms", 0))),
         }
+    if isinstance(meta, dict) and meta:
+        doc["meta"] = meta
     messages_col.insert_one(doc)
+
+
+def publish_session_event(
+    *,
+    event_type: str,
+    session_id: str,
+    from_actor: str,
+    payload: dict[str, Any],
+) -> None:
+    if event_bus is None:
+        return
+    event = {
+        "type": event_type,
+        "session_id": session_id,
+        "from": from_actor,
+        "payload": payload,
+        "ts": now_utc().isoformat(),
+    }
+    try:
+        event_bus.publish(session_channel_key(session_id), event)
+    except Exception:
+        # Live updates must never break request processing.
+        pass
 
 
 def mark_session_activity(session_id: str, backend: str, model: str | None, lang: str | None) -> None:
@@ -1082,7 +1124,7 @@ def build_prompt_with_history(session_id: str, user_text: str, system_prompt: st
     ensure_ready()
     docs = list(
         messages_col.find(
-            {"session_id": session_id, "role": {"$in": ["user", "assistant"]}},
+            {"session_id": session_id, "role": {"$in": ["user", "assistant", "customer", "agent"]}},
             {"role": 1, "content": 1},
         )
         .sort("created_at", DESCENDING)
@@ -1092,7 +1134,7 @@ def build_prompt_with_history(session_id: str, user_text: str, system_prompt: st
 
     parts = [system_prompt, ""]
     for msg in docs:
-        role = "User" if msg.get("role") == "user" else "Assistant"
+        role = normalize_role_for_history(msg.get("role"))
         parts.append(f"{role}:\n{msg.get('content', '')}\n")
     parts.append(f"User:\n{user_text}\n\nAssistant:")
     return "\n".join(parts)
@@ -1409,6 +1451,19 @@ class TextChatRequest(BaseModel):
     tts_lang: str | None = None
 
 
+class AgentJoinRequest(BaseModel):
+    session_id: str = Field(min_length=8)
+    agent_id: str = Field(min_length=4, max_length=128)
+
+
+class AgentMessageRequest(BaseModel):
+    session_id: str = Field(min_length=8)
+    agent_id: str = Field(min_length=4, max_length=128)
+    text: str = Field(min_length=1, max_length=8000)
+    speak: bool = False
+    tts_lang: str | None = None
+
+
 # ----------------------------
 # Routes
 # ----------------------------
@@ -1502,6 +1557,181 @@ def eventbus_selftest():
         "subscribers": int(subscribers),
         "received": received,
     }
+
+
+@app.get("/agent/sessions")
+def agent_sessions(
+    status: str = Query("active"),
+    limit: int = Query(30, ge=1, le=200),
+):
+    ensure_ready()
+    q: dict[str, Any] = {}
+    status_norm = (status or "active").strip().lower()
+    if status_norm == "active":
+        q["last_activity_at"] = {"$gte": now_utc() - timedelta(hours=8)}
+
+    sessions = list(
+        sessions_col.find(
+            q,
+            {
+                "_id": 1,
+                "user_id": 1,
+                "created_at": 1,
+                "updated_at": 1,
+                "last_activity_at": 1,
+                "meta.backend_last": 1,
+                "meta.model_last": 1,
+                "meta.lang_last": 1,
+            },
+        )
+        .sort("last_activity_at", DESCENDING)
+        .limit(limit)
+    )
+
+    out: list[dict[str, Any]] = []
+    for s in sessions:
+        sid = str(s.get("_id") or "")
+        last_msg = messages_col.find_one(
+            {"session_id": sid},
+            {"role": 1, "content": 1, "t": 1},
+            sort=[("t", DESCENDING)],
+        )
+        preview = ""
+        if last_msg:
+            preview = first_words(str(last_msg.get("content") or ""), 14)
+        out.append(
+            {
+                "session_id": sid,
+                "user_id": s.get("user_id"),
+                "created_at": dt_iso(s.get("created_at")),
+                "updated_at": dt_iso(s.get("updated_at")),
+                "last_activity_at": dt_iso(s.get("last_activity_at")),
+                "backend": (s.get("meta") or {}).get("backend_last"),
+                "model": (s.get("meta") or {}).get("model_last"),
+                "lang": (s.get("meta") or {}).get("lang_last"),
+                "preview": preview,
+            }
+        )
+    return {"status": status_norm, "count": len(out), "sessions": out}
+
+
+@app.post("/agent/join")
+def agent_join(req: AgentJoinRequest):
+    ensure_ready()
+    session = sessions_col.find_one({"_id": req.session_id})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    backend = str((session.get("meta") or {}).get("backend_last") or "ollama")
+    model = (session.get("meta") or {}).get("model_last")
+    lang = (session.get("meta") or {}).get("lang_last")
+
+    append_message(
+        user_id=str(session.get("user_id") or ""),
+        session_id=req.session_id,
+        role="system",
+        content=f"Agent joined: {req.agent_id}",
+        lang=lang,
+        backend=backend,
+        model=model,
+        meta={"agent_id": req.agent_id, "event": "join"},
+    )
+    mark_session_activity(req.session_id, backend=backend, model=model, lang=lang)
+    publish_session_event(
+        event_type="session.joined",
+        session_id=req.session_id,
+        from_actor="system",
+        payload={"agent_id": req.agent_id},
+    )
+    return {"ok": True, "session_id": req.session_id, "agent_id": req.agent_id}
+
+
+@app.post("/agent/message")
+def agent_message(req: AgentMessageRequest):
+    ensure_ready()
+    session = sessions_col.find_one({"_id": req.session_id})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty text")
+    if len(text) > MAX_TEXT_CHARS:
+        raise HTTPException(status_code=400, detail=f"Text too long (>{MAX_TEXT_CHARS} chars)")
+
+    backend = str((session.get("meta") or {}).get("backend_last") or "ollama")
+    model = (session.get("meta") or {}).get("model_last")
+    lang = (session.get("meta") or {}).get("lang_last") or DEFAULT_UI_LANG
+    speak = bool(req.speak)
+    tts_lang = ((req.tts_lang or "").strip().lower() or lang)
+    if tts_lang not in set(SUPPORTED_TTS_LANGS):
+        tts_lang = lang
+
+    append_message(
+        user_id=str(session.get("user_id") or ""),
+        session_id=req.session_id,
+        role="agent",
+        content=text,
+        lang=lang,
+        backend=backend,
+        model=model,
+        meta={"agent_id": req.agent_id, "speak": speak, "tts_lang": tts_lang},
+    )
+    mark_session_activity(req.session_id, backend=backend, model=model, lang=lang)
+    publish_session_event(
+        event_type="message.created",
+        session_id=req.session_id,
+        from_actor="agent",
+        payload={"text": text, "agent_id": req.agent_id, "speak": speak, "tts_lang": tts_lang},
+    )
+    return {
+        "ok": True,
+        "session_id": req.session_id,
+        "agent_id": req.agent_id,
+        "speak": speak,
+        "tts_lang": tts_lang,
+    }
+
+
+@app.websocket("/ws/session/{session_id}")
+async def ws_session_stream(
+    websocket: WebSocket,
+    session_id: str,
+    user_id: str = Query(""),
+    client: str = Query("customer"),
+):
+    await websocket.accept()
+    try:
+        await websocket.send_json(
+            {
+                "type": "session.connected",
+                "session_id": session_id,
+                "from": "system",
+                "payload": {"client": client, "user_id": user_id},
+                "ts": now_utc().isoformat(),
+            }
+        )
+        while True:
+            event = await asyncio.to_thread(event_bus.subscribe_once, session_channel_key(session_id), 1.0) if event_bus else None
+            if event:
+                await websocket.send_json(event)
+            else:
+                await websocket.send_json(
+                    {
+                        "type": "session.keepalive",
+                        "session_id": session_id,
+                        "from": "system",
+                        "payload": {"client": client},
+                        "ts": now_utc().isoformat(),
+                    }
+                )
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 @app.get("/config")
@@ -2030,7 +2260,13 @@ def chat_text(req: TextChatRequest):
         raise HTTPException(status_code=400, detail=f"Text too long (>{MAX_TEXT_CHARS} chars)")
 
     user_lang = get_user_ui_lang(uid)
-    append_message(uid, sid, role="user", content=text, lang=user_lang, backend=backend, model=selected_model)
+    append_message(uid, sid, role="customer", content=text, lang=user_lang, backend=backend, model=selected_model)
+    publish_session_event(
+        event_type="message.created",
+        session_id=sid,
+        from_actor="customer",
+        payload={"text": text, "user_id": uid},
+    )
     prompt = build_prompt_with_history(sid, text, SYSTEM_PROMPT)
     answer = llm_generate(backend=backend, prompt=prompt, model_override=model_override)
 
@@ -2049,7 +2285,7 @@ def chat_text(req: TextChatRequest):
     append_message(
         uid,
         sid,
-        role="assistant",
+        role="agent",
         content=answer,
         lang=detected_lang,
         backend=backend,
@@ -2057,6 +2293,12 @@ def chat_text(req: TextChatRequest):
         metrics=metrics,
     )
     mark_session_activity(sid, backend=backend, model=selected_model, lang=detected_lang)
+    publish_session_event(
+        event_type="message.created",
+        session_id=sid,
+        from_actor="agent",
+        payload={"text": answer, "model": selected_model, "backend": backend},
+    )
     log_telemetry(
         user_id=uid,
         session_id=sid,
@@ -2242,7 +2484,13 @@ async def voice(
             )
 
         prompt = build_prompt_with_history(sid, transcript, SYSTEM_PROMPT)
-        append_message(uid, sid, role="user", content=transcript, lang=lang, backend=backend, model=selected_model)
+        append_message(uid, sid, role="customer", content=transcript, lang=lang, backend=backend, model=selected_model)
+        publish_session_event(
+            event_type="message.created",
+            session_id=sid,
+            from_actor="customer",
+            payload={"text": transcript, "user_id": uid},
+        )
 
         t2 = time.perf_counter()
         metrics["stt_ms"] = max(0, int((t2 - t1) * 1000))
@@ -2295,7 +2543,7 @@ async def voice(
                 append_message(
                     uid,
                     sid,
-                    role="assistant",
+                    role="agent",
                     content=answer,
                     lang=lang,
                     backend=backend,
@@ -2303,6 +2551,12 @@ async def voice(
                     metrics=metrics,
                 )
                 mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
+                publish_session_event(
+                    event_type="message.created",
+                    session_id=sid,
+                    from_actor="agent",
+                    payload={"text": answer, "model": selected_model, "backend": backend},
+                )
                 return error_response(
                     status_code=502,
                     error=f"TTS failed: {str(e)}",
@@ -2315,7 +2569,7 @@ async def voice(
             append_message(
                 uid,
                 sid,
-                role="assistant",
+                role="agent",
                 content=answer,
                 lang=lang,
                 backend=backend,
@@ -2323,6 +2577,12 @@ async def voice(
                 metrics=metrics,
             )
             mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
+            publish_session_event(
+                event_type="message.created",
+                session_id=sid,
+                from_actor="agent",
+                payload={"text": answer, "model": selected_model, "backend": backend},
+            )
 
             fd2, tts_wav_path = tempfile.mkstemp(suffix=".wav")
             os.close(fd2)
@@ -2358,7 +2618,7 @@ async def voice(
         append_message(
             uid,
             sid,
-            role="assistant",
+            role="agent",
             content=answer,
             lang=lang,
             backend=backend,
@@ -2366,6 +2626,12 @@ async def voice(
             metrics=metrics,
         )
         mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
+        publish_session_event(
+            event_type="message.created",
+            session_id=sid,
+            from_actor="agent",
+            payload={"text": answer, "model": selected_model, "backend": backend},
+        )
         log_telemetry(
             user_id=uid,
             session_id=sid,

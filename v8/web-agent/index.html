@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Voice Agent Agent UI V8.2.0</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
+    .wrap { max-width: 1200px; margin: 18px auto; padding: 0 14px; }
+    .grid { display:grid; grid-template-columns: 360px 1fr; gap:12px; }
+    .card { background:#fff; border:1px solid #d9e1ee; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.06); }
+    .hd { padding:12px 14px; border-bottom:1px solid #d9e1ee; display:flex; justify-content:space-between; align-items:center; }
+    .bd { padding:14px; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    input, button, textarea, select { border:1px solid #cfd8e6; border-radius:8px; padding:8px 10px; }
+    button.primary { background:#0f766e; color:#fff; border-color:#0f766e; }
+    .muted { color:#6b7280; font-size:12px; }
+    .sessions { max-height: 70vh; overflow:auto; display:grid; gap:8px; }
+    .session { border:1px solid #dbe3f0; border-radius:10px; padding:10px; cursor:pointer; background:#fff; }
+    .session.active { border-color:#0f766e; background:#eefbf8; }
+    .session .small { font-size:12px; color:#64748b; }
+    .chat { max-height: 55vh; overflow:auto; display:grid; gap:8px; margin-top:10px; }
+    .msg { padding:10px; border-radius:10px; border:1px solid #dbe3f0; background:#fff; white-space:pre-wrap; }
+    .msg.customer { background:#eef2ff; }
+    .msg.agent { background:#eefbf8; }
+    .msg.system { background:#fff7ed; }
+    textarea { width:100%; min-height:84px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+      <div>
+        <h2 style="margin:0;">Voice Agent Agent UI V8.2.0</h2>
+        <div class="muted">Inbox + Live Chat (Call-Center Handoff MVP)</div>
+      </div>
+      <div class="row">
+        <label>Agent ID <input id="agentId" size="24" /></label>
+        <button id="refreshBtn">Refresh Inbox</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="hd"><b>Inbox (aktive Sessions)</b><span id="inboxCount" class="muted">0</span></div>
+        <div class="bd">
+          <div id="sessions" class="sessions"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd">
+          <div>
+            <b id="chatTitle">Kein Chat ausgewaehlt</b>
+            <div id="chatMeta" class="muted">Waehle links eine Session.</div>
+          </div>
+          <div id="wsState" class="muted">WS: offline</div>
+        </div>
+        <div class="bd">
+          <div class="chat" id="chat"></div>
+
+          <div style="margin-top:10px;">
+            <textarea id="msgInput" placeholder="Agent-Antwort schreiben..."></textarea>
+            <div class="row" style="margin-top:8px;">
+              <label><input id="speak" type="checkbox" /> Speak to customer</label>
+              <label>TTS <select id="ttsLang"><option value="de">de</option><option value="en">en</option><option value="fr">fr</option><option value="it">it</option><option value="es">es</option></select></label>
+              <button id="sendBtn" class="primary">Send Agent Message</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const sessionsEl = document.getElementById('sessions');
+const inboxCountEl = document.getElementById('inboxCount');
+const chatEl = document.getElementById('chat');
+const chatTitleEl = document.getElementById('chatTitle');
+const chatMetaEl = document.getElementById('chatMeta');
+const wsStateEl = document.getElementById('wsState');
+const agentIdEl = document.getElementById('agentId');
+const msgInputEl = document.getElementById('msgInput');
+const sendBtn = document.getElementById('sendBtn');
+const refreshBtn = document.getElementById('refreshBtn');
+const speakEl = document.getElementById('speak');
+const ttsLangEl = document.getElementById('ttsLang');
+
+const AGENT_KEY = 'v8_agent_id';
+agentIdEl.value = localStorage.getItem(AGENT_KEY) || 'agent-01';
+agentIdEl.onchange = () => localStorage.setItem(AGENT_KEY, agentIdEl.value || 'agent-01');
+
+let activeSessionId = '';
+let activeSessionUserId = '';
+let ws = null;
+
+function addMsg(role, text, ts) {
+  const d = document.createElement('div');
+  d.className = `msg ${role || 'system'}`;
+  const stamp = ts ? `[${new Date(ts).toLocaleTimeString()}] ` : '';
+  d.textContent = `${stamp}${(role || 'system').toUpperCase()}: ${text || ''}`;
+  chatEl.appendChild(d);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function clearChat() { chatEl.innerHTML = ''; }
+
+function wsUrl(path){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${location.host}${path}`;
+}
+
+async function loadSessions(){
+  const r = await fetch('/api/agent/sessions?status=active&limit=60');
+  const data = await r.json();
+  const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+  inboxCountEl.textContent = String(sessions.length);
+  sessionsEl.innerHTML = '';
+  for (const s of sessions) {
+    const card = document.createElement('div');
+    card.className = `session ${s.session_id === activeSessionId ? 'active' : ''}`;
+    card.innerHTML = `<b>${s.session_id}</b><div class="small">User: ${s.user_id || '-'}</div><div class="small">${s.preview || ''}</div>`;
+    card.onclick = () => joinSession(s);
+    sessionsEl.appendChild(card);
+  }
+}
+
+async function joinSession(s){
+  activeSessionId = s.session_id;
+  activeSessionUserId = s.user_id || '';
+  chatTitleEl.textContent = `Session ${s.session_id}`;
+  chatMetaEl.textContent = `User ${s.user_id || '-'} | Last: ${s.last_activity_at || '-'}`;
+  clearChat();
+
+  await fetch('/api/agent/join', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ session_id: s.session_id, agent_id: agentIdEl.value || 'agent-01' })
+  });
+
+  connectWs();
+  await loadRecentMessages();
+  await loadSessions();
+}
+
+async function loadRecentMessages(){
+  if (!activeSessionId || !activeSessionUserId) return;
+  const q = new URLSearchParams({ user_id: activeSessionUserId, limit: '40' });
+  const r = await fetch(`/api/session/${encodeURIComponent(activeSessionId)}?${q.toString()}`);
+  if (!r.ok) return;
+  const data = await r.json();
+  for (const m of (data.messages || [])) {
+    addMsg(m.role || 'system', m.content || '', m.t || m.created_at);
+  }
+}
+
+function connectWs(){
+  if (!activeSessionId) return;
+  if (ws) { try { ws.close(); } catch(_) {} }
+  ws = new WebSocket(wsUrl(`/api/ws/session/${encodeURIComponent(activeSessionId)}?client=agent&user_id=${encodeURIComponent(agentIdEl.value || 'agent-01')}`));
+  ws.onopen = () => { wsStateEl.textContent = 'WS: online'; };
+  ws.onclose = () => { wsStateEl.textContent = 'WS: offline'; };
+  ws.onerror = () => { wsStateEl.textContent = 'WS: error'; };
+  ws.onmessage = (ev) => {
+    try {
+      const e = JSON.parse(ev.data);
+      if (e.type === 'session.keepalive' || e.type === 'session.connected') return;
+      const role = e.from || 'system';
+      const text = (e.payload && e.payload.text) || JSON.stringify(e.payload || {});
+      addMsg(role, text, e.ts);
+    } catch(_) {}
+  };
+}
+
+sendBtn.onclick = async () => {
+  if (!activeSessionId) return;
+  const text = (msgInputEl.value || '').trim();
+  if (!text) return;
+  const payload = {
+    session_id: activeSessionId,
+    agent_id: agentIdEl.value || 'agent-01',
+    text,
+    speak: !!speakEl.checked,
+    tts_lang: ttsLangEl.value || 'de',
+  };
+  const r = await fetch('/api/agent/message', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+  });
+  const data = await r.json();
+  if (!r.ok) {
+    addMsg('system', `Error: ${JSON.stringify(data)}`, new Date().toISOString());
+    return;
+  }
+  msgInputEl.value = '';
+};
+
+refreshBtn.onclick = () => loadSessions();
+loadSessions();
+</script>
+</body>
+</html>

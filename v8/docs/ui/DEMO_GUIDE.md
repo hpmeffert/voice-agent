@@ -1,28 +1,25 @@
-# Demo Guide (V8.1.0)
+# Demo Guide (V8.2.0)
 
-Ziel: In 5-7 Minuten zeigen, warum Voice Agent im Alltag und im Support wirklich hilft.
+## Story: Call-Center Handoff in Echtzeit
+Stell dir vor, ein Kunde ist im Gespraech und braucht ploetzlich einen Spezialisten.
 
-## Demo Story 1: "Der hektische Vormittag"
-Stell dir vor, ein Kunde ruft an, waehrend bereits drei Tickets offen sind.
-Du oeffnest die Customer UI (`8083`) und startest direkt:
-1. Begruessung per Spracheingabe (`Record` -> `Stop` -> `Send`).
-2. Kunde nennt Problem in eigenen Worten.
-3. Agent antwortet strukturiert und ruhig.
-4. Optional Textnachricht nachschieben ueber `/api/chat/text`-Flow in der UI.
+### Flow 1: Kunde startet
+1. Customer UI (`8083`) oeffnen.
+2. Kunde sendet eine Sprach- oder Textnachricht.
+3. Session-ID wird erstellt.
 
-Spannungsbogen:
-- Anfang: Stress, unklare Lage.
-- Mitte: klare, schnelle Interaktion.
-- Ende: sauberer, nachvollziehbarer Gespraechsverlauf.
+### Flow 2: Agent uebernimmt
+1. Agent UI (`8084`) oeffnen.
+2. Inbox zeigt aktive Sessions.
+3. Agent klickt Session an (Join).
+4. Agent schreibt Antwort; Kunde sieht sie live ohne Reload.
 
-## Demo Story 2: "Admin rettet die Live-Demo"
-"Stell dir vor, kurz vor einem Kundentermin wirkt alles instabil."
-1. Admin UI (`8082`) oeffnen.
-2. `api/health`, `api/models`, `eventbus/health` pruefen.
-3. Kurzer Testcall in Customer UI.
-4. Ergebnis live zeigen: System ist messbar gesund und einsatzbereit.
+### Flow 3: Stimme als Wow-Effekt
+1. Im Agent UI `Speak to customer` aktivieren.
+2. Agent sendet Nachricht.
+3. Customer UI spielt Antwort als Audio aus.
 
-## Demo-Hinweise
-- Starte mit einem klaren Use Case, nicht mit Technikdetails.
-- Erklaere jede sichtbare Einstellung in einem Satz.
-- Zeige am Ende immer den Mehrwert: schneller, reproduzierbar, teamfaehig.
+## Spannungsbogen fuer Praesentation
+- Anfang: Kunde ohne Kontext in der Leitung.
+- Mitte: Agent steigt live ein und uebernimmt sauber.
+- Ende: Teamfaehiger, nachvollziehbarer Prozess mit Echtzeit-Feedback.
