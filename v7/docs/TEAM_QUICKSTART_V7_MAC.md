@@ -13,6 +13,20 @@ V7 is isolated under `v7/` and can run in parallel to V6.
 docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml up -d --build
 ```
 
+## Makefile automation (Topic 2)
+You can run the same flow with one command:
+
+```bash
+make v7-test
+```
+
+Useful release helpers:
+
+```bash
+make v7-pr VERSION=7.3.0
+make v7-post-merge VERSION=7.3.0
+```
+
 ## Health checks
 ```bash
 curl -s http://localhost:8081/api/health
