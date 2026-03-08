@@ -1,51 +1,34 @@
-# Benutzer Dokumentation (V8.1.0)
+# Benutzer Dokumentation (V8.2.0)
 
-Diese Seite erklaert die Bedienung so, dass auch neue Teammitglieder sofort loslegen koennen.
+Diese Seite erklaert die Bedienung fuer Benutzer, Agenten und Demo-Szenarien.
 
-## Welche Oberflaeche nutze ich?
+## Oberflaechen
 - Admin UI: `http://localhost:8082`
-  - Voller Funktionsumfang fuer Betrieb, Tests und Auswertung.
 - Customer UI: `http://localhost:8083`
-  - Schlanke Ansicht fuer Gespraech, ohne Admin-Menues.
+- Agent UI (Inbox + Chat): `http://localhost:8084`
 
-## Hauptfunktionen im Bildschirm
-- `Record`: startet die Mikrofonaufnahme.
-- `Stop`: beendet die laufende Aufnahme.
-- `Send`: sendet Audio/Text an die API.
-- `Clear Session`: startet einen neuen Dialogkontext.
-- `Export`/`Protocol`: laedt Gespraechsverlauf herunter (falls aktiviert).
+## Customer UI
+- `Record`, `Stop`, `Send Audio`: Sprachdialog.
+- `Send Text`: Textdialog mit dem Assistenten.
+- Agent-Antworten aus dem Agent UI kommen live ueber den Session-Kanal.
+
+## Agent UI
+- Inbox zeigt aktive Sessions.
+- `Join` passiert beim Anklicken einer Session.
+- `Send Agent Message` sendet Agent-Text in den laufenden Kundendialog.
+- `Speak to customer`: Kunde bekommt Agent-Text zusaetzlich als Sprache.
 
 ## Einstellungen und Wirkung
-- `Backend` / `Model`
-  - Waehlt das Sprachmodell fuer Antworten.
-  - Kleinere Modelle antworten schneller, groessere oft detailreicher.
-- `Auto-stop`
-  - Beendet Aufnahme automatisch nach Stille.
-- `Auto-send`
-  - Sendet nach Auto-Stop direkt, ohne zusaetzlichen Klick.
-- `Silence threshold (ms)`
-  - Standard: `1300`.
-  - Hoeher = laenger warten bis Ende erkannt wird.
-  - Niedriger = schnelleres Stoppen, aber hoeheres Risiko fuer zu fruehes Ende.
-- `TTS language`
-  - Sprache der Sprachausgabe.
+- `Silence threshold (ms)` Standard: `1300`.
+- Hoeherer Wert: spaeteres Stoppen.
+- Niedrigerer Wert: schnelleres Stoppen.
 
-## Statusanzeige verstehen
-- `idle`: bereit.
-- `recording`: Mikrofon aktiv.
-- `sending`: Anfrage wird uebertragen.
-- `thinking`: Modell berechnet Antwort.
-- `speaking`: Audio wird abgespielt.
-- `listening`: Listen-Mode aktiv und wartet auf Sprache.
+## Help-Menue (verbindliche Struktur)
+1. `Admin Token speichern`
+2. `Benutzer Dokumentation`
+3. `Demo Guide`
+4. `Admin Docs`
+5. `Release Notes`
 
-## Help-Menue
-- `Admin Token speichern`: speichert Admin-Token lokal im Browser.
-- `Benutzer Dokumentation`: diese Seite.
-- `Demo Guide`: gefuehrter Vorfuehrablauf mit Story.
-- `Admin Docs`: Betriebs- und Testanleitung fuer Admins.
-- `Release Notes`: Uebersicht aller Releases ab V7.0.0.
-
-## Typische Probleme
-- Keine Antwort: zuerst `http://localhost:8082/api/health` pruefen.
-- Kein Audio: Browser-Mikrofonrechte kontrollieren.
-- Falsche Sprache: `TTS language` und UI-Sprache pruefen.
+## Statuswerte
+- `idle`, `recording`, `sending`, `thinking`, `speaking`, `listening`.

@@ -1,10 +1,9 @@
-# TEAM QUICKSTART - V8.1.0 (macOS)
+# TEAM QUICKSTART - V8.2.0 (macOS)
 
-V8 ist komplett isoliert unter `v8/`.
-
-## Dienste
-- Web Admin: `http://localhost:8082`
-- Web Customer: `http://localhost:8083`
+## Ports
+- Admin UI: `http://localhost:8082`
+- Customer UI: `http://localhost:8083`
+- Agent UI: `http://localhost:8084`
 - API: `http://localhost:8002`
 - Piper: `http://localhost:5004`
 - Mongo: `localhost:27019`
@@ -16,36 +15,20 @@ docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml up -d --b
 docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml down --remove-orphans
 ```
 
-## Health Checks
+## Health / Smoke
 ```bash
 curl -s http://localhost:8082/api/health
 curl -s http://localhost:8082/api/models
 curl -s http://localhost:8082/api/eventbus/health
-curl -s http://localhost:8083/
-```
-
-## Smoke Checks
-```bash
+curl -s http://localhost:8083/ >/dev/null
+curl -s http://localhost:8084/ >/dev/null
+curl -s "http://localhost:8082/api/agent/sessions?status=active&limit=20"
 python3 v8/scripts/test_event_bus.py
-curl -s -X POST http://localhost:8082/api/chat/text \
-  -H 'Content-Type: application/json' \
-  -d '{"text":"Hallo aus Customer UI","user_id":"test-user-810","session_id":""}'
-```
-
-## Doku-Qualitaetscheck (Release-Pflicht)
-```bash
 python3 v8/scripts/check_docs.py
 ```
 
-## Help-Menue Sollzustand
-- `Admin Token speichern`
-- `Benutzer Dokumentation`
-- `Demo Guide`
-- `Admin Docs`
-- `Release Notes`
-
-## Referenzdokumente
-- User: `v8/docs/ui/HELP_USER.md`
-- Demo: `v8/docs/ui/DEMO_GUIDE.md`
-- Admin: `v8/docs/admin/HELP_ADMIN.md`
-- Release Historie: `v8/docs/RELEASE.md`
+## Call-Center Handoff Test
+1. Customer UI auf `8083` starten und Nachricht senden.
+2. Agent UI auf `8084` oeffnen, Session in Inbox anklicken.
+3. Agent-Nachricht senden; sie erscheint live beim Kunden.
+4. Optional `Speak to customer` aktivieren.

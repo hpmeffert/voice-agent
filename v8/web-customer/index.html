@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Customer V8.1.0</title>
+  <title>Voice Agent Customer V8.2.0</title>
   <style>
     body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
     .wrap { max-width: 900px; margin: 20px auto; padding: 0 14px; }
@@ -27,7 +27,7 @@
     <div class="card">
       <div class="hd">
         <div>
-          <b>Voice Agent Customer V8.1.0</b>
+          <b>Voice Agent Customer V8.2.0</b>
           <div class="status" id="status">idle</div>
         </div>
         <div class="status" id="ids">-</div>
@@ -80,19 +80,58 @@ const btnNewSession = document.getElementById("btnNewSession");
 let mediaRecorder = null;
 let chunks = [];
 let lastBlob = null;
+let ws = null;
 
 function setStatus(s){ statusEl.textContent = s; }
 function makeId(){ return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()); }
 function refreshIds(){ idsEl.textContent = `User: ${userIdEl.value} | Session: ${sessionIdEl.value || "-"}`; }
 function persistIds(){ localStorage.setItem(USER_KEY, userIdEl.value); localStorage.setItem(SESSION_KEY, sessionIdEl.value); refreshIds(); }
 function addMsg(cls, title, text){ const d = document.createElement('div'); d.className = `msg ${cls}`; d.textContent = `${title}:\n${text}`; chatEl.appendChild(d); chatEl.scrollTop = chatEl.scrollHeight; }
+function wsUrl(path){ const proto = location.protocol === 'https:' ? 'wss' : 'ws'; return `${proto}://${location.host}${path}`; }
+function closeWs(){ if (ws) { try { ws.close(); } catch(_) {} ws = null; } }
+async function playAgentTts(text, lang){
+  try {
+    const r = await fetch('/tts/tts', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, lang: lang || 'de' }),
+    });
+    if (!r.ok) return;
+    const b = await r.blob();
+    audioEl.src = URL.createObjectURL(b);
+    await audioEl.play();
+  } catch(_) {}
+}
+function connectSessionWs(){
+  closeWs();
+  const sid = (sessionIdEl.value || '').trim();
+  if (!sid) return;
+  const uid = (userIdEl.value || '').trim();
+  ws = new WebSocket(wsUrl(`/api/ws/session/${encodeURIComponent(sid)}?client=customer&user_id=${encodeURIComponent(uid)}`));
+  ws.onopen = () => setStatus('listening');
+  ws.onclose = () => setStatus('idle');
+  ws.onerror = () => setStatus('ws-error');
+  ws.onmessage = async (ev) => {
+    try {
+      const e = JSON.parse(ev.data);
+      if (e.type === 'session.keepalive' || e.type === 'session.connected') return;
+      if (e.from === 'agent' && e.payload && e.payload.text && (e.payload.agent_id || e.payload.speak)) {
+        addMsg('bot','Agent', String(e.payload.text));
+        if (e.payload.speak) await playAgentTts(String(e.payload.text), String(e.payload.tts_lang || ttsLangEl.value || 'de'));
+      }
+      if (e.from === 'system' && e.type === 'session.joined') {
+        addMsg('bot','System', `Agent ${e.payload?.agent_id || ''} joined`);
+      }
+    } catch(_) {}
+  };
+}
 
 userIdEl.value = localStorage.getItem(USER_KEY) || makeId();
 sessionIdEl.value = localStorage.getItem(SESSION_KEY) || "";
 refreshIds();
 
 userIdEl.addEventListener('change', persistIds);
-sessionIdEl.addEventListener('change', persistIds);
+sessionIdEl.addEventListener('change', () => { persistIds(); connectSessionWs(); });
 btnNewSession.onclick = () => { sessionIdEl.value = ""; persistIds(); addMsg('me','System','Neue Session gestartet'); };
 
 btnRecord.onclick = async () => {
@@ -134,6 +173,7 @@ btnSendAudio.onclick = async () => {
   const answer = r.headers.get('X-Answer') || '';
   const sid = r.headers.get('X-Session-Id') || sessionIdEl.value;
   sessionIdEl.value = sid; persistIds();
+  connectSessionWs();
   if (transcript) addMsg('me','Kunde',decodeURIComponent(transcript));
   if (answer) addMsg('bot','Agent',decodeURIComponent(answer));
   audioEl.src = URL.createObjectURL(blob);
@@ -160,10 +200,13 @@ btnSendText.onclick = async () => {
   if (!r.ok) { addMsg('bot','Fehler', JSON.stringify(data)); setStatus('error'); return; }
   sessionIdEl.value = data.session_id || sessionIdEl.value;
   persistIds();
+  connectSessionWs();
   addMsg('bot','Agent', data.answer || '');
   textInputEl.value = '';
   setStatus('idle');
 };
+
+connectSessionWs();
 </script>
 </body>
 </html>

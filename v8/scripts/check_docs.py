@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 required = [
     ROOT / "v8/web/index.html",
+    ROOT / "v8/web-agent/index.html",
+    ROOT / "v8/web-customer/index.html",
     ROOT / "v8/docs/ui/HELP_USER.md",
     ROOT / "v8/docs/ui/DEMO_GUIDE.md",
     ROOT / "v8/docs/admin/HELP_ADMIN.md",
@@ -38,7 +40,7 @@ for pattern, msg in checks:
         sys.exit(1)
 
 release = (ROOT / "v8/docs/RELEASE.md").read_text(encoding="utf-8", errors="ignore")
-for tag in ["V7.0.0", "V8.0.0", "V8.1.0"]:
+for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0"]:
     if tag not in release:
         print(f"[V8-DOC-CHECK][FAIL] release history missing {tag}")
         sys.exit(1)
