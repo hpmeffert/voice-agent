@@ -1,4 +1,4 @@
-# Admin Dokumentation (V7.8.0)
+# Admin Dokumentation (V7.9.0)
 
 Diese Seite ist fuer Admins geschrieben.
 Ziel: schnell starten, sauber testen, alle Einstellungen verstehen.
@@ -117,6 +117,19 @@ curl -s "http://localhost:8081/api/admin/metrics/summary?user_id=<USER_ID>&windo
 Erwartung:
 - `recent` liefert letzte Metrics-Eintraege.
 - `summary` liefert Aggregation fuer `24h` oder `7d`.
+
+### Schritt J: Admin Settings API + UI
+```bash
+curl -s "http://localhost:8081/api/admin/settings?user_id=<USER_ID>" \
+  -H "X-Admin-Token: <TOKEN>"
+curl -s -X POST "http://localhost:8081/api/admin/settings" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Token: <TOKEN>" \
+  -d '{"user_id":"<USER_ID>","retention_days":45,"listen_silence_ms_default":1400}'
+```
+Erwartung:
+- `GET` und `POST` liefern JSON und sind Admin-geschuetzt.
+- Werte bleiben nach Reload/Restart erhalten (`admin_settings` Collection).
 
 ## 5) Alle einstellbaren Parameter (Admin)
 

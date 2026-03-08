@@ -23,7 +23,7 @@ from starlette.background import BackgroundTask
 
 from protocol_renderer import render_protocol
 
-app = FastAPI(title="Voice Agent API V7.7.0")
+app = FastAPI(title="Voice Agent API V7.9.0")
 
 # ----------------------------
 # Config / ENV
@@ -78,7 +78,7 @@ MAX_EXPORT_MESSAGES = int(os.getenv("MAX_EXPORT_MESSAGES", "200"))
 MAX_EXPORT_BYTES = int(os.getenv("MAX_EXPORT_BYTES", str(1_500_000)))
 ADMIN_DEV_MODE = os.getenv("ADMIN_DEV_MODE", "0").strip() == "1"
 ADMIN_UI_TOKEN = os.getenv("ADMIN_UI_TOKEN", "").strip()
-UI_VERSION = os.getenv("UI_VERSION", "v7.8.0").strip() or "v7.8.0"
+UI_VERSION = os.getenv("UI_VERSION", "v7.9.0").strip() or "v7.9.0"
 UI_BUILD = os.getenv("UI_BUILD", "").strip()
 LISTEN_MODE_DEFAULT = os.getenv("LISTEN_MODE_DEFAULT", "0").strip().lower() in {"1", "true", "yes", "on"}
 LISTEN_SILENCE_MS_DEFAULT = int(os.getenv("LISTEN_SILENCE_MS_DEFAULT", "1300"))
@@ -117,6 +117,7 @@ sessions_col: Collection | None = None
 messages_col: Collection | None = None
 telemetry_col: Collection | None = None
 metrics_logs_col: Collection | None = None
+admin_settings_col: Collection | None = None
 
 
 # ----------------------------
@@ -154,7 +155,14 @@ def session_expiry() -> datetime:
 
 
 def telemetry_expiry() -> datetime:
-    return now_utc() + timedelta(days=METRICS_RETENTION_DAYS)
+    retention_days = METRICS_RETENTION_DAYS
+    try:
+        settings = get_admin_settings()
+        retention_days = int(settings.get("retention_days", METRICS_RETENTION_DAYS))
+    except Exception:
+        pass
+    retention_days = max(1, min(365, retention_days))
+    return now_utc() + timedelta(days=retention_days)
 
 
 def ensure_ready() -> None:
@@ -167,6 +175,7 @@ def ensure_ready() -> None:
         or sessions_col is None
         or messages_col is None
         or telemetry_col is None
+        or admin_settings_col is None
     ):
         raise RuntimeError("MongoDB not initialized")
 
@@ -286,6 +295,16 @@ def template_candidates(template_path: str) -> list[Path]:
     ]
 
 
+def get_active_crm_export_template_md() -> str:
+    settings = get_admin_settings()
+    templates = settings.get("templates") if isinstance(settings, dict) else {}
+    if isinstance(templates, dict):
+        candidate = str(templates.get("crm_export_template_md") or "").strip()
+        if candidate:
+            return candidate
+    return CRM_EXPORT_TEMPLATE_MD
+
+
 def load_markdown_template() -> str:
     default_template = (
         "# Transcript Export\n\n"
@@ -300,7 +319,7 @@ def load_markdown_template() -> str:
         "---\n\n"
         "{{messages}}\n"
     )
-    for candidate in template_candidates(CRM_EXPORT_TEMPLATE_MD):
+    for candidate in template_candidates(get_active_crm_export_template_md()):
         try:
             if candidate.is_file():
                 return candidate.read_text(encoding="utf-8")
@@ -432,7 +451,7 @@ def build_export_payload(
     }
 
     json_payload = {
-        "version": "v7.8.0",
+        "version": "v7.9.0",
         "session": {
             "session_id": session.get("_id"),
             "user_id": session.get("user_id"),
@@ -455,11 +474,133 @@ def build_export_payload(
 
 
 def default_listen_settings() -> dict[str, Any]:
+    settings = get_admin_settings()
+    listen_defaults = settings.get("listen_defaults") if isinstance(settings, dict) else {}
+    if not isinstance(listen_defaults, dict):
+        listen_defaults = {}
     return {
         "listen_mode_default": bool(LISTEN_MODE_DEFAULT),
-        "silence_ms": int(LISTEN_SILENCE_MS_DEFAULT),
-        "threshold": float(LISTEN_THRESHOLD_DEFAULT),
+        "silence_ms": int(listen_defaults.get("silence_ms", LISTEN_SILENCE_MS_DEFAULT)),
+        "threshold": float(listen_defaults.get("threshold", LISTEN_THRESHOLD_DEFAULT)),
     }
+
+
+def default_admin_settings() -> dict[str, Any]:
+    return {
+        "retention_days": int(METRICS_RETENTION_DAYS),
+        "listen_defaults": {
+            "silence_ms": int(LISTEN_SILENCE_MS_DEFAULT),
+            "threshold": float(LISTEN_THRESHOLD_DEFAULT),
+        },
+        "templates": {
+            "crm_export_template_md": str(CRM_EXPORT_TEMPLATE_MD),
+        },
+        "feature_toggles": {
+            "crm_export_enabled": bool(CRM_EXPORT_ENABLED),
+            "crm_protocol_enabled": bool(CRM_PROTOCOL_ENABLED),
+            "debug_panel_default": True,
+        },
+    }
+
+
+def normalized_admin_settings(raw: Any) -> dict[str, Any]:
+    defaults = default_admin_settings()
+    src = raw if isinstance(raw, dict) else {}
+
+    try:
+        retention_days = int(src.get("retention_days", defaults["retention_days"]))
+    except Exception:
+        retention_days = defaults["retention_days"]
+    retention_days = max(1, min(365, retention_days))
+
+    listen_src = src.get("listen_defaults") if isinstance(src.get("listen_defaults"), dict) else {}
+    try:
+        silence_ms = int(listen_src.get("silence_ms", defaults["listen_defaults"]["silence_ms"]))
+    except Exception:
+        silence_ms = defaults["listen_defaults"]["silence_ms"]
+    silence_ms = max(300, min(5000, silence_ms))
+    try:
+        threshold = float(listen_src.get("threshold", defaults["listen_defaults"]["threshold"]))
+    except Exception:
+        threshold = defaults["listen_defaults"]["threshold"]
+    threshold = max(0.001, min(0.2, threshold))
+
+    templates_src = src.get("templates") if isinstance(src.get("templates"), dict) else {}
+    template_md = str(templates_src.get("crm_export_template_md", defaults["templates"]["crm_export_template_md"]) or defaults["templates"]["crm_export_template_md"]).strip()
+
+    toggles_src = src.get("feature_toggles") if isinstance(src.get("feature_toggles"), dict) else {}
+    return {
+        "retention_days": retention_days,
+        "listen_defaults": {
+            "silence_ms": silence_ms,
+            "threshold": threshold,
+        },
+        "templates": {
+            "crm_export_template_md": template_md,
+        },
+        "feature_toggles": {
+            "crm_export_enabled": bool(toggles_src.get("crm_export_enabled", defaults["feature_toggles"]["crm_export_enabled"])),
+            "crm_protocol_enabled": bool(toggles_src.get("crm_protocol_enabled", defaults["feature_toggles"]["crm_protocol_enabled"])),
+            "debug_panel_default": bool(toggles_src.get("debug_panel_default", defaults["feature_toggles"]["debug_panel_default"])),
+        },
+    }
+
+
+def get_admin_settings() -> dict[str, Any]:
+    if admin_settings_col is None:
+        return normalized_admin_settings(None)
+    doc = admin_settings_col.find_one({"_id": "global"}, {"settings": 1})
+    if not doc:
+        settings = normalized_admin_settings(None)
+        ts = now_utc()
+        admin_settings_col.update_one(
+            {"_id": "global"},
+            {
+                "$set": {"updated_at": ts, "settings": settings},
+                "$setOnInsert": {"_id": "global", "created_at": ts},
+            },
+            upsert=True,
+        )
+        return settings
+    settings = normalized_admin_settings(doc.get("settings"))
+    if doc.get("settings") != settings:
+        admin_settings_col.update_one(
+            {"_id": "global"},
+            {"$set": {"updated_at": now_utc(), "settings": settings}},
+        )
+    return settings
+
+
+def set_admin_settings(patch: dict[str, Any]) -> dict[str, Any]:
+    current = get_admin_settings()
+    next_settings = json.loads(json.dumps(current))
+    if "retention_days" in patch:
+        next_settings["retention_days"] = patch["retention_days"]
+    if "listen_defaults" in patch and isinstance(patch["listen_defaults"], dict):
+        next_settings["listen_defaults"].update(patch["listen_defaults"])
+    if "templates" in patch and isinstance(patch["templates"], dict):
+        next_settings["templates"].update(patch["templates"])
+    if "feature_toggles" in patch and isinstance(patch["feature_toggles"], dict):
+        next_settings["feature_toggles"].update(patch["feature_toggles"])
+    next_settings = normalized_admin_settings(next_settings)
+    ts = now_utc()
+    admin_settings_col.update_one(
+        {"_id": "global"},
+        {
+            "$set": {"updated_at": ts, "settings": next_settings},
+            "$setOnInsert": {"_id": "global", "created_at": ts},
+        },
+        upsert=True,
+    )
+    return next_settings
+
+
+def get_admin_toggle(name: str, default: bool) -> bool:
+    settings = get_admin_settings()
+    toggles = settings.get("feature_toggles") if isinstance(settings, dict) else {}
+    if isinstance(toggles, dict):
+        return bool(toggles.get(name, default))
+    return default
 
 
 def normalized_listen_settings(raw: Any) -> dict[str, Any]:
@@ -498,7 +639,7 @@ def normalized_listen_settings(raw: Any) -> dict[str, Any]:
 # ----------------------------
 @app.on_event("startup")
 def on_startup() -> None:
-    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col
+    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col, admin_settings_col
 
     whisper = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type=WHISPER_COMPUTE)
 
@@ -511,6 +652,7 @@ def on_startup() -> None:
     messages_col = mongo_db["messages"]
     metrics_logs_col = mongo_db["metrics_logs"]
     telemetry_col = metrics_logs_col
+    admin_settings_col = mongo_db["admin_settings"]
 
     users_col.create_index([("updated_at", DESCENDING)])
 
@@ -527,6 +669,8 @@ def on_startup() -> None:
     metrics_logs_col.create_index([("created_at", DESCENDING)])
     metrics_logs_col.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
     metrics_logs_col.create_index([("status", ASCENDING), ("created_at", DESCENDING)])
+    admin_settings_col.create_index([("updated_at", DESCENDING)])
+    get_admin_settings()
 
 
 @app.on_event("shutdown")
@@ -693,9 +837,13 @@ def set_user_settings(user_id: str, patch: dict[str, Any]) -> dict[str, Any]:
 
 
 def is_crm_export_enabled_for_user(user_id: str) -> bool:
-    if not CRM_EXPORT_ENABLED:
+    if not get_admin_toggle("crm_export_enabled", CRM_EXPORT_ENABLED):
         return False
     return get_user_crm_export_enabled(user_id)
+
+
+def is_crm_protocol_enabled() -> bool:
+    return get_admin_toggle("crm_protocol_enabled", CRM_PROTOCOL_ENABLED)
 
 
 def is_admin_user(user_id: str | None) -> bool:
@@ -1107,6 +1255,17 @@ class UserSettingsUpdateRequest(BaseModel):
     threshold: float | None = Field(default=None, ge=0.001, le=0.2)
 
 
+class AdminSettingsUpdateRequest(BaseModel):
+    user_id: str = Field(min_length=8)
+    retention_days: int | None = Field(default=None, ge=1, le=365)
+    listen_silence_ms_default: int | None = Field(default=None, ge=300, le=5000)
+    listen_threshold_default: float | None = Field(default=None, ge=0.001, le=0.2)
+    crm_export_template_md: str | None = None
+    crm_export_enabled: bool | None = None
+    crm_protocol_enabled: bool | None = None
+    debug_panel_default: bool | None = None
+
+
 # ----------------------------
 # Routes
 # ----------------------------
@@ -1143,20 +1302,28 @@ def models():
 
 @app.get("/config")
 def config(user_id: str | None = Query(None)):
+    admin_settings = get_admin_settings()
+    listen_defaults = admin_settings.get("listen_defaults") if isinstance(admin_settings, dict) else {}
+    if not isinstance(listen_defaults, dict):
+        listen_defaults = {}
+    feature_toggles = admin_settings.get("feature_toggles") if isinstance(admin_settings, dict) else {}
+    if not isinstance(feature_toggles, dict):
+        feature_toggles = {}
     return {
-        "crm_export_enabled": CRM_EXPORT_ENABLED,
+        "crm_export_enabled": bool(feature_toggles.get("crm_export_enabled", CRM_EXPORT_ENABLED)),
         "crm_export_default_enabled": CRM_EXPORT_DEFAULT_ENABLED,
         "crm_export_mode": CRM_EXPORT_MODE,
         "crm_export_format": CRM_EXPORT_FORMAT,
         "crm_export_include_timestamps": CRM_EXPORT_INCLUDE_TIMESTAMPS,
-        "crm_protocol_enabled": CRM_PROTOCOL_ENABLED,
+        "crm_protocol_enabled": bool(feature_toggles.get("crm_protocol_enabled", CRM_PROTOCOL_ENABLED)),
         "crm_protocol_format": CRM_PROTOCOL_FORMAT,
         "protocol_template_path": PROTOCOL_TEMPLATE_PATH,
-        "telemetry_retention_days": METRICS_RETENTION_DAYS,
-        "metrics_retention_days": METRICS_RETENTION_DAYS,
+        "telemetry_retention_days": int(admin_settings.get("retention_days", METRICS_RETENTION_DAYS)),
+        "metrics_retention_days": int(admin_settings.get("retention_days", METRICS_RETENTION_DAYS)),
         "listen_mode_default": LISTEN_MODE_DEFAULT,
-        "listen_silence_ms_default": LISTEN_SILENCE_MS_DEFAULT,
-        "listen_threshold_default": LISTEN_THRESHOLD_DEFAULT,
+        "listen_silence_ms_default": int(listen_defaults.get("silence_ms", LISTEN_SILENCE_MS_DEFAULT)),
+        "listen_threshold_default": float(listen_defaults.get("threshold", LISTEN_THRESHOLD_DEFAULT)),
+        "admin_settings": admin_settings,
         "ui": {
             "admin": is_admin_user(user_id),
             "version": UI_VERSION,
@@ -1187,6 +1354,51 @@ def admin_help_doc(admin_token: str | None = Header(default=None, alias="X-Admin
     except OSError:
         raise HTTPException(status_code=500, detail="Failed to read admin help doc")
     return PlainTextResponse(content, media_type="text/markdown; charset=utf-8")
+
+
+@app.get("/admin/settings")
+def admin_settings(
+    user_id: str = Query(..., min_length=8),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    assert_admin_access(user_id, admin_token)
+    return {
+        "ok": True,
+        "settings": get_admin_settings(),
+    }
+
+
+@app.post("/admin/settings")
+def admin_settings_update(
+    req: AdminSettingsUpdateRequest,
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    assert_admin_access(req.user_id, admin_token)
+    patch: dict[str, Any] = {}
+    if req.retention_days is not None:
+        patch["retention_days"] = int(req.retention_days)
+    if req.listen_silence_ms_default is not None or req.listen_threshold_default is not None:
+        listen_patch: dict[str, Any] = {}
+        if req.listen_silence_ms_default is not None:
+            listen_patch["silence_ms"] = int(req.listen_silence_ms_default)
+        if req.listen_threshold_default is not None:
+            listen_patch["threshold"] = float(req.listen_threshold_default)
+        patch["listen_defaults"] = listen_patch
+    if req.crm_export_template_md is not None:
+        patch["templates"] = {"crm_export_template_md": req.crm_export_template_md}
+    feature_patch: dict[str, Any] = {}
+    if req.crm_export_enabled is not None:
+        feature_patch["crm_export_enabled"] = bool(req.crm_export_enabled)
+    if req.crm_protocol_enabled is not None:
+        feature_patch["crm_protocol_enabled"] = bool(req.crm_protocol_enabled)
+    if req.debug_panel_default is not None:
+        feature_patch["debug_panel_default"] = bool(req.debug_panel_default)
+    if feature_patch:
+        patch["feature_toggles"] = feature_patch
+    if not patch:
+        raise HTTPException(status_code=400, detail="No admin settings fields provided")
+    updated = set_admin_settings(patch)
+    return {"ok": True, "settings": updated}
 
 
 @app.get("/user/prefs")
@@ -1238,7 +1450,7 @@ def templates():
             available.append(p.name)
     available.sort()
     return {
-        "active_md_template": Path(CRM_EXPORT_TEMPLATE_MD).name,
+        "active_md_template": Path(get_active_crm_export_template_md()).name,
         "available_md_templates": available,
         "crm_export_format": CRM_EXPORT_FORMAT,
     }
@@ -1464,6 +1676,8 @@ def export_protocol(
     user_id: str = Query(..., min_length=8),
     session_id: str = Query(..., min_length=8),
 ):
+    if not is_crm_protocol_enabled():
+        raise HTTPException(status_code=409, detail="CRM protocol export is disabled")
     session = assert_session_owned_by_user(session_id, user_id)
     docs = list(
         messages_col.find({"session_id": session_id, "user_id": user_id})
@@ -1504,7 +1718,7 @@ def download_protocol(
     format: str = Query("", pattern="^(|md|txt|json)$"),
     limit: int = Query(200, ge=1, le=500),
 ):
-    if not CRM_PROTOCOL_ENABLED:
+    if not is_crm_protocol_enabled():
         raise HTTPException(status_code=409, detail="CRM protocol export is disabled")
 
     session = assert_session_owned_by_user(session_id, user_id)
@@ -1526,7 +1740,7 @@ def download_protocol(
             "format": format or CRM_PROTOCOL_FORMAT,
             "template": CRM_PROTOCOL_TEMPLATE,
             "tz": tz,
-            "export_version": "v7.8.0",
+            "export_version": "v7.9.0",
         },
     )
 
