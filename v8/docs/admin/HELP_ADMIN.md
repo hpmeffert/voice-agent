@@ -1,4 +1,4 @@
-# Admin Docs (V8.2.0)
+# Admin Docs (V8.3.0)
 
 ## Verzeichnisse
 - API: `v8/docker/api/`
@@ -6,66 +6,41 @@
 - Customer UI: `v8/web-customer/`
 - Agent UI: `v8/web-agent/`
 - Compose: `v8/docker/compose.dev.yml`
-- Skripte: `v8/scripts/`
+- Docs: `v8/docs/`
 
-## Start / Stop
+## Start
 ```bash
 docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml up -d --build
-docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml down --remove-orphans
 ```
 
-## Komponentencheck (Reihenfolge)
-1. API
+## Session-Suche API (neu)
+- `GET /api/agent/sessions?status=active&limit=120`
+- Optional Filter:
+  - `user_id=<id>`
+  - `session_id=<id>`
+  - `q=<text>` (Teilstring auf Session/User)
+
+Beispiele:
 ```bash
-curl -s http://localhost:8082/api/health
-```
-2. Modelle
-```bash
-curl -s http://localhost:8082/api/models
-```
-3. Piper
-```bash
-curl -s http://localhost:8082/tts/health
-```
-4. Mongo
-```bash
-docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml exec mongo mongosh --eval 'db.runCommand({ ping: 1 })'
-```
-5. Valkey/EventBus
-```bash
-curl -s http://localhost:8082/api/eventbus/health
-python3 v8/scripts/test_event_bus.py
-```
-6. UIs
-```bash
-curl -s http://localhost:8082/ >/dev/null
-curl -s http://localhost:8083/ >/dev/null
-curl -s http://localhost:8084/ >/dev/null
-```
-7. Agent API
-```bash
-curl -s "http://localhost:8082/api/agent/sessions?status=active&limit=20"
+curl -s "http://localhost:8082/api/agent/sessions?status=active&user_id=test-user-820"
+curl -s "http://localhost:8082/api/agent/sessions?status=active&session_id=<SESSION_ID>"
+curl -s "http://localhost:8082/api/agent/sessions?status=active&q=820"
 ```
 
-## Admin-Parameter (Auszug)
-- `ADMIN_UI_TOKEN`, `ADMIN_DEV_MODE`
-- `UI_VERSION`, `UI_BUILD`
-- `DEFAULT_UI_LANG`, `SUPPORTED_UI_LANGS`
-- `SUPPORTED_TTS_LANGS`
-- `LISTEN_SILENCE_MS_DEFAULT=1300`, `LISTEN_THRESHOLD_DEFAULT`
-- `VALKEY_URL`, `VALKEY_CHANNEL_PREFIX`
-- `MONGO_URL`, `MONGO_DB`
-- `MAX_AUDIO_BYTES`, `MAX_TEXT_CHARS`
+## Komponentencheck
+1. `curl -s http://localhost:8082/api/health`
+2. `curl -s http://localhost:8082/api/models`
+3. `curl -s http://localhost:8082/api/eventbus/health`
+4. `curl -s http://localhost:8083/ >/dev/null`
+5. `curl -s http://localhost:8084/ >/dev/null`
 
-## Uebersetzungen erweitern
-- Datei: `v8/docker/api/app.py`
-- Tabelle/Seed: `seed_ui_translations()`
-- Schritte:
-1. Sprache in `SUPPORTED_UI_LANGS` aufnehmen.
-2. Translation-Keys in `seed_ui_translations()` ergaenzen.
-3. Sprachwahl in `v8/web/index.html` ergaenzen.
-4. Stack neu starten und `/api/ui/i18n` testen.
+## Uebersetzungen
+- Quelle: `v8/docker/api/app.py`, Funktion `seed_ui_translations()`.
+- Neue Sprache:
+1. `SUPPORTED_UI_LANGS` erweitern.
+2. Keys in `seed_ui_translations()` ergaenzen.
+3. Sprachwahl in `v8/web/index.html` aktualisieren.
 
-## Release-Routine (Pflicht)
-- User/Demo/Admin/Release-Doku bei jedem Release aktualisieren.
-- `python3 v8/scripts/check_docs.py` muss erfolgreich sein.
+## Pflicht pro Release
+- Help/User/Demo/Admin/Release Docs aktualisieren.
+- `python3 v8/scripts/check_docs.py` muss gruen sein.

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Agent UI V8.2.0</title>
+  <title>Voice Agent Agent UI V8.3.0</title>
   <style>
     body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
     .wrap { max-width: 1200px; margin: 18px auto; padding: 0 14px; }
@@ -31,11 +31,21 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:10px;">
       <div>
-        <h2 style="margin:0;">Voice Agent Agent UI V8.2.0</h2>
+        <h2 style="margin:0;">Voice Agent Agent UI V8.3.0</h2>
         <div class="muted">Inbox + Live Chat (Call-Center Handoff MVP)</div>
       </div>
       <div class="row">
         <label>Agent ID <input id="agentId" size="24" /></label>
+        <label>Suche <input id="searchInput" size="26" placeholder="session_id oder user_id" /></label>
+        <label>Typ
+          <select id="searchType">
+            <option value="all">Alle</option>
+            <option value="session">Session ID</option>
+            <option value="user">User ID</option>
+          </select>
+        </label>
+        <button id="searchBtn">Suchen</button>
+        <button id="clearSearchBtn">Reset</button>
         <button id="refreshBtn">Refresh Inbox</button>
       </div>
     </div>
@@ -83,6 +93,10 @@ const agentIdEl = document.getElementById('agentId');
 const msgInputEl = document.getElementById('msgInput');
 const sendBtn = document.getElementById('sendBtn');
 const refreshBtn = document.getElementById('refreshBtn');
+const searchInputEl = document.getElementById('searchInput');
+const searchTypeEl = document.getElementById('searchType');
+const searchBtn = document.getElementById('searchBtn');
+const clearSearchBtn = document.getElementById('clearSearchBtn');
 const speakEl = document.getElementById('speak');
 const ttsLangEl = document.getElementById('ttsLang');
 
@@ -93,6 +107,8 @@ agentIdEl.onchange = () => localStorage.setItem(AGENT_KEY, agentIdEl.value || 'a
 let activeSessionId = '';
 let activeSessionUserId = '';
 let ws = null;
+let currentSearch = '';
+let currentSearchType = 'all';
 
 function addMsg(role, text, ts) {
   const d = document.createElement('div');
@@ -111,7 +127,13 @@ function wsUrl(path){
 }
 
 async function loadSessions(){
-  const r = await fetch('/api/agent/sessions?status=active&limit=60');
+  const params = new URLSearchParams({ status: 'active', limit: '120' });
+  if (currentSearch) {
+    if (currentSearchType === 'session') params.set('session_id', currentSearch);
+    else if (currentSearchType === 'user') params.set('user_id', currentSearch);
+    else params.set('q', currentSearch);
+  }
+  const r = await fetch(`/api/agent/sessions?${params.toString()}`);
   const data = await r.json();
   const sessions = Array.isArray(data.sessions) ? data.sessions : [];
   inboxCountEl.textContent = String(sessions.length);
@@ -194,6 +216,21 @@ sendBtn.onclick = async () => {
 };
 
 refreshBtn.onclick = () => loadSessions();
+searchBtn.onclick = () => {
+  currentSearch = (searchInputEl.value || '').trim();
+  currentSearchType = searchTypeEl.value || 'all';
+  loadSessions();
+};
+clearSearchBtn.onclick = () => {
+  searchInputEl.value = '';
+  searchTypeEl.value = 'all';
+  currentSearch = '';
+  currentSearchType = 'all';
+  loadSessions();
+};
+searchInputEl.onkeydown = (ev) => {
+  if (ev.key === 'Enter') searchBtn.click();
+};
 loadSessions();
 </script>
 </body>
