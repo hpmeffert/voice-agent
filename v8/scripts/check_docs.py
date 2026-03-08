@@ -47,6 +47,31 @@ if positions != sorted(positions):
     print("[V8-DOC-CHECK][FAIL] help menu order is invalid")
     sys.exit(1)
 
+# Verify that help menu links really point to existing docs files.
+menu_doc_map = {
+    "menuUserDocs": ROOT / "v8/docs/ui/HELP_USER.md",
+    "menuDemoGuide": ROOT / "v8/docs/ui/DEMO_GUIDE.md",
+    "adminGuideItem": ROOT / "v8/docs/admin/HELP_ADMIN.md",
+    "menuReleaseNotes": ROOT / "v8/docs/RELEASE.md",
+}
+for element_id, expected_path in menu_doc_map.items():
+    pattern = rf'id="{element_id}"[^>]*data-help-doc="([^"]+)"'
+    match = re.search(pattern, html)
+    if match is None:
+        print(f"[V8-DOC-CHECK][FAIL] missing data-help-doc on menu item: {element_id}")
+        sys.exit(1)
+    data_help_doc = match.group(1).strip()
+    expected_web_path = "/" + str(expected_path.relative_to(ROOT / "v8")).replace("\\", "/")
+    if data_help_doc != expected_web_path:
+        print(
+            f"[V8-DOC-CHECK][FAIL] wrong help doc path for {element_id}: "
+            f"got '{data_help_doc}', expected '{expected_web_path}'"
+        )
+        sys.exit(1)
+    if (not expected_path.exists()) or expected_path.stat().st_size < 120:
+        print(f"[V8-DOC-CHECK][FAIL] menu-linked doc missing/empty: {expected_path}")
+        sys.exit(1)
+
 for label in ["Admin Token speichern", "Benutzer Handbuch", "Demo Guide", "Admin Docs", "Release Notes"]:
     if label not in html:
         print(f"[V8-DOC-CHECK][FAIL] missing menu label: {label}")
