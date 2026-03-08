@@ -171,6 +171,10 @@ v8-smoke:
 	@curl -sS http://localhost:8082/api/eventbus/health
 	@curl -sS http://localhost:8083/ >/dev/null
 	@curl -sS http://localhost:8084/ >/dev/null
+	@curl -fsS http://localhost:8082/docs/ui/HELP_USER.md >/dev/null
+	@curl -fsS http://localhost:8082/docs/ui/DEMO_GUIDE.md >/dev/null
+	@curl -fsS http://localhost:8082/docs/admin/HELP_ADMIN.md >/dev/null
+	@curl -fsS http://localhost:8082/docs/RELEASE.md >/dev/null
 	@curl -sS -X POST http://localhost:8082/api/chat/text -H 'Content-Type: application/json' -d '{"text":"smoke","user_id":"test-user-810","session_id":""}' >/dev/null
 	@curl -sS http://localhost:8082/api/agent/sessions?status=active >/dev/null
 	@python3 v8/scripts/test_event_bus.py

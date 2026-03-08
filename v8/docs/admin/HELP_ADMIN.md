@@ -1,115 +1,169 @@
-# Admin Handbuch - V8.7.0
+# Admin Handbuch - V8.8.0
 
-## 1) Verzeichnisse
+## Ziel dieses Handbuchs
+Dieses Dokument erklaert alle admin-relevanten Funktionen in V8: wofuer sie gut sind, welche Parameter gesetzt werden koennen, wie du die Installation startest und wie du die Betriebsfaehigkeit Schritt fuer Schritt testest.
+
+## 1) Projektstruktur und wichtige Verzeichnisse
 - API: `v8/docker/api/`
 - Admin UI: `v8/web/`
 - Customer UI: `v8/web-customer/`
 - Agent UI: `v8/web-agent/`
 - Compose: `v8/docker/compose.dev.yml`
+- Templates: `v8/templates/`
+- Doku User: `v8/docs/ui/HELP_USER.md`
+- Doku Demo: `v8/docs/ui/DEMO_GUIDE.md`
+- Doku Admin: `v8/docs/admin/HELP_ADMIN.md`
+- Security Checklist: `v8/docs/SECURITY_BASELINE_MAC.md`
 - Channel-Spec: `v8/docs/transport_channels.md`
 
-## 2) Betrieb: Start/Stop
+## 2) Installation und Start als Admin
 ```bash
 docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml up -d --build
 docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml ps
+```
+
+Stop/Clean:
+```bash
 docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml down --remove-orphans
 ```
 
-## 3) Admin-Funktionen mit Zweck, Parametern, Test und Release
-
-### Funktion: EventBus Health
-- Wofuer gut: prueft, ob Valkey/EventBus fuer Live-Events erreichbar ist.
-- Endpoint/Parameter: `GET /api/eventbus/health` (keine Query-Parameter).
-- Test:
+## 3) Komponenten-Checks in korrekter Reihenfolge
+1. API Health
+```bash
+curl -s http://localhost:8082/api/health
+```
+2. Modellverfuegbarkeit (Whisper/Ollama sichtbar)
+```bash
+curl -s http://localhost:8082/api/models
+```
+3. EventBus/Valkey
 ```bash
 curl -s http://localhost:8082/api/eventbus/health
 ```
-- Release-Verweis: EventBus-Basis seit `V8.0.0`.
+4. Piper TTS
+```bash
+curl -s -X POST http://localhost:5004/tts -H 'Content-Type: application/json' -d '{"text":"Systemtest","lang":"de"}' >/dev/null
+```
+5. Mongo
+```bash
+docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml exec mongo mongosh --eval 'db.runCommand({ ping: 1 })'
+```
+6. Valkey
+```bash
+docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml exec valkey valkey-cli ping
+```
 
-### Funktion: Agent Session-Suche
-- Wofuer gut: aktive Sessions filtern fuer schnelle Uebernahme.
-- Endpoint/Parameter: `GET /api/agent/sessions`
+## 4) Admin-Funktionen (Wofuer gut, Parameter, Test, Release-Verweis)
+
+### Funktion: Session-Liste fuer Agenten
+- Wofuer gut: aktive Sessions fuer Support-Team filtern.
+- Endpoint: `GET /api/agent/sessions`
+- Parameter:
   - `status` (`active`)
-  - `limit` (1..200)
+  - `limit` (`1..200`)
   - optional `user_id`
   - optional `session_id`
-  - optional `q`
+  - optional `q` (Freitext)
 - Test:
 ```bash
 curl -s "http://localhost:8082/api/agent/sessions?status=active&limit=50"
 ```
-- Release-Verweis: eingefuehrt in `V8.2.0`, Suche erweitert in `V8.3.0`.
+- Release-Verweis: V8.2.0 (Basis), V8.3.0 (Suche erweitert).
 
 ### Funktion: Admin-Konversationssuche
-- Wofuer gut: historische Inhalte fuer Support/QA/CRM finden.
-- Endpoint/Parameter: `GET /api/admin/conversations/search`
-  - `user_id` (admin identity)
+- Wofuer gut: Konversationen nach Kunde, Session oder Inhalt finden.
+- Endpoint: `GET /api/admin/conversations/search`
+- Parameter:
+  - `user_id` (Admin-Identitaet)
   - optional `search_user_id`
   - optional `session_id`
-  - optional `q`
-  - `limit` (1..500)
-  - Header: `X-Admin-Token` (falls gesetzt)
+  - optional `q` (Wort/Textabschnitt)
+  - `limit` (`1..500`)
+  - optional Header `X-Admin-Token`
 - Test:
 ```bash
 curl -s "http://localhost:8082/api/admin/conversations/search?user_id=<ADMIN>&q=stichwort&limit=50" -H "X-Admin-Token: <TOKEN>"
 ```
-- Release-Verweis: eingefuehrt in `V8.5.0`.
+- Release-Verweis: V8.5.0.
 
-### Funktion: Handoff anfordern (Customer -> Agent)
-- Wofuer gut: gezielte Uebergabe bei komplexen Anliegen.
-- Endpoint/Parameter: `POST /api/handoff/request`
-  - `session_id` (string)
-  - `user_id` (string)
-  - optional `reason` (string)
+### Funktion: Handoff Request/Accept
+- Wofuer gut: Uebergabe von Self-Service an menschlichen Agenten.
+- Endpoints:
+  - `POST /api/handoff/request`
+  - `POST /api/handoff/accept`
+- Parameter:
+  - Request: `session_id`, `user_id`, optional `reason`
+  - Accept: `session_id`, `agent_id`
 - Test:
 ```bash
 curl -s -X POST http://localhost:8082/api/handoff/request \
   -H 'Content-Type: application/json' \
   -d '{"session_id":"<SID>","user_id":"<UID>","reason":"customer_request"}'
-```
-- Release-Verweis: eingefuehrt in `V8.7.0`.
 
-### Funktion: Handoff annehmen (Agent)
-- Wofuer gut: Agent bestaetigt Uebergabe und uebernimmt live.
-- Endpoint/Parameter: `POST /api/handoff/accept`
-  - `session_id` (string)
-  - `agent_id` (string)
-- Test:
-```bash
 curl -s -X POST http://localhost:8082/api/handoff/accept \
   -H 'Content-Type: application/json' \
   -d '{"session_id":"<SID>","agent_id":"agent-01"}'
 ```
-- Release-Verweis: eingefuehrt in `V8.7.0`.
+- Release-Verweis: V8.7.0.
 
-### Funktion: Session-Details mit Handoff-Status
-- Wofuer gut: Persistenz pruefen (auch nach Refresh).
-- Endpoint/Parameter: `GET /api/session/{session_id}`
-  - `user_id`
-  - `limit`
+### Funktion: Security Baseline (neu)
+- Wofuer gut: Schutz vor oversized Requests, Spam-Bursts und unsicheren Browser Defaults.
+- Relevante Parameter:
+  - `MAX_AUDIO_BYTES`
+  - `MAX_REQUEST_BYTES`
+  - `MAX_TEXT_CHARS`
+  - `RATE_LIMIT_WINDOW_SEC`
+  - `RATE_LIMIT_MAX_REQUESTS`
 - Test:
 ```bash
-curl -s "http://localhost:8082/api/session/<SID>?user_id=<UID>&limit=20"
+# Header
+curl -I http://localhost:8082/
+
+# Rate limit (429 erwartet)
+for i in $(seq 1 35); do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8082/api/models; done
 ```
-- Erwartung: Feld `handoff` inkl. `state` und Zeitstempel.
-- Release-Verweis: Handoff-Felder ab `V8.7.0`.
+- Release-Verweis: V8.8.0.
 
-## 4) Komponenten-Checks (Reihenfolge)
-1. API: `curl -s http://localhost:8082/api/health`
-2. Whisper/Ollama: `curl -s http://localhost:8082/api/models`
-3. EventBus/Valkey: `curl -s http://localhost:8082/api/eventbus/health`
-4. Piper: `curl -s -X POST http://localhost:5004/tts -H 'Content-Type: application/json' -d '{"text":"Systemtest","lang":"de"}' >/dev/null`
-5. Mongo: `docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml exec mongo mongosh --eval 'db.runCommand({ ping: 1 })'`
-6. Valkey: `docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml exec valkey valkey-cli ping`
+## 5) Alle admin-einstellbaren Parameter (Compose/API)
+- Plattform/Betrieb:
+  - `UI_VERSION`, `UI_BUILD`
+  - `ADMIN_DEV_MODE`, `ADMIN_UI_TOKEN`
+- Modelle:
+  - `WHISPER_MODEL`, `WHISPER_COMPUTE`
+  - `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_NUM_PREDICT`, `OLLAMA_TEMPERATURE`, `OLLAMA_NUM_CTX`
+  - `OPENAI_API_KEY`, `OPENAI_MODEL`
+- Limits/Sicherheit:
+  - `MAX_AUDIO_BYTES`, `MAX_REQUEST_BYTES`, `MAX_TEXT_CHARS`
+  - `RATE_LIMIT_WINDOW_SEC`, `RATE_LIMIT_MAX_REQUESTS`
+- Storage/Retention:
+  - `MONGO_URL`, `MESSAGE_RETENTION_DAYS`, `SESSION_RETENTION_DAYS`, `METRICS_RETENTION_DAYS`
+- Export/Protocol:
+  - `CRM_EXPORT_ENABLED`, `CRM_EXPORT_DEFAULT_ENABLED`, `CRM_EXPORT_MODE`, `CRM_EXPORT_WEBHOOK_URL`
+  - `CRM_EXPORT_FORMAT`, `CRM_EXPORT_TEMPLATE_MD`, `CRM_EXPORT_INCLUDE_TIMESTAMPS`, `CRM_EXPORT_TIMEZONE`
+  - `MAX_EXPORT_MESSAGES`, `MAX_EXPORT_BYTES`
+  - `CRM_PROTOCOL_ENABLED`, `CRM_PROTOCOL_TEMPLATE`, `CRM_PROTOCOL_FORMAT`, `CRM_PROTOCOL_TIMEZONE`, `PROTOCOL_TEMPLATE_PATH`
+- EventBus/Realtime:
+  - `VALKEY_URL`, `VALKEY_CHANNEL_PREFIX`
+- UI/Sprachen:
+  - `DEFAULT_UI_LANG`, `SUPPORTED_UI_LANGS`, `SUPPORTED_TTS_LANGS`
+  - `LISTEN_MODE_DEFAULT`, `LISTEN_SILENCE_MS_DEFAULT`, `LISTEN_THRESHOLD_DEFAULT`
 
-## 5) Relevante Admin-Parameter
-- `VALKEY_URL`, `VALKEY_CHANNEL_PREFIX`
-- `ADMIN_UI_TOKEN`, `ADMIN_DEV_MODE`
-- `WHISPER_MODEL`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`
-- `LISTEN_SILENCE_MS_DEFAULT` (Default `1300`)
-- `UI_VERSION`, `UI_BUILD`
+## 6) Uebersetzungstabelle und neue Sprachen
+- Uebersetzungen werden in Mongo Collection `ui_translations` gespeichert.
+- Seed-Quelle in Code: `v8/docker/api/app.py` in `seed_ui_translations()`.
+- Vorgehen fuer neue Sprache:
+  1. Sprachcode in `SUPPORTED_UI_LANGS` aufnehmen (Compose/API env).
+  2. In `seed_ui_translations()` pro Key die neue Sprachspalte hinterlegen.
+  3. API neu starten (`docker compose ... up -d --build api`).
+  4. In UI `Sprache` testen und Menue/Labels pruefen.
 
-## 6) Pflicht je Release
+## 7) Pflichtchecks vor jedem Release
 ```bash
 python3 v8/scripts/check_docs.py
+make v8-lint
+make v8-test
 ```
+
+Zusatz:
+- User-Handbuch darf keine Release-Notes enthalten.
+- Menuepunkt muss `Benutzer Handbuch` heissen.

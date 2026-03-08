@@ -9,7 +9,7 @@ Pflicht bei JEDEM V8-Release:
 
 ## Help-Menue Vertrag
 1. Admin Token speichern
-2. Help
+2. Benutzer Handbuch
 3. Demo Guide
 4. Admin Docs
 5. Release Notes
@@ -20,6 +20,7 @@ Zusatz:
 - Doku-Checks duerfen keine leeren Seiten erlauben.
 - Release Notes muessen den Verlauf ab `V7.0.0` bis zur aktuellen Version enthalten.
 - Help/Hilfe bedeutet immer: **Benutzer Handbuch**.
+- Ab `V8.8.0` muss im Admin-Menue der sichtbare Text **Benutzer Handbuch** sein (nicht `Help`).
 - Im Benutzer Handbuch muss jede Funktion mit **Funktionsweise + Beispiel** beschrieben werden.
 - Release Notes Inhalte duerfen nicht im Benutzer Handbuch stehen.
 
@@ -42,6 +43,7 @@ Zusatz:
   - Was ist neu?
   - Wofuer ist es gut? (Admin/Agent/Kunde)
   - Welcher Vorteil entsteht im Betrieb oder in der Demo?
+  - Welche relevanten Parameter/Flags/Endpoints gehoeren dazu?
 
 ## Agent UI Hilfe (permanent)
 - Agent-Client enthaelt ein eigenes Help.
