@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent V8.0.0</title>
+  <title>Voice Agent V8.1.0</title>
   <style>
     :root {
       --bg:#f4f7fb;
@@ -296,7 +296,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V8.0.0</h1>
+        <h1>Voice Agent V8.1.0</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
@@ -319,7 +319,7 @@
           <div id="menuVersion" class="menuHeader">Version: -</div>
           <input id="adminTokenInput" type="password" placeholder="Admin token (optional)" />
           <button id="adminTokenSave" class="menuItem" data-i18n="menu.admin_token">Admin Token speichern</button>
-          <button id="menuUserDocs" class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Help" data-i18n="menu.user_docs">Help</button>
+          <button id="menuUserDocs" class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Benutzer Dokumentation" data-i18n="menu.user_docs">Benutzer Dokumentation</button>
           <button id="menuDemoGuide" class="menuItem" data-help-doc="/docs/ui/DEMO_GUIDE.md" data-help-title="Demo Guide" data-i18n="menu.demo_guide">Demo Guide</button>
           <button id="adminGuideItem" class="menuItem" data-help-doc="/docs/admin/HELP_ADMIN.md" data-help-title="Admin Docs" data-i18n="menu.admin_docs">Admin Docs</button>
           <button id="adminSettingsMenuItem" class="menuItem" data-i18n="menu.admin_settings">Admin Settings</button>
@@ -670,7 +670,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v8.0.0";
+let uiVersionText = "v8.1.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 let appState = "idle";
@@ -1233,7 +1233,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v8.0.0";
+    const ver = cfg?.ui?.version || "v8.1.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
     applyAdminSettingsForm(cfg?.admin_settings || {});
@@ -1242,7 +1242,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v8.0.0";
+    uiVersionText = "v8.1.0";
     applyAdminSettingsForm({});
   }
   await loadWhoAmI();

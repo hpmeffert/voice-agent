@@ -25,7 +25,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v8.0.0"
+APP_VERSION = "v8.1.0"
 
 app = FastAPI(title=f"Voice Agent API {APP_VERSION}")
 
@@ -203,6 +203,25 @@ def safe_ms(value: Any) -> int:
         return max(0, int(value))
     except Exception:
         return 0
+
+
+def detect_lang_from_text(text: str) -> str:
+    sample = (text or "").strip().lower()
+    if not sample:
+        return DEFAULT_UI_LANG
+
+    if any(token in sample for token in ["ä", "ö", "ü", "ß", " danke ", " bitte ", " und ", " ist ", " nicht "]):
+        return "de"
+    if any(token in sample for token in ["é", "è", "à", "ç", "bonjour", "merci", "avec", "pour"]):
+        return "fr"
+    if any(token in sample for token in ["ciao", "grazie", "perche", "allora", "quindi", "sono"]):
+        return "it"
+    if any(token in sample for token in ["hola", "gracias", "por favor", "usted", "estoy", "porque"]):
+        return "es"
+
+    # Default to English for ASCII-like answers if no explicit signal is found.
+    candidate = "en"
+    return candidate if candidate in SUPPORTED_UI_LANGS else DEFAULT_UI_LANG
 
 
 def normalize_user_id(user_id: str | None) -> str:
@@ -908,7 +927,7 @@ def seed_ui_translations() -> None:
     docs = [
         {"_id": "app.title", "de": "Voice Agent", "en": "Voice Agent", "fr": "Agent Vocal", "it": "Agente Vocale", "es": "Agente de Voz"},
         {"_id": "menu.admin_token", "de": "Admin-Token speichern", "en": "Save Admin Token", "fr": "Enregistrer Token Admin", "it": "Salva Token Admin", "es": "Guardar Token Admin"},
-        {"_id": "menu.user_docs", "de": "Help", "en": "Help", "fr": "Help", "it": "Help", "es": "Help"},
+        {"_id": "menu.user_docs", "de": "Benutzer Dokumentation", "en": "User Documentation", "fr": "Documentation Utilisateur", "it": "Documentazione Utente", "es": "Documentacion de Usuario"},
         {"_id": "menu.demo_guide", "de": "Demo-Leitfaden", "en": "Demo Guide", "fr": "Guide Demo", "it": "Guida Demo", "es": "Guia Demo"},
         {"_id": "menu.admin_docs", "de": "Admin-Dokumentation", "en": "Admin Docs", "fr": "Docs Admin", "it": "Documenti Admin", "es": "Docs Admin"},
         {"_id": "menu.admin_settings", "de": "Admin-Einstellungen", "en": "Admin Settings", "fr": "Parametres Admin", "it": "Impostazioni Admin", "es": "Configuracion Admin"},
@@ -1379,6 +1398,15 @@ class UiLangUpdateRequest(BaseModel):
 class EventPublishRequest(BaseModel):
     channel: str = Field(min_length=1, max_length=120)
     payload: dict[str, Any]
+
+
+class TextChatRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
+    user_id: str = Field(min_length=8)
+    session_id: str | None = None
+    backend: str = Field(default="ollama")
+    model: str | None = None
+    tts_lang: str | None = None
 
 
 # ----------------------------
@@ -1981,6 +2009,77 @@ def download_protocol(
         media_type=content_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.post("/chat/text")
+def chat_text(req: TextChatRequest):
+    ensure_ready()
+    t0 = time.perf_counter()
+    uid = normalize_user_id(req.user_id)
+    upsert_user(uid)
+
+    backend = (req.backend or "ollama").strip().lower()
+    model_override = (req.model or "").strip() or None
+    selected_model = model_override or (OPENAI_MODEL if backend == "openai" else OLLAMA_MODEL)
+    sid = get_or_create_session(req.session_id or "", uid, backend=backend, model=selected_model)
+
+    text = (req.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty text")
+    if len(text) > MAX_TEXT_CHARS:
+        raise HTTPException(status_code=400, detail=f"Text too long (>{MAX_TEXT_CHARS} chars)")
+
+    user_lang = get_user_ui_lang(uid)
+    append_message(uid, sid, role="user", content=text, lang=user_lang, backend=backend, model=selected_model)
+    prompt = build_prompt_with_history(sid, text, SYSTEM_PROMPT)
+    answer = llm_generate(backend=backend, prompt=prompt, model_override=model_override)
+
+    detected_lang = detect_lang_from_text(answer) or user_lang or DEFAULT_UI_LANG
+    selected_tts_lang = ((req.tts_lang or "").strip().lower() or detected_lang)
+    if selected_tts_lang not in set(SUPPORTED_TTS_LANGS):
+        selected_tts_lang = detected_lang
+
+    metrics = {
+        "audio_read_ms": 0,
+        "stt_ms": 0,
+        "llm_ms": max(0, int((time.perf_counter() - t0) * 1000)),
+        "tts_ms": 0,
+        "total_ms": max(0, int((time.perf_counter() - t0) * 1000)),
+    }
+    append_message(
+        uid,
+        sid,
+        role="assistant",
+        content=answer,
+        lang=detected_lang,
+        backend=backend,
+        model=selected_model,
+        metrics=metrics,
+    )
+    mark_session_activity(sid, backend=backend, model=selected_model, lang=detected_lang)
+    log_telemetry(
+        user_id=uid,
+        session_id=sid,
+        backend=backend,
+        model=selected_model,
+        metrics=metrics,
+        lang=detected_lang,
+        transcript=text,
+        answer=answer,
+        status="ok",
+    )
+    return {
+        "session_id": sid,
+        "user_id": uid,
+        "backend": backend,
+        "model": selected_model,
+        "lang": detected_lang,
+        "tts_lang_selected": selected_tts_lang,
+        "transcript": text,
+        "answer": answer,
+        "metrics": metrics,
+        "version": APP_VERSION,
+    }
 
 
 @app.post("/session/delete")

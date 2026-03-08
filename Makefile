@@ -146,6 +146,7 @@ v8-health:
 	  ok=1; \
 	  curl -fsS --max-time 2 http://localhost:8002/health >/dev/null || ok=0; \
 	  curl -fsS --max-time 2 http://localhost:8082/api/health >/dev/null || ok=0; \
+	  curl -fsS --max-time 2 http://localhost:8083 >/dev/null || ok=0; \
 	  curl -fsS --max-time 2 http://localhost:5004/health >/dev/null || ok=0; \
 	  if [ $$ok -eq 1 ]; then echo "V8 OK"; exit 0; fi; \
 	  echo "V8 not ready ($$i/120) ..."; sleep 1; \
@@ -167,6 +168,8 @@ v8-doc-check:
 v8-smoke:
 	@curl -sS http://localhost:8082/api/health
 	@curl -sS http://localhost:8082/api/eventbus/health
+	@curl -sS http://localhost:8083/ >/dev/null
+	@curl -sS -X POST http://localhost:8082/api/chat/text -H 'Content-Type: application/json' -d '{"text":"smoke","user_id":"test-user-810","session_id":""}' >/dev/null
 	@python3 v8/scripts/test_event_bus.py
 
 v8-test: v8-up v8-health v8-doc-check v8-smoke
