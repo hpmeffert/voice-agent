@@ -7,7 +7,7 @@ BASE_BRANCH = release/v5.4-azure-stable
 
 
 .PHONY: up-d wait - up down restart logs ps rebuild web-rebuild api-rebuild piper-rebuild health
-.PHONY: v7-up v7-down v7-restart v7-ps v7-logs v7-health v7-smoke v7-test
+.PHONY: v7-up v7-down v7-restart v7-ps v7-logs v7-health v7-lint v7-doc-check v7-smoke v7-test v7-ci
 .PHONY: v7-pr v7-tag v7-release v7-post-merge
 
 up-d:
@@ -110,12 +110,21 @@ v7-health:
 	curl -i http://localhost:5003/health || true; \
 	exit 1
 
+v7-lint:
+	PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v7/docker/api/app.py
+	PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v7/docker/piper/app.py
+
+v7-doc-check:
+	./scripts/check_v7_docs.sh
+
 v7-smoke:
 	@curl -sS http://localhost:8081/api/health
 	@curl -sS http://localhost:8081/api/config
 	@curl -sS -F "file=@/dev/null;filename=empty.webm" http://localhost:8081/api/voice
 
 v7-test: v7-up v7-health v7-smoke
+
+v7-ci: v7-lint v7-doc-check v7-test
 
 # Usage:
 # make v7-pr VERSION=7.3.0

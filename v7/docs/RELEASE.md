@@ -75,3 +75,5 @@ Bei jedem neuen V7-Release werden mindestens diese Help-Menue-Seiten aktualisier
 - `v7/docs/ui/DEMO_GUIDE.md`
 - `v7/docs/admin/HELP_ADMIN.md`
 - `v7/docs/RELEASE.md` (mit kompletter V7-Historie)
+
+- Verbindliche Regel: siehe `v7/docs/DOCUMENTATION_RULES.md`
