@@ -1,4 +1,4 @@
-# TEAM QUICKSTART - V7.3.0 (macOS, isolated scaffold)
+# TEAM QUICKSTART - V7.4.0 (macOS, isolated scaffold)
 
 V7 is isolated under `v7/` and can run in parallel to V6.
 
@@ -91,3 +91,12 @@ curl -s "http://localhost:8081/api/session/<SESSION_ID>?user_id=<USER_ID>&limit=
   - `/docs/ui/HELP_USER.md`
   - `/docs/ui/DEMO_GUIDE.md`
   - `/docs/admin/HELP_ADMIN.md`
+
+## CRM export templates (V7.4.0)
+- Default template path in API:
+  - `/app/templates/exports/transcript_default.md.tpl`
+- Repo location to customize:
+  - `v7/templates/exports/`
+- Export endpoints:
+  - `GET /api/session/{session_id}/export?user_id=...&format=md`
+  - `GET /api/session/{session_id}/export?user_id=...&format=json`

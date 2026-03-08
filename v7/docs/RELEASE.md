@@ -3,7 +3,26 @@
 Diese Seite enthaelt die konsolidierten Release Notes von `v7.0.0` bis zur aktuellen Version.
 
 ## Aktuell
-- Version: `v7.3.0`
+- Version: `v7.4.0`
+
+## V7.4.0
+### Highlights
+- CRM-Export nutzt jetzt bevorzugt repo-eigene MIT-Templates unter `v7/templates/exports/`.
+- Export-Endpoint bleibt kompatibel (`md`/`json`) und ist klar fuer Template-Anpassung dokumentiert.
+
+### Added
+- Neue Template-Struktur:
+  - `v7/templates/exports/transcript_default.md.tpl`
+  - `v7/templates/exports/transcript_default.json.schema.json`
+- Doku fuer Template-Anpassung im Admin-/Quickstart-Kontext erweitert.
+
+### Changed
+- API-Default fuer `CRM_EXPORT_TEMPLATE_MD` zeigt auf:
+  - `/app/templates/exports/transcript_default.md.tpl`
+- Compose-Default wurde entsprechend angepasst.
+
+### Fixed
+- Eindeutiger und reproduzierbarer Standardpfad fuer CRM-Export-Templates.
 
 ## V7.3.0
 ### Highlights

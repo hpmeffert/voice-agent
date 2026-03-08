@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Voice Agent Transcript Export",
+  "type": "object",
+  "required": [
+    "version",
+    "session",
+    "participants",
+    "messages",
+    "stats"
+  ],
+  "properties": {
+    "version": { "type": "string" },
+    "session": {
+      "type": "object",
+      "required": ["session_id", "user_id"],
+      "properties": {
+        "session_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "created_at": { "type": ["string", "null"] },
+        "updated_at": { "type": ["string", "null"] },
+        "expires_at": { "type": ["string", "null"] },
+        "last_backend": { "type": ["string", "null"] },
+        "last_model": { "type": ["string", "null"] },
+        "lang": { "type": ["string", "null"] }
+      }
+    },
+    "participants": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "text"],
+        "properties": {
+          "ts": { "type": ["string", "null"] },
+          "role": { "type": "string" },
+          "text": { "type": "string" },
+          "lang": { "type": ["string", "null"] },
+          "backend": { "type": ["string", "null"] },
+          "model": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "required": ["turns", "chars_user", "chars_assistant"],
+      "properties": {
+        "turns": { "type": "integer" },
+        "chars_user": { "type": "integer" },
+        "chars_assistant": { "type": "integer" }
+      }
+    }
+  }
+}
