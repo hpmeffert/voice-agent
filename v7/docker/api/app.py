@@ -897,16 +897,16 @@ def seed_ui_translations() -> None:
     ts = now_utc()
     docs = [
         {"_id": "app.title", "de": "Voice Agent", "en": "Voice Agent", "fr": "Agent Vocal", "it": "Agente Vocale", "es": "Agente de Voz"},
-        {"_id": "menu.admin_token", "de": "Admin Token speichern", "en": "Save Admin Token", "fr": "Enregistrer Token Admin", "it": "Salva Token Admin", "es": "Guardar Token Admin"},
+        {"_id": "menu.admin_token", "de": "Admin-Token speichern", "en": "Save Admin Token", "fr": "Enregistrer Token Admin", "it": "Salva Token Admin", "es": "Guardar Token Admin"},
         {"_id": "menu.user_docs", "de": "Benutzer Dokumentation", "en": "User Documentation", "fr": "Documentation Utilisateur", "it": "Documentazione Utente", "es": "Documentacion de Usuario"},
-        {"_id": "menu.demo_guide", "de": "Demo Guide", "en": "Demo Guide", "fr": "Guide Demo", "it": "Guida Demo", "es": "Guia Demo"},
-        {"_id": "menu.admin_docs", "de": "Admin Docs", "en": "Admin Docs", "fr": "Docs Admin", "it": "Documenti Admin", "es": "Docs Admin"},
-        {"_id": "menu.admin_settings", "de": "Admin Settings", "en": "Admin Settings", "fr": "Parametres Admin", "it": "Impostazioni Admin", "es": "Configuracion Admin"},
-        {"_id": "menu.release_notes", "de": "Release Notes", "en": "Release Notes", "fr": "Notes de Version", "it": "Note di Rilascio", "es": "Notas de Version"},
-        {"_id": "label.record", "de": "Record", "en": "Record", "fr": "Enregistrer", "it": "Registra", "es": "Grabar"},
-        {"_id": "label.stop", "de": "Stop", "en": "Stop", "fr": "Arreter", "it": "Stop", "es": "Detener"},
-        {"_id": "label.send", "de": "Send", "en": "Send", "fr": "Envoyer", "it": "Invia", "es": "Enviar"},
-        {"_id": "label.clear", "de": "Clear Session", "en": "Clear Session", "fr": "Effacer Session", "it": "Pulisci Sessione", "es": "Limpiar Sesion"},
+        {"_id": "menu.demo_guide", "de": "Demo-Leitfaden", "en": "Demo Guide", "fr": "Guide Demo", "it": "Guida Demo", "es": "Guia Demo"},
+        {"_id": "menu.admin_docs", "de": "Admin-Dokumentation", "en": "Admin Docs", "fr": "Docs Admin", "it": "Documenti Admin", "es": "Docs Admin"},
+        {"_id": "menu.admin_settings", "de": "Admin-Einstellungen", "en": "Admin Settings", "fr": "Parametres Admin", "it": "Impostazioni Admin", "es": "Configuracion Admin"},
+        {"_id": "menu.release_notes", "de": "Release-Notizen", "en": "Release Notes", "fr": "Notes de Version", "it": "Note di Rilascio", "es": "Notas de Version"},
+        {"_id": "label.record", "de": "Aufnehmen", "en": "Record", "fr": "Enregistrer", "it": "Registra", "es": "Grabar"},
+        {"_id": "label.stop", "de": "Stopp", "en": "Stop", "fr": "Arreter", "it": "Stop", "es": "Detener"},
+        {"_id": "label.send", "de": "Senden", "en": "Send", "fr": "Envoyer", "it": "Invia", "es": "Enviar"},
+        {"_id": "label.clear", "de": "Sitzung leeren", "en": "Clear Session", "fr": "Effacer Session", "it": "Pulisci Sessione", "es": "Limpiar Sesion"},
     ]
     for d in docs:
         ui_translations_col.update_one(
