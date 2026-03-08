@@ -1,4 +1,4 @@
-# TEAM QUICKSTART - V8.5.0 (macOS)
+# TEAM QUICKSTART - V8.6.0 (macOS)
 
 ## Ports
 - Admin UI: `http://localhost:8082`
@@ -37,3 +37,13 @@ python3 v8/scripts/check_docs.py
 4. Erwartung:
    - Trefferanzahl > 0 (falls Daten vorhanden)
    - Session-Summary + Message-Treffer im JSON-Output.
+
+## V8.6 Doku-Hardening Check
+1. Help-Menue pruefen (5 Punkte in Reihenfolge):
+   - Admin Token speichern
+   - Help
+   - Demo Guide
+   - Admin Docs
+   - Release Notes
+2. Jede Seite oeffnen und pruefen, dass Inhalt nicht leer ist.
+3. `python3 v8/scripts/check_docs.py` muss gruen sein.

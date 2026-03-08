@@ -28,7 +28,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v8.5.0"
+APP_VERSION = "v8.6.0"
 
 app = FastAPI(title=f"Voice Agent API {APP_VERSION}")
 
@@ -959,7 +959,7 @@ def seed_ui_translations() -> None:
     docs = [
         {"_id": "app.title", "de": "Voice Agent", "en": "Voice Agent", "fr": "Agent Vocal", "it": "Agente Vocale", "es": "Agente de Voz"},
         {"_id": "menu.admin_token", "de": "Admin-Token speichern", "en": "Save Admin Token", "fr": "Enregistrer Token Admin", "it": "Salva Token Admin", "es": "Guardar Token Admin"},
-        {"_id": "menu.user_docs", "de": "Benutzer Dokumentation", "en": "User Documentation", "fr": "Documentation Utilisateur", "it": "Documentazione Utente", "es": "Documentacion de Usuario"},
+        {"_id": "menu.user_docs", "de": "Help", "en": "Help", "fr": "Aide", "it": "Aiuto", "es": "Ayuda"},
         {"_id": "menu.demo_guide", "de": "Demo-Leitfaden", "en": "Demo Guide", "fr": "Guide Demo", "it": "Guida Demo", "es": "Guia Demo"},
         {"_id": "menu.admin_docs", "de": "Admin-Dokumentation", "en": "Admin Docs", "fr": "Docs Admin", "it": "Documenti Admin", "es": "Docs Admin"},
         {"_id": "menu.admin_settings", "de": "Admin-Einstellungen", "en": "Admin Settings", "fr": "Parametres Admin", "it": "Impostazioni Admin", "es": "Configuracion Admin"},

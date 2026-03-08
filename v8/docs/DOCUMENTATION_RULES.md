@@ -9,7 +9,7 @@ Pflicht bei JEDEM V8-Release:
 
 ## Help-Menue Vertrag
 1. Admin Token speichern
-2. Benutzer Dokumentation
+2. Help
 3. Demo Guide
 4. Admin Docs
 5. Release Notes
@@ -23,7 +23,7 @@ Zusatz:
 ## Admin-Doku Pflichtinhalt
 - Wo liegen API/UI/Compose/Docs-Verzeichnisse?
 - Wie startet/stoppt man den Stack als Admin?
-- Welche Testreihenfolge gilt fuer Komponenten (`api`, `models`, `eventbus`, `piper`, `mongo`, UIs)?
+- Welche Testreihenfolge gilt fuer Komponenten (`api`, `whisper`, `ollama`, `eventbus/valkey`, `piper`, `mongo`, UIs)?
 - Welche Admin-Parameter sind konfigurierbar?
 - Wo liegt die Uebersetzungstabelle und wie fuegt man Sprachen hinzu?
 - Welche Admin-Features sind in der aktuellen Version neu?

@@ -1,26 +1,27 @@
-# Demo Guide (V8.5.0)
+# Demo Guide - V8.6.0
 
-## Story-Flow 1: "Vom ersten Satz bis zur Loesung ohne Bruch"
-Stell dir vor, ein Kunde ruft an und spricht einfach los. Kein Button-Stress, kein Technikfrust. Der Dialog fliesst wie ein echtes Gespraech.
+## Story-Flow 1: Self-Service mit Wow-Effekt
+Stell dir vor, ein Kunde spricht einfach los. Keine Klick-Orgie, kein Bruch. Der Assistent reagiert automatisch wie in einem echten Gespraech.
 
-1. Customer UI (`8083`) oeffnen und `Listen Mode` aktivieren.
-2. Kunde sagt sein Anliegen in zwei bis drei Teilen.
-3. Zeige, wie Stille erkannt wird (Default `1300 ms`) und die Antwort automatisch folgt.
-4. Oeffne Agent UI (`8084`) und suche die aktive Session per `user_id` oder Stichwort.
-5. Agent uebernimmt live und beantwortet den konkreten Fall.
+1. Customer UI (`8083`) oeffnen.
+2. `Listen Mode` aktivieren.
+3. Kunde spricht 2-3 kurze Anliegen.
+4. Zeigen, dass bei Stille (`1300 ms`) automatisch gesendet wird.
+5. Antwort wird abgespielt, danach geht es automatisch weiter.
 
-## Story-Flow 2: "Service mit Gedächtnis"
-Ein Zuschauer sagt: "Das klingt gut, aber findet ihr auch einzelne Aussagen wieder?"
+## Story-Flow 2: Call-Center Handoff mit Nachvollziehbarkeit
+Jetzt kommt der spannende Teil: der Agent uebernimmt ohne Informationsverlust.
 
-1. Im Agent UI nach einem markanten Wort suchen.
-2. Treffer zeigen (Session + Turn).
-3. Danach im Admin UI dieselbe Unterhaltung ueber die neue Admin-Suche finden:
-   - nach `user_id`
-   - nach `session_id`
-   - nach Textausschnitt
-4. Ergebnis: Nachvollziehbarkeit fuer Support, QA und CRM.
+1. Agent UI (`8084`) oeffnen.
+2. Session ueber `user_id` oder Stichwort finden.
+3. Session uebernehmen und live antworten.
+4. Admin UI (`8082`) oeffnen und dieselbe Konversation suchen:
+   - mit `search_user_id`
+   - mit `session_id`
+   - mit `q` (z. B. Schluesselwort aus dem Gespraech)
+5. Ergebnis zeigen: vom Kundendialog bis zum Admin-Audit alles durchgaengig nachvollziehbar.
 
-## Spannungsbogen fuer Praesentationen
-- Einstieg: "Ein Kunde spricht frei, ohne Bedienungsanleitung."
-- Mitte: "System reagiert automatisch und Agent steigt nahtlos ein."
-- Finale: "Admin findet jede wichtige Stelle in Sekunden wieder."
+## Praesentationsbogen
+- Einstieg: "Kunde spricht frei, das System fuehrt sauber durch den Turn."
+- Mitte: "Agent steigt nahtlos ein, ohne neue Session."
+- Finale: "Admin findet jede relevante Passage sofort wieder."
