@@ -1,4 +1,4 @@
-# Demo Guide (V7.3.0)
+# Demo Guide (V7.5.0)
 
 Ziel: Interesse wecken, einen klaren Spannungsbogen aufbauen und die Kernfunktionen in 5-8 Minuten zeigen.
 
@@ -40,11 +40,18 @@ Stellen Sie sich mal vor, ein Kunde ruft an und erwartet sofortige, natuerliche 
 
 ## Konkreter Demo-Ablauf
 1. `http://localhost:8081` oeffnen.
-2. Frage 1 manuell senden (`Record -> Stop -> Send`).
-3. Folgefrage im selben Kontext stellen.
-4. `Listen Mode` aktivieren und einen kompletten hands-free Turn zeigen.
-5. Optional fehlerhafte Datei senden und JSON-Fehlerformat zeigen.
-6. Seite neu laden und persistierte User-Settings pruefen.
+2. Als Admin `Demo Mode` aktivieren.
+3. Frage 1 manuell senden (`Record -> Stop -> Send`).
+4. Folgefrage im selben Kontext stellen.
+5. Einen kompletten Hands-free-Zyklus zeigen:
+   - automatische Aufnahme
+   - Stille erkannt
+   - Auto-Send
+   - TTS-Wiedergabe
+   - Auto-Resume
+6. `Debug panel` ausblenden, um zu zeigen, wie die Endnutzeransicht wirkt.
+7. Optional fehlerhafte Datei senden und JSON-Fehlerformat zeigen.
+8. Seite neu laden und persistierte User-Settings pruefen.
 
 ## Wirkungstexte fuer Praesentation
 - "Stellen Sie sich vor, der Agent reagiert wie ein echter Dialogpartner."
