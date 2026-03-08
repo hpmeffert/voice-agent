@@ -1868,28 +1868,71 @@ def agent_message(req: AgentMessageRequest):
 
     backend = str((session.get("meta") or {}).get("backend_last") or "ollama")
     model = (session.get("meta") or {}).get("model_last")
-    lang = (session.get("meta") or {}).get("lang_last") or DEFAULT_UI_LANG
+    customer_lang = (session.get("meta") or {}).get("lang_last") or DEFAULT_UI_LANG
+    source_lang = detect_lang_from_text(text) or "en"
     speak = bool(req.speak)
-    tts_lang = ((req.tts_lang or "").strip().lower() or lang)
+    tts_lang = ((req.tts_lang or "").strip().lower() or customer_lang)
     if tts_lang not in set(SUPPORTED_TTS_LANGS):
-        tts_lang = lang
+        tts_lang = customer_lang
+
+    translated_text = ""
+    translation_ms = 0
+    delivered_text = text
+    if tts_lang and tts_lang != source_lang:
+        t_tr = time.perf_counter()
+        translated_text = translate_answer_text(
+            backend=backend,
+            model_override=model,
+            text=text,
+            target_lang=tts_lang,
+        )
+        translation_ms = max(0, int((time.perf_counter() - t_tr) * 1000))
+        delivered_text = translated_text or text
+
+    metrics = {
+        "audio_read_ms": 0,
+        "stt_ms": 0,
+        "llm_ms": 0,
+        "translation_ms": translation_ms,
+        "tts_ms": 0,
+        "total_ms": translation_ms,
+    }
 
     append_message(
         user_id=str(session.get("user_id") or ""),
         session_id=req.session_id,
         role="agent",
         content=text,
-        lang=lang,
+        lang=source_lang,
         backend=backend,
         model=model,
-        meta={"agent_id": req.agent_id, "speak": speak, "tts_lang": tts_lang},
+        metrics=metrics,
+        answer_original=text,
+        answer_translated=translated_text,
+        answer_tts_lang=tts_lang,
+        meta={
+            "agent_id": req.agent_id,
+            "speak": speak,
+            "tts_lang": tts_lang,
+            "source_lang": source_lang,
+            "customer_lang": customer_lang,
+        },
     )
-    mark_session_activity(req.session_id, backend=backend, model=model, lang=lang)
+    mark_session_activity(req.session_id, backend=backend, model=model, lang=customer_lang)
     publish_session_event(
         event_type="message.created",
         session_id=req.session_id,
         from_actor="agent",
-        payload={"text": text, "agent_id": req.agent_id, "speak": speak, "tts_lang": tts_lang},
+        payload={
+            "text": delivered_text,
+            "text_original": text,
+            "text_translated": translated_text,
+            "agent_id": req.agent_id,
+            "speak": speak,
+            "tts_lang": tts_lang,
+            "source_lang": source_lang,
+            "translation_ms": translation_ms,
+        },
     )
     return {
         "ok": True,
@@ -1897,6 +1940,10 @@ def agent_message(req: AgentMessageRequest):
         "agent_id": req.agent_id,
         "speak": speak,
         "tts_lang": tts_lang,
+        "source_lang": source_lang,
+        "answer_original": text,
+        "answer_translated": translated_text or None,
+        "translation_ms": translation_ms,
     }
 
 

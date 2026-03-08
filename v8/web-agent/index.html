@@ -83,7 +83,7 @@
             <textarea id="msgInput" placeholder="Agent-Antwort schreiben..."></textarea>
             <div class="row" style="margin-top:8px;">
               <label><input id="speak" type="checkbox" /> Speak to customer</label>
-              <label>TTS <select id="ttsLang"><option value="de">de</option><option value="en">en</option><option value="fr">fr</option><option value="it">it</option><option value="es">es</option></select></label>
+              <label>Customer output lang <select id="ttsLang"><option value="de">de</option><option value="en">en</option><option value="fr">fr</option><option value="it">it</option><option value="es">es</option></select></label>
               <button id="btnAcceptHandoff">Handoff annehmen</button>
               <button id="sendBtn" class="primary">Send Agent Message</button>
             </div>
@@ -273,7 +273,7 @@ function connectWs(){
         chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=accepted`;
       }
       const role = e.from || 'system';
-      const text = (e.payload && e.payload.text) || JSON.stringify(e.payload || {});
+      const text = (e.payload && (e.payload.text_original || e.payload.text)) || JSON.stringify(e.payload || {});
       addMsg(role, text, e.ts);
     } catch(_) {}
   };

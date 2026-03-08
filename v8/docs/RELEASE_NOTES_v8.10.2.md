@@ -2,6 +2,10 @@
 
 ## What changed
 - Added TTS output translation pipeline in `/api/voice` and `/api/chat/text`.
+- Added Agent->Customer translation behavior in `/api/agent/message`:
+  - Agent can send original text in source language.
+  - Customer receives translated delivery text based on `tts_lang`.
+  - Response includes `source_lang`, `answer_original`, `answer_translated`, `translation_ms`.
 - Added response fields:
   - `answer` (original)
   - `answer_translated` (nullable)
@@ -23,6 +27,7 @@
 
 ## Why this is useful
 - Users can listen to answers in their preferred output language without losing original content.
+- Agent teams can reply in their working language while customers still receive localized responses.
 - Agents/admins can audit translation impact via stored fields and `translation_ms`.
 - Demo/readiness improves for multilingual scenarios.
 

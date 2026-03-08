@@ -1,4 +1,4 @@
-# Benutzer Handbuch - V8.9.0
+# Benutzer Handbuch - V8.10.2
 
 ## Wichtig
 - Diese Seite ist das **Benutzer Handbuch**.
@@ -51,3 +51,12 @@
   2. Agent klickt `Handoff annehmen`.
   3. Kunde sieht Status `accepted`.
 - Release-Verweis: eingefuehrt in `V8.7.0`.
+
+## Funktion: Agent-Nachricht in Kundensprache (Agent UI)
+- Wofuer: Agent kann z. B. auf Englisch schreiben, Kunde bekommt den Text in seiner Sprache (z. B. Deutsch).
+- So funktioniert es: Im Agent UI die `Customer output lang` waehlen und Nachricht senden.
+- Beispiel:
+  1. Agent schreibt: `Hello, I can help you now.`
+  2. Auswahl: `Customer output lang = de`
+  3. Kunde sieht/hoert die deutsche Ausgabe.
+- Release-Verweis: erweitert in `V8.10.2`.
