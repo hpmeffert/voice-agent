@@ -1,4 +1,4 @@
-# Benutzer Dokumentation (V7.6.0)
+# Benutzer Dokumentation (V7.7.0)
 
 Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einstellung hat.
 
@@ -39,6 +39,10 @@ Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einste
   - Hoeher = weniger empfindlich gegen Hintergrundgeraeusche.
 - `Max recording seconds`:
   - Wirkung: Sicherheitslimit fuer lange Aufnahmen.
+- `TTS language`:
+  - `Auto`: nutzt erkannte Sprache.
+  - `de/en/sv/no/fi`: erzwingt die Sprechsprache.
+  - `fr/it/es`: vorbereitet (coming soon).
 
 ## Admin-only Demo Steuerung
 - `Demo Mode` (nur Admin):

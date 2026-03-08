@@ -1,4 +1,4 @@
-# Demo Guide (V7.6.0)
+# Demo Guide (V7.7.0)
 
 Ziel: Interesse wecken, einen klaren Spannungsbogen aufbauen und die Kernfunktionen in 5-8 Minuten zeigen.
 
@@ -55,6 +55,10 @@ Stellen Sie sich mal vor, ein Kunde ruft an und erwartet sofortige, natuerliche 
 9. Optionaler Edge-Case:
    - Browser blockiert Autoplay -> Banner erscheint
    - einmal manuell `Play` klicken -> Flow laeuft weiter
+10. TTS-Demo-Trick:
+   - `TTS language = en`
+   - deutsch sprechen
+   - englische Ausgabe als bewusst gesetzter Voice-Override demonstrieren.
 
 ## Wirkungstexte fuer Praesentation
 - "Stellen Sie sich vor, der Agent reagiert wie ein echter Dialogpartner."

@@ -3,7 +3,24 @@
 Diese Seite enthaelt die konsolidierten Release Notes von `v7.0.0` bis zur aktuellen Version.
 
 ## Aktuell
-- Version: `v7.6.0`
+- Version: `v7.7.0`
+
+## V7.7.0
+### Highlights
+- TTS-Sprach-Override im UI: `Auto`, `de`, `en`, `sv`, `no`, `fi`.
+- API akzeptiert `tts_lang` und liefert `tts_lang_selected`.
+- Platzhalter fuer `fr/it/es` sind vorbereitet.
+
+### Added
+- Neues UI-Feld `TTS language`.
+- API-Feld `tts_lang_selected` in `/api/voice`-Antworten.
+
+### Changed
+- TTS-Ausgabe kann bewusst von erkannter STT-Sprache abweichen (Demo-Use-Case).
+- UI-Version-Defaults auf `v7.7.0` angehoben.
+
+### Fixed
+- Mehr Kontrolle ueber die Sprechstimme bei Demo-Szenarien.
 
 ## V7.6.0
 ### Highlights

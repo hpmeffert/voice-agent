@@ -1,4 +1,4 @@
-# Admin Dokumentation (V7.6.0)
+# Admin Dokumentation (V7.7.0)
 
 Diese Seite ist fuer Admins geschrieben.
 Ziel: schnell starten, sauber testen, alle Einstellungen verstehen.
@@ -102,6 +102,10 @@ Erwartung:
 5. TTS-Autoplay pruefen:
    - Falls Browser blockiert, muss Autoplay-Banner erscheinen.
    - Nach manuellem `Play` soll der Hinweis verschwinden.
+6. TTS-Override pruefen:
+   - UI-Feld `TTS language` auf `en` setzen.
+   - Deutsche Anfrage sprechen.
+   - Englische TTS-Antwort erwarten.
 
 ## 5) Alle einstellbaren Parameter (Admin)
 
