@@ -75,7 +75,7 @@ services:
       CRM_EXPORT_WEBHOOK_URL: "${CRM_EXPORT_WEBHOOK_URL:-}"
       ADMIN_DEV_MODE: "${ADMIN_DEV_MODE:-1}"
       ADMIN_UI_TOKEN: "${ADMIN_UI_TOKEN:-}"
-      UI_VERSION: "${UI_VERSION:-v8.9.0}"
+      UI_VERSION: "${UI_VERSION:-v8.10.2}"
       UI_BUILD: "${UI_BUILD:-}"
       DEFAULT_UI_LANG: "${DEFAULT_UI_LANG:-de}"
       SUPPORTED_UI_LANGS: "${SUPPORTED_UI_LANGS:-de,en,fr,it,es}"

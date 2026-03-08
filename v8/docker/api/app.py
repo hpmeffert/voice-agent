@@ -29,7 +29,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v8.9.0"
+APP_VERSION = "v8.10.2"
 
 app = FastAPI(title=f"Voice Agent API {APP_VERSION}")
 
@@ -234,6 +234,21 @@ def detect_lang_from_text(text: str) -> str:
     # Default to English for ASCII-like answers if no explicit signal is found.
     candidate = "en"
     return candidate if candidate in SUPPORTED_UI_LANGS else DEFAULT_UI_LANG
+
+
+def lang_label(lang: str | None) -> str:
+    code = (lang or "").strip().lower()
+    labels = {
+        "de": "German",
+        "en": "English",
+        "fr": "French",
+        "it": "Italian",
+        "es": "Spanish",
+        "sv": "Swedish",
+        "no": "Norwegian",
+        "fi": "Finnish",
+    }
+    return labels.get(code, code or "target language")
 
 
 def normalize_role_for_history(role: str | None) -> str:
@@ -1020,7 +1035,7 @@ def seed_ui_translations() -> None:
     docs = [
         {"_id": "app.title", "de": "Voice Agent", "en": "Voice Agent", "fr": "Agent Vocal", "it": "Agente Vocale", "es": "Agente de Voz"},
         {"_id": "menu.admin_token", "de": "Admin-Token speichern", "en": "Save Admin Token", "fr": "Enregistrer Token Admin", "it": "Salva Token Admin", "es": "Guardar Token Admin"},
-        {"_id": "menu.user_docs", "de": "Benutzer Handbuch", "en": "User Handbook", "fr": "Manuel Utilisateur", "it": "Manuale Utente", "es": "Manual de Usuario"},
+        {"_id": "menu.user_docs", "de": "Benutzer Handbuch", "en": "User Guide", "fr": "Manuel Utilisateur", "it": "Manuale Utente", "es": "Manual de Usuario"},
         {"_id": "menu.demo_guide", "de": "Demo-Leitfaden", "en": "Demo Guide", "fr": "Guide Demo", "it": "Guida Demo", "es": "Guia Demo"},
         {"_id": "menu.admin_docs", "de": "Admin-Dokumentation", "en": "Admin Docs", "fr": "Docs Admin", "it": "Documenti Admin", "es": "Docs Admin"},
         {"_id": "menu.admin_settings", "de": "Admin-Einstellungen", "en": "Admin Settings", "fr": "Parametres Admin", "it": "Impostazioni Admin", "es": "Configuracion Admin"},
@@ -1125,6 +1140,9 @@ def append_message(
     model: str | None,
     metrics: dict[str, int] | None = None,
     meta: dict[str, Any] | None = None,
+    answer_original: str | None = None,
+    answer_translated: str | None = None,
+    answer_tts_lang: str | None = None,
 ) -> None:
     ensure_ready()
     if len(content) > MAX_TEXT_CHARS:
@@ -1148,9 +1166,16 @@ def append_message(
             "audio_read_ms": max(0, int(metrics.get("audio_read_ms", 0))),
             "stt_ms": max(0, int(metrics.get("stt_ms", 0))),
             "llm_ms": max(0, int(metrics.get("llm_ms", 0))),
+            "translation_ms": max(0, int(metrics.get("translation_ms", 0))),
             "tts_ms": max(0, int(metrics.get("tts_ms", 0))),
             "total_ms": max(0, int(metrics.get("total_ms", 0))),
         }
+    if answer_original is not None:
+        doc["answer_original"] = (answer_original or "")[:MAX_TEXT_CHARS]
+    if answer_translated is not None:
+        doc["answer_translated"] = (answer_translated or "")[:MAX_TEXT_CHARS]
+    if answer_tts_lang is not None:
+        doc["answer_tts_lang"] = (answer_tts_lang or "")[:16]
     if isinstance(meta, dict) and meta:
         doc["meta"] = meta
     messages_col.insert_one(doc)
@@ -1272,6 +1297,9 @@ def log_telemetry(
     lang: str | None,
     transcript: str | None,
     answer: str | None,
+    answer_original: str | None = None,
+    answer_translated: str | None = None,
+    answer_tts_lang: str | None = None,
     status: str,
     error_code: str | None = None,
     error_detail: str | None = None,
@@ -1290,12 +1318,16 @@ def log_telemetry(
             "audio_read_ms": safe_ms(m.get("audio_read_ms")),
             "stt_ms": safe_ms(m.get("stt_ms")),
             "llm_ms": safe_ms(m.get("llm_ms")),
+            "translation_ms": safe_ms(m.get("translation_ms")),
             "tts_ms": safe_ms(m.get("tts_ms")),
             "total_ms": safe_ms(m.get("total_ms")),
         },
         "lang": lang,
         "transcript": (transcript or "")[:MAX_TEXT_CHARS],
         "answer": (answer or "")[:MAX_TEXT_CHARS],
+        "answer_original": (answer_original if answer_original is not None else (answer or ""))[:MAX_TEXT_CHARS],
+        "answer_translated": (answer_translated or "")[:MAX_TEXT_CHARS],
+        "answer_tts_lang": (answer_tts_lang or "")[:16] or None,
         "status": status,
         "error_code": (error_code or "")[:128] or None,
         "error_detail": (error_detail or "")[:512] or None,
@@ -1377,6 +1409,26 @@ def llm_generate(backend: str, prompt: str, model_override: str | None) -> str:
     if (backend or "ollama").strip().lower() == "openai":
         return openai_generate(prompt, model_override=model_override)
     return ollama_generate(prompt, model_override=model_override)
+
+
+def translate_answer_text(
+    *,
+    backend: str,
+    model_override: str | None,
+    text: str,
+    target_lang: str,
+) -> str:
+    source = (text or "").strip()
+    if not source:
+        return ""
+    target = (target_lang or "").strip().lower()
+    prompt = (
+        f"Translate the following answer into {lang_label(target)} ({target}).\n"
+        "Keep meaning and formatting. Do not add facts. Return only translated text.\n\n"
+        f"Answer:\n{source}"
+    )
+    translated = llm_generate(backend=backend, prompt=prompt, model_override=model_override).strip()
+    return translated or source
 
 
 def generate_crm_summary(
@@ -2270,7 +2322,7 @@ def metrics_recent(
         messages_col.find(
             {
                 "user_id": user_id,
-                "role": "assistant",
+                "role": {"$in": ["assistant", "agent"]},
                 "metrics.total_ms": {"$exists": True},
             },
             {
@@ -2300,6 +2352,7 @@ def metrics_recent(
                 "audio_read_ms": max(0, int(m.get("audio_read_ms", 0))),
                 "stt_ms": max(0, int(m.get("stt_ms", 0))),
                 "llm_ms": max(0, int(m.get("llm_ms", 0))),
+                "translation_ms": max(0, int(m.get("translation_ms", 0))),
                 "tts_ms": max(0, int(m.get("tts_ms", 0))),
                 "total_ms": max(0, int(m.get("total_ms", 0))),
             }
@@ -2349,10 +2402,10 @@ def admin_metrics_summary(
             "count": 0,
             "ok_count": 0,
             "error_count": 0,
-            "avg_ms": {"audio_read_ms": 0, "stt_ms": 0, "llm_ms": 0, "tts_ms": 0, "total_ms": 0},
+            "avg_ms": {"audio_read_ms": 0, "stt_ms": 0, "llm_ms": 0, "translation_ms": 0, "tts_ms": 0, "total_ms": 0},
         }
 
-    sums = {"audio_read_ms": 0, "stt_ms": 0, "llm_ms": 0, "tts_ms": 0, "total_ms": 0}
+    sums = {"audio_read_ms": 0, "stt_ms": 0, "llm_ms": 0, "translation_ms": 0, "tts_ms": 0, "total_ms": 0}
     for d in docs:
         m = d.get("metrics") or {}
         for key in sums:
@@ -2629,16 +2682,32 @@ def chat_text(req: TextChatRequest):
     answer = llm_generate(backend=backend, prompt=prompt, model_override=model_override)
 
     detected_lang = detect_lang_from_text(answer) or user_lang or DEFAULT_UI_LANG
-    selected_tts_lang = ((req.tts_lang or "").strip().lower() or detected_lang)
+    selected_tts_lang = ((req.tts_lang or "").strip().lower() or "auto")
+    if selected_tts_lang == "auto":
+        selected_tts_lang = detected_lang
     if selected_tts_lang not in set(SUPPORTED_TTS_LANGS):
         selected_tts_lang = detected_lang
+    answer_translated = ""
+    translation_ms = 0
+    answer_for_tts = answer
+    if selected_tts_lang != detected_lang:
+        t_tr = time.perf_counter()
+        answer_translated = translate_answer_text(
+            backend=backend,
+            model_override=model_override,
+            text=answer,
+            target_lang=selected_tts_lang,
+        )
+        translation_ms = max(0, int((time.perf_counter() - t_tr) * 1000))
+        answer_for_tts = answer_translated or answer
 
     metrics = {
         "audio_read_ms": 0,
         "stt_ms": 0,
         "llm_ms": max(0, int((time.perf_counter() - t0) * 1000)),
+        "translation_ms": translation_ms,
         "tts_ms": 0,
-        "total_ms": max(0, int((time.perf_counter() - t0) * 1000)),
+        "total_ms": max(0, int((time.perf_counter() - t0) * 1000)) + translation_ms,
     }
     append_message(
         uid,
@@ -2649,13 +2718,16 @@ def chat_text(req: TextChatRequest):
         backend=backend,
         model=selected_model,
         metrics=metrics,
+        answer_original=answer,
+        answer_translated=answer_translated,
+        answer_tts_lang=selected_tts_lang,
     )
     mark_session_activity(sid, backend=backend, model=selected_model, lang=detected_lang)
     publish_session_event(
         event_type="message.created",
         session_id=sid,
         from_actor="agent",
-        payload={"text": answer, "model": selected_model, "backend": backend},
+        payload={"text": answer_for_tts, "text_original": answer, "model": selected_model, "backend": backend},
     )
     log_telemetry(
         user_id=uid,
@@ -2665,7 +2737,10 @@ def chat_text(req: TextChatRequest):
         metrics=metrics,
         lang=detected_lang,
         transcript=text,
-        answer=answer,
+        answer=answer_for_tts,
+        answer_original=answer,
+        answer_translated=answer_translated,
+        answer_tts_lang=selected_tts_lang,
         status="ok",
     )
     session_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
@@ -2677,12 +2752,15 @@ def chat_text(req: TextChatRequest):
         "model": selected_model,
         "lang": detected_lang,
         "tts_lang_selected": selected_tts_lang,
+        "answer_tts_lang": selected_tts_lang,
         "transcript": text,
         "answer": answer,
+        "answer_translated": (answer_translated or None),
         "handoff_requested": handoff["requested"],
         "handoff_state": handoff["state"],
         "handoff_recommended": handoff_recommended,
         "metrics": metrics,
+        "translation_ms": translation_ms,
         "version": APP_VERSION,
     }
 
@@ -2748,12 +2826,16 @@ async def voice(
         "audio_read_ms": 0,
         "stt_ms": 0,
         "llm_ms": 0,
+        "translation_ms": 0,
         "tts_ms": 0,
         "total_ms": 0,
     }
     transcript = ""
     answer = ""
+    answer_translated = ""
+    answer_for_tts = ""
     lang: str | None = None
+    answer_lang: str | None = None
     tts_lang_selected: str | None = None
     handoff_recommended = False
 
@@ -2778,7 +2860,10 @@ async def voice(
             metrics=metrics,
             lang=lang,
             transcript=transcript,
-            answer=answer,
+            answer=answer_for_tts or answer,
+            answer_original=answer,
+            answer_translated=answer_translated,
+            answer_tts_lang=tts_lang_selected or answer_lang,
             status="error",
             error_code=error_code,
             error_detail=detail or error,
@@ -2908,15 +2993,30 @@ async def voice(
 
         t3 = time.perf_counter()
         metrics["llm_ms"] = max(0, int((t3 - t2) * 1000))
+        answer_lang = detect_lang_from_text(answer) or lang or DEFAULT_UI_LANG
+        if not tts_lang_selected:
+            tts_lang_selected = answer_lang
+        if tts_lang_selected not in allowed_tts_langs:
+            tts_lang_selected = answer_lang
+        if tts_lang_selected != answer_lang:
+            t_tr = time.perf_counter()
+            answer_translated = translate_answer_text(
+                backend=backend,
+                model_override=model_override,
+                text=answer,
+                target_lang=tts_lang_selected,
+            )
+            metrics["translation_ms"] = max(0, int((time.perf_counter() - t_tr) * 1000))
+        answer_for_tts = answer_translated or answer
         metrics["tts_ms"] = 0
-        metrics["total_ms"] = max(0, int((t3 - t0) * 1000))
+        metrics["total_ms"] = max(0, int((time.perf_counter() - t0) * 1000))
 
         if return_audio == "1":
             t3_tts = time.perf_counter()
             try:
                 tts_resp = requests.post(
                     f"{PIPER_BASE_URL}/tts",
-                    json={"text": answer, "lang": (tts_lang_selected or lang)},
+                    json={"text": answer_for_tts, "lang": (tts_lang_selected or answer_lang or lang)},
                     timeout=180,
                 )
                 tts_resp.raise_for_status()
@@ -2930,13 +3030,22 @@ async def voice(
                     backend=backend,
                     model=selected_model,
                     metrics=metrics,
+                    answer_original=answer,
+                    answer_translated=answer_translated,
+                    answer_tts_lang=tts_lang_selected or answer_lang,
                 )
                 mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
                 publish_session_event(
                     event_type="message.created",
                     session_id=sid,
                     from_actor="agent",
-                    payload={"text": answer, "model": selected_model, "backend": backend},
+                    payload={
+                        "text": answer_for_tts,
+                        "text_original": answer,
+                        "text_translated": answer_translated,
+                        "model": selected_model,
+                        "backend": backend,
+                    },
                 )
                 return error_response(
                     status_code=502,
@@ -2956,13 +3065,22 @@ async def voice(
                 backend=backend,
                 model=selected_model,
                 metrics=metrics,
+                answer_original=answer,
+                answer_translated=answer_translated,
+                answer_tts_lang=tts_lang_selected or answer_lang,
             )
             mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
             publish_session_event(
                 event_type="message.created",
                 session_id=sid,
                 from_actor="agent",
-                payload={"text": answer, "model": selected_model, "backend": backend},
+                payload={
+                    "text": answer_for_tts,
+                    "text_original": answer,
+                    "text_translated": answer_translated,
+                    "model": selected_model,
+                    "backend": backend,
+                },
             )
 
             fd2, tts_wav_path = tempfile.mkstemp(suffix=".wav")
@@ -2978,7 +3096,10 @@ async def voice(
                 metrics=metrics,
                 lang=lang,
                 transcript=transcript,
-                answer=answer,
+                answer=answer_for_tts,
+                answer_original=answer,
+                answer_translated=answer_translated,
+                answer_tts_lang=tts_lang_selected or answer_lang,
                 status="ok",
             )
             session_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
@@ -2992,7 +3113,7 @@ async def voice(
                     "X-Session-Id": sid,
                     "X-User-Id": uid,
                     "X-Detected-Lang": (lang or ""),
-                    "X-TTS-Lang": (tts_lang_selected or lang or ""),
+                    "X-TTS-Lang": (tts_lang_selected or answer_lang or lang or ""),
                     "X-TTS-Audio-Duration-Ms": str(tts_audio_duration_ms),
                     "X-Crm-Export-Enabled": "1" if crm_export_user_enabled else "0",
                     "X-Export-Generated": "1" if crm_export_user_enabled else "0",
@@ -3012,13 +3133,22 @@ async def voice(
             backend=backend,
             model=selected_model,
             metrics=metrics,
+            answer_original=answer,
+            answer_translated=answer_translated,
+            answer_tts_lang=tts_lang_selected or answer_lang,
         )
         mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
         publish_session_event(
             event_type="message.created",
             session_id=sid,
             from_actor="agent",
-            payload={"text": answer, "model": selected_model, "backend": backend},
+            payload={
+                "text": answer_for_tts,
+                "text_original": answer,
+                "text_translated": answer_translated,
+                "model": selected_model,
+                "backend": backend,
+            },
         )
         log_telemetry(
             user_id=uid,
@@ -3028,7 +3158,10 @@ async def voice(
             metrics=metrics,
             lang=lang,
             transcript=transcript,
-            answer=answer,
+            answer=answer_for_tts,
+            answer_original=answer,
+            answer_translated=answer_translated,
+            answer_tts_lang=tts_lang_selected or answer_lang,
             status="ok",
         )
         session_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
@@ -3042,11 +3175,14 @@ async def voice(
             "transcript": transcript,
             "lang": lang,
             "answer": answer,
-            "tts_lang_selected": tts_lang_selected or lang,
+            "answer_translated": (answer_translated or None),
+            "answer_tts_lang": tts_lang_selected or answer_lang or lang,
+            "tts_lang_selected": tts_lang_selected or answer_lang or lang,
             "metrics": metrics,
             "audio_read_ms": metrics["audio_read_ms"],
             "stt_ms": metrics["stt_ms"],
             "llm_ms": metrics["llm_ms"],
+            "translation_ms": metrics["translation_ms"],
             "tts_ms": metrics["tts_ms"],
             "total_ms": metrics["total_ms"],
             "crm_export_enabled": crm_export_user_enabled,
