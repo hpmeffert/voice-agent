@@ -1,4 +1,4 @@
-# Demo Guide (V7.5.0)
+# Demo Guide (V7.6.0)
 
 Ziel: Interesse wecken, einen klaren Spannungsbogen aufbauen und die Kernfunktionen in 5-8 Minuten zeigen.
 
@@ -52,6 +52,9 @@ Stellen Sie sich mal vor, ein Kunde ruft an und erwartet sofortige, natuerliche 
 6. `Debug panel` ausblenden, um zu zeigen, wie die Endnutzeransicht wirkt.
 7. Optional fehlerhafte Datei senden und JSON-Fehlerformat zeigen.
 8. Seite neu laden und persistierte User-Settings pruefen.
+9. Optionaler Edge-Case:
+   - Browser blockiert Autoplay -> Banner erscheint
+   - einmal manuell `Play` klicken -> Flow laeuft weiter
 
 ## Wirkungstexte fuer Praesentation
 - "Stellen Sie sich vor, der Agent reagiert wie ein echter Dialogpartner."

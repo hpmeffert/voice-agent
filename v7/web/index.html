@@ -296,7 +296,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V7.5.0</h1>
+        <h1>Voice Agent V7.6.0</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
@@ -420,7 +420,9 @@
 
           <h3>Spoken reply (Piper)</h3>
           <audio id="audioReply" controls></audio>
-          <div class="muted">If autoplay is blocked, click play once manually.</div>
+          <div id="autoplayBanner" class="muted" style="margin-top:8px;display:none;">
+            Browser blockiert Auto-Play. Bitte einmal auf den Play-Button klicken.
+          </div>
           <div id="demoGuideBanner" class="muted" style="margin-top:8px;display:none;">
             Demo Mode aktiv: Der Agent hoert automatisch weiter. Tipp: kurze Fragen stellen, dann 1-2 Sekunden Pause machen.
           </div>
@@ -532,6 +534,7 @@ const btnClear = el("btnClear");
 const btnExport = el("btnExport");
 const btnProtocol = el("btnProtocol");
 const debugBoxEl = el("debugBox");
+const autoplayBanner = el("autoplayBanner");
 
 const backendSel = el("backend");
 const modelSel = el("model");
@@ -587,9 +590,10 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v7.5.0";
+let uiVersionText = "v7.6.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
+let appState = "idle";
 
 demoModeEnabled = localStorage.getItem(DEMO_MODE_KEY) === "1";
 debugPanelEnabled = localStorage.getItem(DEBUG_PANEL_KEY) !== "0";
@@ -624,6 +628,36 @@ if (!userId) {
 refreshIdentityPills();
 
 function setStatus(msg) { statusEl.textContent = msg; }
+function setAppState(nextState) {
+  appState = nextState;
+  if (nextState === "recording") {
+    setBadge("live", "Rec");
+    setStatus("Recording");
+    return;
+  }
+  if (nextState === "sending") {
+    setBadge("warn", "Send");
+    setStatus("Sending");
+    return;
+  }
+  if (nextState === "thinking") {
+    setBadge("warn", "Think");
+    setStatus("Thinking");
+    return;
+  }
+  if (nextState === "speaking") {
+    setBadge("live", "Speak");
+    setStatus("Speaking");
+    return;
+  }
+  if (nextState === "listening") {
+    setBadge("warn", "Listen");
+    setStatus("Listening");
+    return;
+  }
+  setBadge("", "Idle");
+  setStatus("Listening");
+}
 function setLatency(audioRead, stt, llm, tts, total) {
   latAudioReadEl.textContent = Number.isFinite(audioRead) ? String(Math.max(0, Math.round(audioRead))) : "-";
   latSttEl.textContent = Number.isFinite(stt) ? String(Math.max(0, Math.round(stt))) : "-";
@@ -1020,8 +1054,7 @@ function updateMenuUi() {
 }
 
 async function loadModels() {
-  setBadge("warn", "Loading");
-  setStatus("Listening");
+  setAppState("listening");
   showError("");
 
   const r = await fetchWithRetry("/api/models", 30, 500);
@@ -1035,8 +1068,7 @@ async function loadModels() {
   const openaiOpt = Array.from(backendSel.options).find((o) => o.value === "openai");
   if (openaiOpt) openaiOpt.disabled = !data?.openai?.available;
 
-  setBadge("", "Idle");
-  setStatus("Listening");
+  setAppState("idle");
 }
 
 async function loadConfig() {
@@ -1053,7 +1085,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v7.5.0";
+    const ver = cfg?.ui?.version || "v7.6.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
   } catch (_) {
@@ -1061,7 +1093,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v7.5.0";
+    uiVersionText = "v7.6.0";
   }
   await loadWhoAmI();
   recomputeCrmExportEnabled();
@@ -1171,11 +1203,11 @@ backendSel.onchange = () => {
     const openaiAvailable = !!modelCatalog?.openai?.available;
     if (!openaiAvailable) {
       backendSel.value = "ollama";
-      setStatus("Listening");
+      setAppState("listening");
     } else {
       const defaultOpenAI = modelCatalog?.openai?.default_model || "gpt-5";
       setModelOptions([defaultOpenAI], defaultOpenAI);
-      setStatus("Listening");
+      setAppState("listening");
       return;
     }
   }
@@ -1183,7 +1215,7 @@ backendSel.onchange = () => {
   const ollamaModels = modelCatalog?.ollama?.models || [];
   const defaultOllama = modelCatalog?.ollama?.default_model || "qwen2.5:7b";
   setModelOptions(ollamaModels.length ? ollamaModels : [defaultOllama], defaultOllama);
-  setStatus("Listening");
+  setAppState("listening");
 };
 
 loadModels()
@@ -1193,7 +1225,7 @@ loadModels()
   .catch((err) => {
     console.error(err);
     setBadge("err", "Error");
-    setStatus("Listening");
+    setAppState("listening");
     showError(String(err));
   });
 
@@ -1218,9 +1250,12 @@ adminTokenInput.addEventListener("keydown", async (ev) => {
 
 replyAudio.addEventListener("ended", () => {
   isReplyPlaying = false;
-  setBadge("", "Idle");
-  setStatus("Listening");
+  setAppState("idle");
   scheduleListenModeAutoStart("tts-ended");
+});
+
+replyAudio.addEventListener("play", () => {
+  autoplayBanner.style.display = "none";
 });
 
 replyAudio.addEventListener("pause", () => {
@@ -1267,7 +1302,7 @@ function cleanupRecordingResources() {
 
 function canStartListenModeRecording() {
   return (
-    !!listenModeChk.checked &&
+    (!!listenModeChk.checked || demoModeEnabled) &&
     !uiBusy &&
     !isReplyPlaying &&
     (!mediaRecorder || mediaRecorder.state === "inactive")
@@ -1280,15 +1315,14 @@ function scheduleListenModeAutoStart(reason) {
     listenAutoStartTimer = null;
   }
   if (!canStartListenModeRecording()) return;
-  setStatus("Listening");
-  setBadge("warn", "Listen");
+  setAppState("listening");
   listenAutoStartTimer = setTimeout(async () => {
     if (!canStartListenModeRecording()) return;
     try {
       await startRecording();
     } catch (err) {
       setBadge("err", "Error");
-      setStatus("Listening");
+      setAppState("listening");
       showError(`Listen mode start failed (${reason}): ${String(err)}`);
       cleanupRecordingResources();
     }
@@ -1376,8 +1410,7 @@ async function startRecording() {
     return;
   }
   showError("");
-  setBadge("live", "Rec");
-  setStatus("Recording");
+  setAppState("recording");
 
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   currentStream = stream;
@@ -1418,8 +1451,7 @@ async function startRecording() {
       recordedBlob = null;
       previewAudio.src = "";
       btnSend.disabled = true;
-      setBadge("warn", "Idle");
-      setStatus("Listening");
+      setAppState("listening");
       showError("No speech detected within timeout. Try again.");
       scheduleListenModeAutoStart("no-speech");
       return;
@@ -1431,12 +1463,10 @@ async function startRecording() {
 
     const stoppedByAutomation = stopReason === "silence" || stopReason === "max_record";
     if (autoStopChk.checked && autoSendChk.checked && stoppedByAutomation) {
-      setBadge("warn", "Ready");
-      setStatus("Sending");
+      setAppState("sending");
       await sendRecording();
     } else {
-      setBadge("warn", "Ready");
-      setStatus("Listening");
+      setAppState("listening");
       scheduleListenModeAutoStart("record-stop");
     }
   };
@@ -1456,7 +1486,7 @@ btnRecord.onclick = async () => {
   } catch (err) {
     console.error(err);
     setBadge("err", "Error");
-    setStatus("Listening");
+    setAppState("listening");
     showError(`Mic error: ${err?.name || ""} ${err?.message || err}`);
     cleanupRecordingResources();
   }
@@ -1468,7 +1498,7 @@ btnStop.onclick = () => {
     mediaRecorder.stop();
     btnRecord.disabled = false;
     btnStop.disabled = true;
-    setStatus("Listening");
+    setAppState("listening");
   }
 };
 
@@ -1484,8 +1514,7 @@ btnClear.onclick = () => {
   sessionId = "";
 
   btnSend.disabled = true;
-  setBadge("", "Idle");
-  setStatus("Listening");
+  setAppState("idle");
   showError("");
   refreshIdentityPills();
   scheduleListenModeAutoStart("clear");
@@ -1603,8 +1632,7 @@ async function sendRecording() {
   }
 
   setBusy(true);
-  setBadge("warn", "Work");
-  setStatus("Sending");
+  setAppState("sending");
   showError("");
 
   try {
@@ -1648,7 +1676,7 @@ async function sendRecording() {
           backendSel.value = "ollama";
           backendSel.onchange?.();
           modelSel.value = "qwen2.5:3b";
-          setStatus("Thinking");
+          setAppState("thinking");
           continue;
         }
 
@@ -1665,8 +1693,7 @@ async function sendRecording() {
       }
       renderVoiceResult(data);
 
-      setBadge("warn", "Think");
-      setStatus("Thinking");
+      setAppState("thinking");
 
       const tts = await fetch("/tts/tts", {
         method: "POST",
@@ -1678,15 +1705,15 @@ async function sendRecording() {
       const wavBlob = await tts.blob();
       isReplyPlaying = false;
       replyAudio.src = URL.createObjectURL(wavBlob);
-      setBadge("live", "Speak");
-      setStatus("Speaking");
+      setAppState("speaking");
+      autoplayBanner.style.display = "none";
       try {
         isReplyPlaying = true;
         await replyAudio.play();
       } catch (_) {
         isReplyPlaying = false;
-        setBadge("", "Idle");
-        setStatus("Listening");
+        autoplayBanner.style.display = "block";
+        setAppState("listening");
         scheduleListenModeAutoStart("tts-play-blocked");
       }
 
@@ -1696,7 +1723,7 @@ async function sendRecording() {
   } catch (err) {
     console.error(err);
     setBadge("err", "Error");
-    setStatus("Listening");
+    setAppState("listening");
     clearLatency();
     showError(String(err));
   } finally {
@@ -1714,6 +1741,7 @@ applyDebugPanelVisibility();
 syncHandsfreeControls();
 updateAdminControls();
 resetOutputView();
+setAppState("idle");
 </script>
 </body>
 </html>

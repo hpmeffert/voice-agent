@@ -1,4 +1,4 @@
-# Benutzer Dokumentation (V7.5.0)
+# Benutzer Dokumentation (V7.6.0)
 
 Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einstellung hat.
 
@@ -58,6 +58,19 @@ Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einste
 - Wirkung:
   - Im Alltag lesen Sie nur `Transcript` und `Answer`.
   - Fuer Technik-Checks nutzen Sie `Debug JSON` und die Latenzen.
+
+## Status-Phasen (V7.6.0)
+- `idle`: bereit, keine aktive Aufnahme.
+- `recording`: Mikrofonaufnahme laeuft.
+- `sending`: Audio wird an die API gesendet.
+- `thinking`: STT/LLM verarbeitet die Anfrage.
+- `speaking`: TTS-Antwort wird abgespielt.
+- `listening`: wartet auf naechste Spracheingabe.
+
+## Autoplay-Hinweis
+- Manche Browser blockieren Auto-Play.
+- Dann erscheint ein Banner mit Hinweis auf manuellen `Play`-Klick.
+- Nach einem erfolgreichen manuellen Klick verschwindet der Hinweis.
 
 ## Exportfunktionen
 - `CRM Export` Toggle:
