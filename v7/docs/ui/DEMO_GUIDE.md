@@ -1,4 +1,4 @@
-# Demo Guide (V7.2.0)
+# Demo Guide (V7.3.0)
 
 Ziel: Interesse wecken, einen klaren Spannungsbogen aufbauen und die Kernfunktionen in 5-8 Minuten zeigen.
 
@@ -7,7 +7,7 @@ Stellen Sie sich mal vor, ein Kunde ruft an und erwartet sofortige, natuerliche 
 
 1. **Einstieg (Neugier)**
 - Starten Sie mit: "Was waere, wenn unser Agent einfach zuhoert, versteht und nahtlos antwortet?"
-- Zeigen Sie das UI und die Klarheit von Transcript/Answer.
+- Zeigen Sie das UI und die Klarheit von `Transcript`/`Answer` statt Roh-JSON.
 
 2. **Momentum (Aha-Moment)**
 - Aktivieren Sie `Listen Mode`.
@@ -24,11 +24,17 @@ Stellen Sie sich mal vor, ein Kunde ruft an und erwartet sofortige, natuerliche 
   - ffmpeg-Konvertierung nach WAV vor STT
 - Zeigen Sie einen Fehlerfall (ungultige Datei) und dass die UI strukturierte JSON-Fehler bekommt statt HTML.
 
-4. **Kontrolle (Betriebssicherheit)**
+4. **Transparenz (Performance sichtbar machen)**
+- Oeffnen Sie den Bereich unter dem Ergebnis:
+  - `Audio Read`, `STT`, `LLM`, `TTS`, `Total`
+- Erklaeren Sie kurz den Nutzen:
+  - "So sehen wir live, wo Zeit verbraucht wird, und koennen gezielt optimieren."
+
+5. **Kontrolle (Betriebssicherheit)**
 - Zeigen Sie Session/User-Pills und dass Verlauf in derselben Session erhalten bleibt.
 - Optional: Transcript/Protocol Download als Nachweis fuer Dokumentation und Nachvollziehbarkeit.
 
-5. **Abschluss (Nutzen klar machen)**
+6. **Abschluss (Nutzen klar machen)**
 - Formulierungsvorschlag:
   - "Wir zeigen nicht nur einen Voice-Chat, sondern einen robusten Gespraechsfluss, der fuer echte Nutzung vorbereitet ist."
 

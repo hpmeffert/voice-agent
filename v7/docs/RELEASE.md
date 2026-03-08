@@ -3,7 +3,30 @@
 Diese Seite enthaelt die konsolidierten Release Notes von `v7.0.0` bis zur aktuellen Version.
 
 ## Aktuell
-- Version: `v7.2.0`
+- Version: `v7.3.0`
+
+## V7.3.0
+### Highlights
+- Ergebnisanzeige ist klar gegliedert in Transcript, Answer und Metrics.
+- Rohdaten bleiben im einklappbaren `Debug JSON` erhalten.
+- Demo-Dokumentation erklaert die Latenzwerte fuer Praesentationen.
+
+### Added
+- Sichtbares Metrics-Panel:
+  - `audio_read_ms`
+  - `stt_ms`
+  - `llm_ms`
+  - `tts_ms`
+  - `total_ms`
+- Kollabierbarer Bereich `Debug JSON`.
+
+### Changed
+- Hauptausgabe priorisiert lesbaren Inhalt statt Rohdaten.
+- `metrics`-Objekt wird als bevorzugtes API-Format genutzt (abwaertskompatibel).
+
+### Fixed
+- Verwechslungsgefahr durch rohe Escape-Ausgaben im Hauptbereich reduziert.
+- Klarere Trennung zwischen Nutzeransicht und Entwickler-Diagnose.
 
 ## V7.2.0
 ### Highlights
