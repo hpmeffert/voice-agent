@@ -2,6 +2,7 @@
 
 COMPOSE_FILE = docker/compose.sidecar.yml
 V7_COMPOSE_FILE = v7/docker/compose.dev.yml
+V8_COMPOSE_FILE = v8/docker/compose.dev.yml
 PROJECT_DIR = $(CURDIR)
 BASE_BRANCH = release/v5.4-azure-stable
 
@@ -9,6 +10,7 @@ BASE_BRANCH = release/v5.4-azure-stable
 .PHONY: up-d wait - up down restart logs ps rebuild web-rebuild api-rebuild piper-rebuild health
 .PHONY: v7-up v7-down v7-restart v7-ps v7-logs v7-health v7-lint v7-doc-check v7-smoke v7-test v7-ci
 .PHONY: v7-pr v7-tag v7-release v7-post-merge
+.PHONY: v8-up v8-down v8-ps v8-health v8-lint v8-doc-check v8-smoke v8-test
 
 up-d:
 	docker compose --env-file .env -f $(COMPOSE_FILE) up -d --build --remove-orphans
@@ -125,6 +127,49 @@ v7-smoke:
 v7-test: v7-up v7-health v7-smoke
 
 v7-ci: v7-lint v7-doc-check v7-test
+
+# ----------------------------
+# V8 automation
+# ----------------------------
+v8-up:
+	docker compose --project-directory "$(PROJECT_DIR)" -f $(V8_COMPOSE_FILE) up -d --build
+
+v8-down:
+	docker compose --project-directory "$(PROJECT_DIR)" -f $(V8_COMPOSE_FILE) down --remove-orphans
+
+v8-ps:
+	docker compose --project-directory "$(PROJECT_DIR)" -f $(V8_COMPOSE_FILE) ps
+
+v8-health:
+	@echo "Checking V8 endpoints (retry up to 120x)..."
+	@for i in $$(seq 1 120); do \
+	  ok=1; \
+	  curl -fsS --max-time 2 http://localhost:8002/health >/dev/null || ok=0; \
+	  curl -fsS --max-time 2 http://localhost:8082/api/health >/dev/null || ok=0; \
+	  curl -fsS --max-time 2 http://localhost:5004/health >/dev/null || ok=0; \
+	  if [ $$ok -eq 1 ]; then echo "V8 OK"; exit 0; fi; \
+	  echo "V8 not ready ($$i/120) ..."; sleep 1; \
+	done; \
+	echo "V8 health check failed"; \
+	docker compose --project-directory "$(PROJECT_DIR)" -f $(V8_COMPOSE_FILE) ps || true; \
+	exit 1
+
+v8-lint:
+	PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v8/docker/api/app.py
+	PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v8/docker/api/event_bus.py
+	PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v8/docker/piper/app.py
+	PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v8/scripts/check_docs.py
+	PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v8/scripts/test_event_bus.py
+
+v8-doc-check:
+	python3 v8/scripts/check_docs.py
+
+v8-smoke:
+	@curl -sS http://localhost:8082/api/health
+	@curl -sS http://localhost:8082/api/eventbus/health
+	@python3 v8/scripts/test_event_bus.py
+
+v8-test: v8-up v8-health v8-doc-check v8-smoke
 
 # Usage:
 # make v7-pr VERSION=7.3.0

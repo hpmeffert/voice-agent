@@ -1,0 +1,21 @@
+# Gesprächsprotokoll (Demo)
+
+**Datum:** {{ header.date }} ({{ header.weekday }})  
+**Uhrzeit:** {{ header.time }} ({{ header.timezone }})  
+**Caller/User:** {{ header.user_id }}  
+**Session:** {{ header.session_id }}  
+**Backend/Model:** {{ header.backend or "n/a" }} / {{ header.model or "n/a" }}  
+**Sprache:** {{ header.lang or "n/a" }}
+
+---
+
+## Verlauf
+{% for m in messages %}
+### {{ m.ts }} — {{ m.role }}
+{{ m.text }}
+
+{% endfor %}
+---
+
+**Export erstellt:** {{ footer.generated_at }}  
+**Version:** {{ footer.export_version }}
