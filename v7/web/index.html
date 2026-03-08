@@ -296,7 +296,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V7.2.0</h1>
+        <h1>Voice Agent V7.5.0</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
@@ -341,11 +341,16 @@
           <div class="row" style="margin-bottom:10px;">
             <span class="pill" id="sessionPill">Session: -</span>
             <span class="pill" id="userPill">User: -</span>
-            <label class="muted" title="Enable or disable transcript export for this user">
+            <label id="crmExportLabel" class="muted" title="Enable or disable transcript export for this user">
               CRM Export
               <input id="crmExportToggle" type="checkbox" />
             </label>
             <span class="muted" id="crmExportHint"></span>
+            <label id="demoModeLabel" class="muted" title="Admin demo loop: forces listen mode on">
+              Demo Mode
+              <input id="demoMode" type="checkbox" />
+            </label>
+            <span class="muted" id="demoModeHint"></span>
           </div>
 
           <div class="controlGrid">
@@ -371,6 +376,10 @@
 
             <label class="muted">Max recording seconds
               <input id="maxRecordSec" type="number" min="5" max="120" step="1" value="45" />
+            </label>
+
+            <label id="debugPanelLabel" class="muted">Debug panel
+              <input id="debugPanelToggle" type="checkbox" checked />
             </label>
           </div>
 
@@ -412,6 +421,9 @@
           <h3>Spoken reply (Piper)</h3>
           <audio id="audioReply" controls></audio>
           <div class="muted">If autoplay is blocked, click play once manually.</div>
+          <div id="demoGuideBanner" class="muted" style="margin-top:8px;display:none;">
+            Demo Mode aktiv: Der Agent hoert automatisch weiter. Tipp: kurze Fragen stellen, dann 1-2 Sekunden Pause machen.
+          </div>
         </div>
       </div>
 
@@ -446,7 +458,7 @@
             </div>
           </div>
 
-          <details class="debugBox">
+          <details id="debugBox" class="debugBox">
             <summary>Debug JSON</summary>
             <pre id="debugJson">-</pre>
           </details>
@@ -484,6 +496,8 @@ let isReplyPlaying = false;
 let listenAutoStartTimer = null;
 let settingsSaveTimer = null;
 let applyingUserSettings = false;
+let demoModeEnabled = false;
+let debugPanelEnabled = true;
 
 const DEFAULT_VOICE_RMS_THRESHOLD = 0.012;
 const MIN_SPEECH_MS = 250;
@@ -517,6 +531,7 @@ const btnSend = el("btnSend");
 const btnClear = el("btnClear");
 const btnExport = el("btnExport");
 const btnProtocol = el("btnProtocol");
+const debugBoxEl = el("debugBox");
 
 const backendSel = el("backend");
 const modelSel = el("model");
@@ -537,6 +552,13 @@ const exportFormatSel = el("exportFormat");
 const exportStatusEl = el("exportStatus");
 const crmExportToggle = el("crmExportToggle");
 const crmExportHint = el("crmExportHint");
+const crmExportLabel = el("crmExportLabel");
+const demoModeLabel = el("demoModeLabel");
+const demoModeChk = el("demoMode");
+const demoModeHint = el("demoModeHint");
+const demoGuideBanner = el("demoGuideBanner");
+const debugPanelLabel = el("debugPanelLabel");
+const debugPanelToggle = el("debugPanelToggle");
 const protocolFormatSel = el("protocolFormat");
 const protocolStatusEl = el("protocolStatus");
 
@@ -551,6 +573,8 @@ const SESSION_KEY = "voice_agent_session_id";
 const USER_KEY = "voice_agent_user_id";
 const THEME_KEY = "voice_agent_theme_mode";
 const ADMIN_TOKEN_KEY = "voice_agent_admin_token";
+const DEMO_MODE_KEY = "voice_agent_demo_mode";
+const DEBUG_PANEL_KEY = "voice_agent_debug_panel";
 
 let sessionId = localStorage.getItem(SESSION_KEY) || "";
 let userId = localStorage.getItem(USER_KEY) || "";
@@ -563,9 +587,12 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v7.2.0";
+let uiVersionText = "v7.5.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
+
+demoModeEnabled = localStorage.getItem(DEMO_MODE_KEY) === "1";
+debugPanelEnabled = localStorage.getItem(DEBUG_PANEL_KEY) !== "0";
 
 function shortId(value) {
   if (!value) return "-";
@@ -663,26 +690,33 @@ function setBusy(isBusy) {
   btnClear.disabled = isBusy;
   backendSel.disabled = isBusy;
   modelSel.disabled = isBusy;
-  crmExportToggle.disabled = isBusy || !crmExportGlobalEnabled;
+  crmExportToggle.disabled = isBusy || !crmExportGlobalEnabled || !uiAdmin;
   autoStopChk.disabled = isBusy;
   autoSendChk.disabled = isBusy || !autoStopChk.checked;
-  listenModeChk.disabled = isBusy;
+  listenModeChk.disabled = isBusy || demoModeEnabled;
+  demoModeChk.disabled = isBusy || !uiAdmin;
+  debugPanelToggle.disabled = isBusy || !uiAdmin;
   silenceMsInput.disabled = isBusy || !autoStopChk.checked;
   voiceThresholdInput.disabled = isBusy || !autoStopChk.checked;
   maxRecordSecInput.disabled = isBusy || !autoStopChk.checked;
   updateExportUi();
   updateProtocolUi();
   syncHandsfreeControls();
+  updateAdminControls();
 }
 
 function updateExportUi() {
   const hasSession = !!sessionId;
   transcriptRow.style.display = hasSession ? "flex" : "none";
   crmExportToggle.checked = !!crmExportUserEnabled;
+  if (!uiAdmin) {
+    crmExportHint.textContent = "Admin-only setting";
+    crmExportToggle.disabled = true;
+  }
   if (!crmExportGlobalEnabled) {
     crmExportHint.textContent = "Globally disabled by server";
     crmExportToggle.disabled = true;
-  } else {
+  } else if (uiAdmin) {
     crmExportHint.textContent = crmExportUserEnabled ? "Enabled for this user" : "Disabled for this user";
     crmExportToggle.disabled = uiBusy;
   }
@@ -782,7 +816,10 @@ document.addEventListener("keydown", (ev) => {
 });
 
 function syncHandsfreeControls() {
-  const listenMode = !!listenModeChk.checked;
+  const listenMode = !!listenModeChk.checked || demoModeEnabled;
+  if (demoModeEnabled) {
+    listenModeChk.checked = true;
+  }
   if (listenMode) {
     autoStopChk.checked = true;
     autoSendChk.checked = true;
@@ -790,9 +827,34 @@ function syncHandsfreeControls() {
   const enabled = !!autoStopChk.checked;
   autoStopChk.disabled = uiBusy || listenMode;
   autoSendChk.disabled = uiBusy || listenMode || !enabled;
+  listenModeChk.disabled = uiBusy || demoModeEnabled;
   silenceMsInput.disabled = uiBusy || !enabled;
   voiceThresholdInput.disabled = uiBusy || !enabled;
   maxRecordSecInput.disabled = uiBusy || !enabled;
+}
+
+function applyDebugPanelVisibility() {
+  debugBoxEl.style.display = debugPanelEnabled ? "block" : "none";
+  debugPanelToggle.checked = debugPanelEnabled;
+}
+
+function updateAdminControls() {
+  const showAdmin = !!uiAdmin;
+  crmExportLabel.style.display = showAdmin ? "inline-flex" : "none";
+  crmExportHint.style.display = showAdmin ? "inline" : "none";
+  demoModeLabel.style.display = showAdmin ? "inline-flex" : "none";
+  demoModeHint.style.display = showAdmin ? "inline" : "none";
+  debugPanelLabel.style.display = showAdmin ? "inline-flex" : "none";
+  if (!showAdmin) {
+    demoModeEnabled = false;
+    localStorage.removeItem(DEMO_MODE_KEY);
+    demoModeChk.checked = false;
+    demoModeHint.textContent = "";
+    debugPanelEnabled = true;
+    localStorage.removeItem(DEBUG_PANEL_KEY);
+    applyDebugPanelVisibility();
+  }
+  demoGuideBanner.style.display = demoModeEnabled && showAdmin ? "block" : "none";
 }
 
 autoStopChk.onchange = () => {
@@ -808,10 +870,49 @@ autoStopChk.onchange = () => {
 };
 
 listenModeChk.onchange = () => {
+  if (demoModeEnabled) {
+    listenModeChk.checked = true;
+    return;
+  }
   syncHandsfreeControls();
   if (applyingUserSettings) return;
   queueSaveUserSettings({ listen_mode_default: !!listenModeChk.checked });
   scheduleListenModeAutoStart("listen-mode-toggle");
+};
+
+demoModeChk.onchange = () => {
+  if (!uiAdmin) {
+    demoModeChk.checked = false;
+    return;
+  }
+  demoModeEnabled = !!demoModeChk.checked;
+  if (demoModeEnabled) {
+    listenModeChk.checked = true;
+    autoStopChk.checked = true;
+    autoSendChk.checked = true;
+    demoModeHint.textContent = "Demo loop active";
+    localStorage.setItem(DEMO_MODE_KEY, "1");
+  } else {
+    demoModeHint.textContent = "";
+    localStorage.removeItem(DEMO_MODE_KEY);
+  }
+  syncHandsfreeControls();
+  updateAdminControls();
+  scheduleListenModeAutoStart("demo-mode-toggle");
+};
+
+debugPanelToggle.onchange = () => {
+  if (!uiAdmin) {
+    debugPanelToggle.checked = true;
+    return;
+  }
+  debugPanelEnabled = !!debugPanelToggle.checked;
+  if (debugPanelEnabled) {
+    localStorage.removeItem(DEBUG_PANEL_KEY);
+  } else {
+    localStorage.setItem(DEBUG_PANEL_KEY, "0");
+  }
+  applyDebugPanelVisibility();
 };
 
 silenceMsInput.onchange = () => {
@@ -915,6 +1016,7 @@ function updateMenuUi() {
   adminGuideItem.style.display = "block";
   menuVersion.textContent = `Version: ${uiVersionText}`;
   adminTokenInput.value = adminToken;
+  updateAdminControls();
 }
 
 async function loadModels() {
@@ -951,7 +1053,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v7.2.0";
+    const ver = cfg?.ui?.version || "v7.5.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
   } catch (_) {
@@ -959,7 +1061,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v7.2.0";
+    uiVersionText = "v7.5.0";
   }
   await loadWhoAmI();
   recomputeCrmExportEnabled();
@@ -1127,6 +1229,10 @@ replyAudio.addEventListener("pause", () => {
 });
 
 crmExportToggle.onchange = async () => {
+  if (!uiAdmin) {
+    crmExportToggle.checked = crmExportUserEnabled;
+    return;
+  }
   const nextValue = !!crmExportToggle.checked;
   try {
     await saveUserPrefs(nextValue);
@@ -1602,7 +1708,11 @@ btnSend.onclick = async () => {
   await sendRecording();
 };
 
+demoModeChk.checked = demoModeEnabled;
+if (demoModeEnabled) demoModeHint.textContent = "Demo loop active";
+applyDebugPanelVisibility();
 syncHandsfreeControls();
+updateAdminControls();
 resetOutputView();
 </script>
 </body>

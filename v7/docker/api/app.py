@@ -23,7 +23,7 @@ from starlette.background import BackgroundTask
 
 from protocol_renderer import render_protocol
 
-app = FastAPI(title="Voice Agent API V7.2.0")
+app = FastAPI(title="Voice Agent API V7.5.0")
 
 # ----------------------------
 # Config / ENV
@@ -73,7 +73,7 @@ MAX_EXPORT_MESSAGES = int(os.getenv("MAX_EXPORT_MESSAGES", "200"))
 MAX_EXPORT_BYTES = int(os.getenv("MAX_EXPORT_BYTES", str(1_500_000)))
 ADMIN_DEV_MODE = os.getenv("ADMIN_DEV_MODE", "0").strip() == "1"
 ADMIN_UI_TOKEN = os.getenv("ADMIN_UI_TOKEN", "").strip()
-UI_VERSION = os.getenv("UI_VERSION", "v7.4.0").strip() or "v7.4.0"
+UI_VERSION = os.getenv("UI_VERSION", "v7.5.0").strip() or "v7.5.0"
 UI_BUILD = os.getenv("UI_BUILD", "").strip()
 LISTEN_MODE_DEFAULT = os.getenv("LISTEN_MODE_DEFAULT", "0").strip().lower() in {"1", "true", "yes", "on"}
 LISTEN_SILENCE_MS_DEFAULT = int(os.getenv("LISTEN_SILENCE_MS_DEFAULT", "1300"))
@@ -426,7 +426,7 @@ def build_export_payload(
     }
 
     json_payload = {
-        "version": "v7.4.0",
+        "version": "v7.5.0",
         "session": {
             "session_id": session.get("_id"),
             "user_id": session.get("user_id"),
@@ -1451,7 +1451,7 @@ def download_protocol(
             "format": format or CRM_PROTOCOL_FORMAT,
             "template": CRM_PROTOCOL_TEMPLATE,
             "tz": tz,
-            "export_version": "v7.4.0",
+            "export_version": "v7.5.0",
         },
     )
 

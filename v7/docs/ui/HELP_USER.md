@@ -1,4 +1,4 @@
-# Benutzer Dokumentation (V7.3.0)
+# Benutzer Dokumentation (V7.5.0)
 
 Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einstellung hat.
 
@@ -39,6 +39,15 @@ Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einste
   - Hoeher = weniger empfindlich gegen Hintergrundgeraeusche.
 - `Max recording seconds`:
   - Wirkung: Sicherheitslimit fuer lange Aufnahmen.
+
+## Admin-only Demo Steuerung
+- `Demo Mode` (nur Admin):
+  - Wirkung: startet einen stabilen Demo-Loop (`listen -> send -> speak -> listen`).
+  - Listen Mode wird dabei automatisch erzwungen.
+- `Debug panel` (nur Admin):
+  - Wirkung: blendet `Debug JSON` ein/aus, damit Demos fuer Publikum sauberer wirken.
+- `CRM Export` Toggle (nur Admin):
+  - Wirkung: steuert Transcript-Exportfahigkeit fuer den User.
 
 ## Ergebnisbereich
 - `Transcript`: erkannter gesprochener Text.

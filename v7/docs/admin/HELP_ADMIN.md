@@ -1,4 +1,4 @@
-# Admin Dokumentation (V7.4.0)
+# Admin Dokumentation (V7.5.0)
 
 Diese Seite ist fuer Admins geschrieben.
 Ziel: schnell starten, sauber testen, alle Einstellungen verstehen.
@@ -88,6 +88,17 @@ curl -L -o protocol.md "http://localhost:8081/api/protocol/<SESSION_ID>?user_id=
 Erwartung:
 - Export nur fuer eigene Session/User-Kombination (Ownership-Check).
 - Markdown/JSON enthalten geordnete Turns.
+
+### Schritt H: Demo-Admin-UI pruefen
+1. Browser auf `http://localhost:8081` oeffnen.
+2. Sicherstellen, dass Admin erkannt ist (`ADMIN_DEV_MODE=1` oder gueltiger Token).
+3. Pruefen, dass sichtbar sind:
+   - `CRM Export` Toggle
+   - `Demo Mode` Toggle
+   - `Debug panel` Toggle
+4. `Demo Mode` aktivieren:
+   - Listen Mode muss erzwungen sein.
+   - Demo-Hinweisbanner muss sichtbar sein.
 
 ## 5) Alle einstellbaren Parameter (Admin)
 

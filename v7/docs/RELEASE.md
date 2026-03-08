@@ -3,7 +3,26 @@
 Diese Seite enthaelt die konsolidierten Release Notes von `v7.0.0` bis zur aktuellen Version.
 
 ## Aktuell
-- Version: `v7.4.0`
+- Version: `v7.5.0`
+
+## V7.5.0
+### Highlights
+- Admin-only Demo Mode fuer gefuehrte Hands-free Praesentationen.
+- Admin-only Debug-Panel Toggle fuer saubere/non-technical Demoansicht.
+
+### Added
+- `Demo Mode` Toggle:
+  - erzwingt Listen Mode
+  - aktiviert Auto-stop und Auto-send
+  - zeigt Demo-Hinweisbanner
+- `Debug panel` Toggle (Admin-only) zum Ein-/Ausblenden von `Debug JSON`.
+
+### Changed
+- CRM Export Toggle ist im UI jetzt ebenfalls Admin-only.
+- UI-Version-Defaults auf `v7.5.0` angehoben.
+
+### Fixed
+- Weniger Fehlbedienung bei Live-Demos durch klare Admin-Steuerung.
 
 ## V7.4.0
 ### Highlights
