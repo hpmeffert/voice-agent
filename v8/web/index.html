@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent V8.7.0</title>
+  <title>Voice Agent V8.8.0</title>
   <style>
     :root {
       --bg:#f4f7fb;
@@ -296,11 +296,11 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V8.7.0</h1>
+        <h1>Voice Agent V8.8.0</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
-        <button id="menuBtn" class="menuBtn" title="Help / Menu">Help</button>
+        <button id="menuBtn" class="menuBtn" title="Hilfe / Menu">Menu</button>
         <label class="muted" for="themeMode">Theme</label>
         <select id="themeMode">
           <option value="auto">Auto</option>
@@ -319,11 +319,11 @@
           <div id="menuVersion" class="menuHeader">Version: -</div>
           <input id="adminTokenInput" type="password" placeholder="Admin token (optional)" />
           <button id="adminTokenSave" class="menuItem" data-i18n="menu.admin_token">Admin Token speichern</button>
-          <button id="menuUserDocs" class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Help" data-i18n="menu.user_docs">Help</button>
+          <button id="menuUserDocs" class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Benutzer Handbuch" data-i18n="menu.user_docs">Benutzer Handbuch</button>
           <button id="menuDemoGuide" class="menuItem" data-help-doc="/docs/ui/DEMO_GUIDE.md" data-help-title="Demo Guide" data-i18n="menu.demo_guide">Demo Guide</button>
           <button id="adminGuideItem" class="menuItem" data-help-doc="/docs/admin/HELP_ADMIN.md" data-help-title="Admin Docs" data-i18n="menu.admin_docs">Admin Docs</button>
           <button id="adminSettingsMenuItem" class="menuItem" data-i18n="menu.admin_settings">Admin Settings</button>
-          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V8.7.0" data-i18n="menu.release_notes">Release Notes</button>
+          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V8.8.0" data-i18n="menu.release_notes">Release Notes</button>
         </div>
       </div>
     </div>
@@ -559,7 +559,7 @@
   <div id="helpModalBackdrop" class="modalBackdrop">
     <div class="modal" role="dialog" aria-modal="true" aria-label="Help and Demo Guide">
       <div class="modalHeader">
-        <b id="helpModalTitle">Help</b>
+        <b id="helpModalTitle">Benutzer Handbuch</b>
         <button id="helpCloseBtn">Close</button>
       </div>
       <div class="modalBody">
@@ -703,7 +703,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v8.1.0";
+let uiVersionText = "v8.8.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 let appState = "idle";
@@ -957,7 +957,7 @@ for (const item of document.querySelectorAll("[data-help-doc], [data-help-endpoi
     const docPath = item.getAttribute("data-help-doc");
     const endpoint = item.getAttribute("data-help-endpoint");
     const source = endpoint || docPath;
-    const title = item.getAttribute("data-help-title") || "Help";
+    const title = item.getAttribute("data-help-title") || "Benutzer Handbuch";
     menuPanel.classList.remove("show");
     openHelpModal(title);
     helpDocText.textContent = "Loading...";
@@ -1191,8 +1191,8 @@ async function loadHelpDoc(path) {
 }
 
 function openHelpModal(title) {
-  helpModalTitle.textContent = "Help";
-  helpDocTitle.textContent = title || "Help";
+  helpModalTitle.textContent = "Benutzer Handbuch";
+  helpDocTitle.textContent = title || "Benutzer Handbuch";
   helpDocText.textContent = "Loading...";
   helpModalBackdrop.classList.add("show");
 }
@@ -1302,7 +1302,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v8.1.0";
+    const ver = cfg?.ui?.version || "v8.8.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
     applyAdminSettingsForm(cfg?.admin_settings || {});
@@ -1311,7 +1311,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v8.1.0";
+    uiVersionText = "v8.8.0";
     applyAdminSettingsForm({});
   }
   await loadWhoAmI();

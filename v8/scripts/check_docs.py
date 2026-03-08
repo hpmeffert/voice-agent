@@ -15,6 +15,7 @@ required = [
     ROOT / "v8/docs/RELEASE.md",
     ROOT / "v8/docs/TEAM_QUICKSTART_V8_MAC.md",
     ROOT / "v8/docs/transport_channels.md",
+    ROOT / "v8/docs/SECURITY_BASELINE_MAC.md",
 ]
 
 for p in required:
@@ -46,14 +47,14 @@ if positions != sorted(positions):
     print("[V8-DOC-CHECK][FAIL] help menu order is invalid")
     sys.exit(1)
 
-for label in ["Admin Token speichern", "Help", "Demo Guide", "Admin Docs", "Release Notes"]:
+for label in ["Admin Token speichern", "Benutzer Handbuch", "Demo Guide", "Admin Docs", "Release Notes"]:
     if label not in html:
         print(f"[V8-DOC-CHECK][FAIL] missing menu label: {label}")
         sys.exit(1)
 
 checks = [
     (r"id=\"silenceMs\"[^\n]*value=\"1300\"", "silence default must be 1300"),
-    (r"Voice Agent V8\.", "header/title must show V8.x version"),
+    (r"Voice Agent V8\.8\.0", "header/title must show V8.8.0 version"),
 ]
 for pattern, msg in checks:
     if re.search(pattern, html) is None:
@@ -64,8 +65,13 @@ doc_rules = [
     (ROOT / "v8/docs/ui/HELP_USER.md", [r"^# Benutzer Handbuch", r"Beispiel", r"Funktion:"], "help user"),
     (ROOT / "v8/docs/ui/DEMO_GUIDE.md", [r"Story-Flow 1", r"Story-Flow 2"], "demo guide"),
     (ROOT / "v8/docs/admin/HELP_ADMIN.md", [r"Admin-Funktionen", r"Wofuer gut", r"Parameter", r"Release-Verweis"], "admin docs"),
-    (ROOT / "v8/docs/RELEASE.md", [r"V7\.0\.0", r"V8\.7\.0"], "release notes"),
+    (ROOT / "v8/docs/RELEASE.md", [r"V7\.0\.0", r"V8\.8\.0"], "release notes"),
     (ROOT / "v8/docs/transport_channels.md", [r"session\.<session_id>", r"handoff\.request", r"handoff\.accept"], "transport channels"),
+    (
+        ROOT / "v8/docs/SECURITY_BASELINE_MAC.md",
+        [r"MAX_AUDIO_BYTES", r"MAX_REQUEST_BYTES", r"RATE_LIMIT_WINDOW_SEC", r"RATE_LIMIT_MAX_REQUESTS", r"Content-Security-Policy"],
+        "security baseline",
+    ),
 ]
 for path, patterns, label in doc_rules:
     text = path.read_text(encoding="utf-8", errors="ignore")
@@ -96,7 +102,7 @@ if "/docs/admin/" in agent_html or "/docs/RELEASE" in agent_html or "/docs/ui/DE
     sys.exit(1)
 
 release = (ROOT / "v8/docs/RELEASE.md").read_text(encoding="utf-8", errors="ignore")
-for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0", "V8.3.0", "V8.4.0", "V8.5.0", "V8.6.0", "V8.7.0"]:
+for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0", "V8.3.0", "V8.4.0", "V8.5.0", "V8.6.0", "V8.7.0", "V8.8.0"]:
     if tag not in release:
         print(f"[V8-DOC-CHECK][FAIL] release history missing {tag}")
         sys.exit(1)

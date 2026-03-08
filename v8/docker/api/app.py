@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 import wave
+from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -28,7 +29,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v8.7.0"
+APP_VERSION = "v8.8.0"
 
 app = FastAPI(title=f"Voice Agent API {APP_VERSION}")
 
@@ -55,7 +56,10 @@ MONGO_DB = os.getenv("MONGO_DB", "voice_agent").strip() or "voice_agent"
 MESSAGE_RETENTION_DAYS = int(os.getenv("MESSAGE_RETENTION_DAYS", "30"))
 SESSION_RETENTION_DAYS = int(os.getenv("SESSION_RETENTION_DAYS", "90"))
 MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
+MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", str(2 * 1024 * 1024)))
 MAX_TEXT_CHARS = int(os.getenv("MAX_TEXT_CHARS", "8000"))
+RATE_LIMIT_WINDOW_SEC = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "10"))
+RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "25"))
 METRICS_RETENTION_DAYS = int(
     os.getenv(
         "METRICS_RETENTION_DAYS",
@@ -117,6 +121,9 @@ if DEFAULT_UI_LANG not in SUPPORTED_UI_LANGS:
     DEFAULT_UI_LANG = SUPPORTED_UI_LANGS[0]
 if not SUPPORTED_TTS_LANGS:
     SUPPORTED_TTS_LANGS = ["de", "en", "fr", "it", "es", "sv", "no", "fi"]
+MAX_REQUEST_BYTES = max(64 * 1024, MAX_REQUEST_BYTES)
+RATE_LIMIT_WINDOW_SEC = max(1, RATE_LIMIT_WINDOW_SEC)
+RATE_LIMIT_MAX_REQUESTS = max(5, RATE_LIMIT_MAX_REQUESTS)
 
 SYSTEM_PROMPT = (
     "Du bist ein hilfreicher, präziser Assistent. Antworte kurz, klar und korrekt. "
@@ -138,6 +145,8 @@ metrics_logs_col: Collection | None = None
 admin_settings_col: Collection | None = None
 ui_translations_col: Collection | None = None
 event_bus: EventBus | None = None
+rate_limit_lock = threading.Lock()
+rate_limit_buckets: dict[str, deque[float]] = defaultdict(deque)
 
 
 # ----------------------------
@@ -791,6 +800,58 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
+@app.middleware("http")
+async def security_baseline_middleware(request: Request, call_next):
+    path = request.url.path or "/"
+    method = request.method.upper()
+    client_ip = ""
+    if request.client and request.client.host:
+        client_ip = request.client.host
+    if not client_ip:
+        xff = request.headers.get("x-forwarded-for", "")
+        client_ip = (xff.split(",")[0].strip() if xff else "") or "unknown"
+
+    # Basic per-IP rate limit (memory-local, demo baseline).
+    exempt_paths = {
+        "/health",
+        "/openapi.json",
+        "/docs",
+        "/docs/",
+    }
+    if method != "OPTIONS" and path not in exempt_paths:
+        now_ts = time.monotonic()
+        window_start = now_ts - RATE_LIMIT_WINDOW_SEC
+        with rate_limit_lock:
+            bucket = rate_limit_buckets[client_ip]
+            while bucket and bucket[0] < window_start:
+                bucket.popleft()
+            if len(bucket) >= RATE_LIMIT_MAX_REQUESTS:
+                retry_after = max(1, int(bucket[0] + RATE_LIMIT_WINDOW_SEC - now_ts))
+                return JSONResponse(
+                    status_code=429,
+                    content={"error": "Rate limit exceeded", "detail": "Too many requests"},
+                    headers={"Retry-After": str(retry_after)},
+                )
+            bucket.append(now_ts)
+
+    # Request size baseline via Content-Length.
+    cl_raw = request.headers.get("content-length", "").strip()
+    if cl_raw:
+        try:
+            content_length = int(cl_raw)
+        except ValueError:
+            content_length = -1
+        if content_length > 0:
+            max_bytes = MAX_AUDIO_BYTES if path == "/voice" else MAX_REQUEST_BYTES
+            if content_length > max_bytes:
+                return JSONResponse(
+                    status_code=413,
+                    content={"error": "Payload too large", "detail": f"Max {max_bytes} bytes"},
+                )
+
+    return await call_next(request)
+
+
 # ----------------------------
 # Persistence helpers
 # ----------------------------
@@ -959,7 +1020,7 @@ def seed_ui_translations() -> None:
     docs = [
         {"_id": "app.title", "de": "Voice Agent", "en": "Voice Agent", "fr": "Agent Vocal", "it": "Agente Vocale", "es": "Agente de Voz"},
         {"_id": "menu.admin_token", "de": "Admin-Token speichern", "en": "Save Admin Token", "fr": "Enregistrer Token Admin", "it": "Salva Token Admin", "es": "Guardar Token Admin"},
-        {"_id": "menu.user_docs", "de": "Help", "en": "Help", "fr": "Aide", "it": "Aiuto", "es": "Ayuda"},
+        {"_id": "menu.user_docs", "de": "Benutzer Handbuch", "en": "User Handbook", "fr": "Manuel Utilisateur", "it": "Manuale Utente", "es": "Manual de Usuario"},
         {"_id": "menu.demo_guide", "de": "Demo-Leitfaden", "en": "Demo Guide", "fr": "Guide Demo", "it": "Guida Demo", "es": "Guia Demo"},
         {"_id": "menu.admin_docs", "de": "Admin-Dokumentation", "en": "Admin Docs", "fr": "Docs Admin", "it": "Documenti Admin", "es": "Docs Admin"},
         {"_id": "menu.admin_settings", "de": "Admin-Einstellungen", "en": "Admin Settings", "fr": "Parametres Admin", "it": "Impostazioni Admin", "es": "Configuracion Admin"},
@@ -1566,6 +1627,12 @@ def models():
         "tts": {
             "langs": SUPPORTED_TTS_LANGS,
         },
+        "security": {
+            "max_audio_bytes": MAX_AUDIO_BYTES,
+            "max_request_bytes": MAX_REQUEST_BYTES,
+            "rate_limit_window_sec": RATE_LIMIT_WINDOW_SEC,
+            "rate_limit_max_requests": RATE_LIMIT_MAX_REQUESTS,
+        },
     }
 
 
@@ -1945,6 +2012,12 @@ def config(user_id: str | None = Query(None)):
         "listen_mode_default": LISTEN_MODE_DEFAULT,
         "listen_silence_ms_default": int(listen_defaults.get("silence_ms", LISTEN_SILENCE_MS_DEFAULT)),
         "listen_threshold_default": float(listen_defaults.get("threshold", LISTEN_THRESHOLD_DEFAULT)),
+        "security": {
+            "max_audio_bytes": MAX_AUDIO_BYTES,
+            "max_request_bytes": MAX_REQUEST_BYTES,
+            "rate_limit_window_sec": RATE_LIMIT_WINDOW_SEC,
+            "rate_limit_max_requests": RATE_LIMIT_MAX_REQUESTS,
+        },
         "admin_settings": admin_settings,
         "ui_lang_default": DEFAULT_UI_LANG,
         "ui_langs_supported": SUPPORTED_UI_LANGS,

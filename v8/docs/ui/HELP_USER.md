@@ -1,4 +1,4 @@
-# Benutzer Handbuch (Help) - V8.7.0
+# Benutzer Handbuch - V8.8.0
 
 ## Wichtig
 - Diese Seite ist das **Benutzer Handbuch**.
