@@ -6,11 +6,21 @@ fail() {
   exit 1
 }
 
+has_pattern() {
+  local pattern="$1"
+  local file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -q "$pattern" "$file"
+  else
+    grep -Eq "$pattern" "$file"
+  fi
+}
+
 must_contain() {
   local file="$1"
   local pattern="$2"
   local msg="$3"
-  if ! rg -q "$pattern" "$file"; then
+  if ! has_pattern "$pattern" "$file"; then
     fail "$msg ($file, pattern: $pattern)"
   fi
 }
@@ -34,7 +44,7 @@ must_contain v7/web/index.html 'data-help-endpoint="/api/admin/docs/help"' 'Help
 must_contain v7/web/index.html 'data-help-doc="/docs/RELEASE.md"' 'Help menu: Release Notes link missing'
 
 # Silence threshold defaults
-must_contain v7/web/index.html 'id="silenceMs"[^\n]*value="1300"' 'Silence threshold default in UI must be 1300ms'
+must_contain v7/web/index.html 'id="silenceMs".*value="1300"' 'Silence threshold default in UI must be 1300ms'
 must_contain v7/web/index.html '\|\| 1300' 'Silence threshold fallback in UI must be 1300ms'
 must_contain v7/docker/api/app.py 'LISTEN_SILENCE_MS_DEFAULT.*"1300"' 'API default silence threshold must be 1300ms'
 
