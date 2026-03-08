@@ -1,4 +1,5 @@
 import asyncio
+import io
 import os
 import json
 import re
@@ -7,6 +8,7 @@ import tempfile
 import threading
 import time
 import uuid
+import wave
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -26,7 +28,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v8.3.0"
+APP_VERSION = "v8.4.0"
 
 app = FastAPI(title=f"Voice Agent API {APP_VERSION}")
 
@@ -260,6 +262,20 @@ def cleanup_paths(*paths: str | None) -> None:
                 os.remove(path)
             except OSError:
                 pass
+
+
+def wav_duration_ms(wav_bytes: bytes) -> int:
+    if not wav_bytes:
+        return 0
+    try:
+        with wave.open(io.BytesIO(wav_bytes), "rb") as wf:
+            fr = wf.getframerate()
+            frames = wf.getnframes()
+            if fr <= 0:
+                return 0
+            return max(0, int((frames / fr) * 1000))
+    except Exception:
+        return 0
 
 
 def run_ffmpeg_to_wav_16k_mono(input_path: str) -> str:
@@ -2602,6 +2618,7 @@ async def voice(
             os.close(fd2)
             with open(tts_wav_path, "wb") as wf:
                 wf.write(tts_resp.content)
+            tts_audio_duration_ms = wav_duration_ms(tts_resp.content)
             log_telemetry(
                 user_id=uid,
                 session_id=sid,
@@ -2623,6 +2640,7 @@ async def voice(
                     "X-User-Id": uid,
                     "X-Detected-Lang": (lang or ""),
                     "X-TTS-Lang": (tts_lang_selected or lang or ""),
+                    "X-TTS-Audio-Duration-Ms": str(tts_audio_duration_ms),
                     "X-Crm-Export-Enabled": "1" if crm_export_user_enabled else "0",
                     "X-Export-Generated": "1" if crm_export_user_enabled else "0",
                 },

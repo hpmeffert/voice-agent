@@ -1,4 +1,4 @@
-# Admin Docs (V8.3.0)
+# Admin Docs (V8.4.0)
 
 ## Verzeichnisse
 - API: `v8/docker/api/`
@@ -13,18 +13,17 @@
 docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml up -d --build
 ```
 
-## Session-Suche API (neu)
-- `GET /api/agent/sessions?status=active&limit=120`
-- Optional Filter:
-  - `user_id=<id>`
-  - `session_id=<id>`
-  - `q=<text>` (Teilstring auf Session/User)
+## Hands-free Tests (neu)
+1. Customer UI `8083` oeffnen, Listen Mode aktivieren.
+2. Drei Sprachrunden ohne manuelle Klicks durchlaufen.
+3. Prüfen, dass State sauber wechselt: `listening/recording/uploading/speaking`.
+4. Bei absichtlichem TTS-Fehler muss Loop stoppen (kein runaway).
 
-Beispiele:
+## Agent-Session-Suche API
 ```bash
-curl -s "http://localhost:8082/api/agent/sessions?status=active&user_id=test-user-820"
+curl -s "http://localhost:8082/api/agent/sessions?status=active&user_id=<USER_ID>"
 curl -s "http://localhost:8082/api/agent/sessions?status=active&session_id=<SESSION_ID>"
-curl -s "http://localhost:8082/api/agent/sessions?status=active&q=820"
+curl -s "http://localhost:8082/api/agent/sessions?status=active&q=<TEXT>"
 ```
 
 ## Komponentencheck
@@ -38,9 +37,9 @@ curl -s "http://localhost:8082/api/agent/sessions?status=active&q=820"
 - Quelle: `v8/docker/api/app.py`, Funktion `seed_ui_translations()`.
 - Neue Sprache:
 1. `SUPPORTED_UI_LANGS` erweitern.
-2. Keys in `seed_ui_translations()` ergaenzen.
-3. Sprachwahl in `v8/web/index.html` aktualisieren.
+2. Keys in `seed_ui_translations()` pflegen.
+3. Sprachwahl in `v8/web/index.html` ergaenzen.
 
 ## Pflicht pro Release
-- Help/User/Demo/Admin/Release Docs aktualisieren.
+- Docs (User/Demo/Admin/Release) aktualisieren.
 - `python3 v8/scripts/check_docs.py` muss gruen sein.
