@@ -1,4 +1,4 @@
-# Demo Guide (V7.8.0)
+# Demo Guide (V7.9.0)
 
 Ziel: Interesse wecken, einen klaren Spannungsbogen aufbauen und die Kernfunktionen in 5-8 Minuten zeigen.
 
@@ -62,6 +62,10 @@ Stellen Sie sich mal vor, ein Kunde ruft an und erwartet sofortige, natuerliche 
 11. Admin-Monitoring-Moment:
    - `Admin Metrics` refreshen
    - live erklaeren, wie STT/LLM/TTS-Zeiten als Trends sichtbar werden.
+12. Admin-Steuerung-Moment:
+   - `Admin Settings` oeffnen
+   - z.B. `Metrics retention` aendern und speichern
+   - zeigen, dass die Einstellungen nach Reload erhalten bleiben.
 
 ## Wirkungstexte fuer Praesentation
 - "Stellen Sie sich vor, der Agent reagiert wie ein echter Dialogpartner."

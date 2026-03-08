@@ -296,7 +296,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V7.8.0</h1>
+        <h1>Voice Agent V7.9.0</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
@@ -314,6 +314,7 @@
           <button class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Benutzer Dokumentation">Benutzer Dokumentation</button>
           <button class="menuItem" data-help-doc="/docs/ui/DEMO_GUIDE.md" data-help-title="Demo Guide">Demo Guide</button>
           <button id="adminGuideItem" class="menuItem" data-help-doc="/docs/admin/HELP_ADMIN.md" data-help-title="Admin Docs">Admin Docs</button>
+          <button id="adminSettingsMenuItem" class="menuItem">Admin Settings</button>
           <button class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V7">Release Notes</button>
         </div>
       </div>
@@ -395,6 +396,37 @@
             <label id="debugPanelLabel" class="muted">Debug panel
               <input id="debugPanelToggle" type="checkbox" checked />
             </label>
+          </div>
+
+          <div id="adminSettingsCard" class="latencyBox" style="display:none;">
+            <div class="muted" style="margin-bottom:6px;">Admin Settings</div>
+            <div class="controlGrid">
+              <label class="muted">Metrics retention (days)
+                <input id="adminRetentionDays" type="number" min="1" max="365" step="1" value="30" />
+              </label>
+              <label class="muted">Default silence (ms)
+                <input id="adminDefaultSilence" type="number" min="300" max="5000" step="100" value="1300" />
+              </label>
+              <label class="muted">Default threshold
+                <input id="adminDefaultThreshold" type="number" min="0.001" max="0.200" step="0.001" value="0.012" />
+              </label>
+              <label class="muted">Export template (md)
+                <input id="adminTemplatePath" type="text" value="/app/templates/exports/transcript_default.md.tpl" />
+              </label>
+              <label class="muted">CRM export enabled
+                <input id="adminToggleExport" type="checkbox" checked />
+              </label>
+              <label class="muted">CRM protocol enabled
+                <input id="adminToggleProtocol" type="checkbox" checked />
+              </label>
+              <label class="muted">Debug panel default
+                <input id="adminToggleDebugDefault" type="checkbox" checked />
+              </label>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button id="adminSettingsSave">Save Admin Settings</button>
+              <span id="adminSettingsStatus" class="muted">-</span>
+            </div>
           </div>
 
           <div class="row">
@@ -562,6 +594,16 @@ const adminMetricsPanel = el("adminMetricsPanel");
 const adminMetricsSummary = el("adminMetricsSummary");
 const adminMetricsRecent = el("adminMetricsRecent");
 const btnMetricsRefresh = el("btnMetricsRefresh");
+const adminSettingsCard = el("adminSettingsCard");
+const adminRetentionDays = el("adminRetentionDays");
+const adminDefaultSilence = el("adminDefaultSilence");
+const adminDefaultThreshold = el("adminDefaultThreshold");
+const adminTemplatePath = el("adminTemplatePath");
+const adminToggleExport = el("adminToggleExport");
+const adminToggleProtocol = el("adminToggleProtocol");
+const adminToggleDebugDefault = el("adminToggleDebugDefault");
+const adminSettingsSave = el("adminSettingsSave");
+const adminSettingsStatus = el("adminSettingsStatus");
 
 const backendSel = el("backend");
 const modelSel = el("model");
@@ -569,6 +611,7 @@ const themeSel = el("themeMode");
 const menuBtn = el("menuBtn");
 const menuPanel = el("menuPanel");
 const menuVersion = el("menuVersion");
+const adminSettingsMenuItem = el("adminSettingsMenuItem");
 const adminTokenInput = el("adminTokenInput");
 const adminTokenSave = el("adminTokenSave");
 const adminGuideItem = el("adminGuideItem");
@@ -618,7 +661,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v7.8.0";
+let uiVersionText = "v7.9.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 let appState = "idle";
@@ -759,6 +802,7 @@ function setBusy(isBusy) {
   listenModeChk.disabled = isBusy || demoModeEnabled;
   demoModeChk.disabled = isBusy || !uiAdmin;
   debugPanelToggle.disabled = isBusy || !uiAdmin;
+  adminSettingsSave.disabled = isBusy || !uiAdmin;
   silenceMsInput.disabled = isBusy || !autoStopChk.checked;
   voiceThresholdInput.disabled = isBusy || !autoStopChk.checked;
   maxRecordSecInput.disabled = isBusy || !autoStopChk.checked;
@@ -909,6 +953,7 @@ function updateAdminControls() {
   demoModeHint.style.display = showAdmin ? "inline" : "none";
   debugPanelLabel.style.display = showAdmin ? "inline-flex" : "none";
   adminMetricsPanel.style.display = showAdmin ? "block" : "none";
+  adminSettingsMenuItem.style.display = showAdmin ? "block" : "none";
   if (!showAdmin) {
     demoModeEnabled = false;
     localStorage.removeItem(DEMO_MODE_KEY);
@@ -919,8 +964,25 @@ function updateAdminControls() {
     applyDebugPanelVisibility();
     adminMetricsSummary.textContent = "-";
     adminMetricsRecent.textContent = "-";
+    adminSettingsCard.style.display = "none";
+    adminSettingsStatus.textContent = "-";
   }
   demoGuideBanner.style.display = demoModeEnabled && showAdmin ? "block" : "none";
+}
+
+function applyAdminSettingsForm(settings) {
+  const src = settings || {};
+  const listen = src.listen_defaults || {};
+  const templates = src.templates || {};
+  const toggles = src.feature_toggles || {};
+  adminRetentionDays.value = String(Number(src.retention_days || 30));
+  adminDefaultSilence.value = String(Number(listen.silence_ms || 1300));
+  const th = Number(listen.threshold || 0.012);
+  adminDefaultThreshold.value = Number.isFinite(th) ? th.toFixed(3) : "0.012";
+  adminTemplatePath.value = String(templates.crm_export_template_md || "/app/templates/exports/transcript_default.md.tpl");
+  adminToggleExport.checked = !!toggles.crm_export_enabled;
+  adminToggleProtocol.checked = !!toggles.crm_protocol_enabled;
+  adminToggleDebugDefault.checked = !!toggles.debug_panel_default;
 }
 
 autoStopChk.onchange = () => {
@@ -1146,15 +1208,17 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v7.8.0";
+    const ver = cfg?.ui?.version || "v7.9.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
+    applyAdminSettingsForm(cfg?.admin_settings || {});
   } catch (_) {
     crmExportGlobalEnabled = false;
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v7.8.0";
+    uiVersionText = "v7.9.0";
+    applyAdminSettingsForm({});
   }
   await loadWhoAmI();
   recomputeCrmExportEnabled();
@@ -1302,6 +1366,59 @@ adminTokenSave.onclick = async () => {
   await loadWhoAmI();
   updateMenuUi();
   await loadAdminMetrics();
+};
+
+adminSettingsMenuItem.onclick = async () => {
+  if (!uiAdmin) return;
+  menuPanel.classList.remove("show");
+  adminSettingsCard.style.display = adminSettingsCard.style.display === "none" ? "block" : "none";
+  if (adminSettingsCard.style.display === "block") {
+    adminSettingsStatus.textContent = "Loading...";
+    try {
+      const r = await fetch(`/api/admin/settings?user_id=${encodeURIComponent(userId)}`, {
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      if (!r.ok) throw new Error(`admin settings fetch failed: ${r.status}`);
+      const data = await r.json();
+      applyAdminSettingsForm(data?.settings || {});
+      adminSettingsStatus.textContent = "Loaded";
+    } catch (err) {
+      adminSettingsStatus.textContent = String(err);
+    }
+  }
+};
+
+adminSettingsSave.onclick = async () => {
+  if (!uiAdmin) return;
+  adminSettingsStatus.textContent = "Saving...";
+  try {
+    const payload = {
+      user_id: userId,
+      retention_days: Math.max(1, Math.min(365, Number(adminRetentionDays.value || 30))),
+      listen_silence_ms_default: Math.max(300, Math.min(5000, Number(adminDefaultSilence.value || 1300))),
+      listen_threshold_default: Math.max(0.001, Math.min(0.2, Number(adminDefaultThreshold.value || 0.012))),
+      crm_export_template_md: String(adminTemplatePath.value || "").trim(),
+      crm_export_enabled: !!adminToggleExport.checked,
+      crm_protocol_enabled: !!adminToggleProtocol.checked,
+      debug_panel_default: !!adminToggleDebugDefault.checked,
+    };
+    const r = await fetch("/api/admin/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      throw new Error(`admin settings save failed: ${r.status}`);
+    }
+    const data = await r.json();
+    applyAdminSettingsForm(data?.settings || {});
+    adminSettingsStatus.textContent = "Saved";
+    await loadConfig();
+    await loadAdminMetrics();
+  } catch (err) {
+    adminSettingsStatus.textContent = String(err);
+  }
 };
 
 adminTokenInput.addEventListener("keydown", async (ev) => {

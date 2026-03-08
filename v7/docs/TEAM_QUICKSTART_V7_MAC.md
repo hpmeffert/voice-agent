@@ -1,4 +1,4 @@
-# TEAM QUICKSTART - V7.8.0 (macOS, isolated scaffold)
+# TEAM QUICKSTART - V7.9.0 (macOS, isolated scaffold)
 
 V7 is isolated under `v7/` and can run in parallel to V6.
 
@@ -85,6 +85,11 @@ curl -s -F "file=@sample.webm" http://localhost:8081/api/voice
   - als Admin einloggen
   - `Admin Metrics` Panel muss sichtbar sein
   - `Refresh` zeigt Recent-Liste und 24h-Zusammenfassung.
+12. Admin Settings testen:
+  - Menu: `Admin Settings`
+  - Werte aendern und speichern
+  - Seite reloaden
+  - Werte muessen erhalten bleiben.
 
 ## Persistence check
 ```bash

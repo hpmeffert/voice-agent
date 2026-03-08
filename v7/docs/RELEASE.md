@@ -3,7 +3,28 @@
 Diese Seite enthaelt die konsolidierten Release Notes von `v7.0.0` bis zur aktuellen Version.
 
 ## Aktuell
-- Version: `v7.8.0`
+- Version: `v7.9.0`
+
+## V7.9.0
+### Highlights
+- Persistenter `admin_settings` Store in Mongo eingefuehrt.
+- Admin API zum Lesen/Schreiben von Runtime-Einstellungen.
+- Admin Settings UI direkt im Web-Menu.
+
+### Added
+- Endpunkte:
+  - `GET /api/admin/settings`
+  - `POST /api/admin/settings`
+- Collection:
+  - `admin_settings` (`_id=global`)
+
+### Changed
+- Laufzeitparameter koennen zentral durch Admin verwaltet werden.
+- `/api/config` liefert `admin_settings` mit aus.
+- UI-Version-Defaults auf `v7.9.0` angehoben.
+
+### Fixed
+- Keine manuellen Mongo-Edits mehr noetig, um zentrale Runtime-Defaults anzupassen.
 
 ## V7.8.0
 ### Highlights
