@@ -3,7 +3,24 @@
 Diese Seite enthaelt die konsolidierten Release Notes von `v7.0.0` bis zur aktuellen Version.
 
 ## Aktuell
-- Version: `v7.5.0`
+- Version: `v7.6.0`
+
+## V7.6.0
+### Highlights
+- Explizite UI-State-Machine fuer den Live-Betrieb:
+  - `idle`, `recording`, `sending`, `thinking`, `speaking`, `listening`
+- Autoplay-Fallback-Banner bei Browser-Blockade von Audio-Wiedergabe.
+
+### Added
+- Zentrale Statuslogik mit klaren Zustandswechseln.
+- Sichtbarer Hinweis fuer manuelles Play bei Autoplay-Block.
+
+### Changed
+- Einheitliche Statusuebergaenge in Manual- und Listen-Mode-Flows.
+- UI-Version-Defaults auf `v7.6.0` angehoben.
+
+### Fixed
+- Weniger Risiko fuer inkonsistente Status-/Button-Zustaende waehrend Demos.
 
 ## V7.5.0
 ### Highlights

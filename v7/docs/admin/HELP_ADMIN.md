@@ -1,4 +1,4 @@
-# Admin Dokumentation (V7.5.0)
+# Admin Dokumentation (V7.6.0)
 
 Diese Seite ist fuer Admins geschrieben.
 Ziel: schnell starten, sauber testen, alle Einstellungen verstehen.
@@ -99,6 +99,9 @@ Erwartung:
 4. `Demo Mode` aktivieren:
    - Listen Mode muss erzwungen sein.
    - Demo-Hinweisbanner muss sichtbar sein.
+5. TTS-Autoplay pruefen:
+   - Falls Browser blockiert, muss Autoplay-Banner erscheinen.
+   - Nach manuellem `Play` soll der Hinweis verschwinden.
 
 ## 5) Alle einstellbaren Parameter (Admin)
 

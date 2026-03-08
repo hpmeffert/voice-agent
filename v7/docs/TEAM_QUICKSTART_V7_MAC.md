@@ -1,4 +1,4 @@
-# TEAM QUICKSTART - V7.5.0 (macOS, isolated scaffold)
+# TEAM QUICKSTART - V7.6.0 (macOS, isolated scaffold)
 
 V7 is isolated under `v7/` and can run in parallel to V6.
 
@@ -74,6 +74,9 @@ curl -s -F "file=@sample.webm" http://localhost:8081/api/voice
   - `Debug JSON` collapsible section
 7. Als Admin `Demo Mode` aktivieren und den auto-resume Loop pruefen.
 8. `Debug panel` Toggle pruefen (ein/aus).
+9. Falls Audio nicht automatisch startet:
+  - einmal manuell `Play` klicken
+  - Autoplay-Banner muss danach verschwinden.
 
 ## Persistence check
 ```bash
