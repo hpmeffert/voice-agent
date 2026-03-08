@@ -1,4 +1,4 @@
-# TEAM QUICKSTART - V7.2.0 (macOS, isolated scaffold)
+# TEAM QUICKSTART - V7.3.0 (macOS, isolated scaffold)
 
 V7 is isolated under `v7/` and can run in parallel to V6.
 
@@ -52,7 +52,7 @@ curl -s -X POST http://localhost:8081/api/user/settings \
 docker compose -f v7/docker/compose.dev.yml exec mongo mongosh --eval 'db.runCommand({ ping: 1 })'
 ```
 
-## STT hardening checks (V7.2.0)
+## STT hardening checks (V7.2.0+)
 ```bash
 # Empty upload -> structured JSON error
 curl -s -F "file=@/dev/null;filename=empty.webm" http://localhost:8081/api/voice
@@ -67,6 +67,11 @@ curl -s -F "file=@sample.webm" http://localhost:8081/api/voice
 3. Speak, then stay silent.
 4. Verify: auto-stop -> auto-send -> reply plays -> recording auto-starts again.
 5. Disable `Listen Mode` and verify manual `Record -> Stop -> Send` still works.
+6. Verify `Result` area shows:
+  - `Transcript`
+  - `Answer`
+  - `Latency breakdown`
+  - `Debug JSON` collapsible section
 
 ## Persistence check
 ```bash
@@ -80,7 +85,7 @@ curl -s "http://localhost:8081/api/session/<SESSION_ID>?user_id=<USER_ID>&limit=
   - `listen_mode_default`
   - `silence_ms`
   - `threshold`
-- Default `silence_ms` in V7.2 is `1300`.
+- Default `silence_ms` in V7.3 is `1300`.
 - API and nginx now normalize upstream failures as JSON for `/api/*` routes (no HTML error page in UI path).
 - Use V7 docs in Help menu:
   - `/docs/ui/HELP_USER.md`

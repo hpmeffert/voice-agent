@@ -1,4 +1,4 @@
-# Benutzer Dokumentation (V7.2.0)
+# Benutzer Dokumentation (V7.3.0)
 
 Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einstellung hat.
 
@@ -6,7 +6,7 @@ Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einste
 - URL: `http://localhost:8081`
 - Oben rechts im Help-Menue:
   - `Admin Token speichern`
-  - `Help` (diese Benutzer Dokumentation)
+  - `Benutzer Dokumentation` (diese Seite)
   - `Demo Guide`
   - `Admin Docs` (nur sichtbar bei Admin)
   - `Release Notes`
@@ -46,6 +46,9 @@ Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einste
 - Metadaten: Session, User, Sprache, Backend, Modell.
 - Latenzpanel: Audio Read, STT, LLM, TTS, Total.
 - `Debug JSON`: technische Rohantwort fuer Analyse.
+- Wirkung:
+  - Im Alltag lesen Sie nur `Transcript` und `Answer`.
+  - Fuer Technik-Checks nutzen Sie `Debug JSON` und die Latenzen.
 
 ## Exportfunktionen
 - `CRM Export` Toggle:
