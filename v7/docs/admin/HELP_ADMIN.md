@@ -162,11 +162,42 @@ curl -L -o protocol.md "http://localhost:8081/api/protocol/<SESSION_ID>?user_id=
 - `UI_VERSION`
 - `UI_BUILD`
 
-## 7) Voice-Dateien (wichtig)
+## 7) Wo liegen die UI-Uebersetzungen und wie erweitert man sie?
+### Fundstelle der Uebersetzungs-Tabelle
+- Die Seed-Tabelle fuer UI-Texte liegt in:
+  - `v7/docker/api/app.py`
+  - Funktion: `seed_ui_translations()`
+- Runtime-Collection in Mongo:
+  - `ui_translations`
+  - Key-Schema: `_id` = stabiler Text-Schluessel (z. B. `label.record`)
+
+### So fuegst du eine neue Sprache hinzu (Beispiel `pt`)
+1. API/Config erweitern:
+   - `DEFAULT_UI_LANG`, `SUPPORTED_UI_LANGS`, `SUPPORTED_TTS_LANGS` in `v7/docker/compose.dev.yml`
+   - `SUPPORTED_UI_LANGS` und `SUPPORTED_TTS_LANGS` in `v7/docker/api/app.py`
+2. UI-Sprache eintragen:
+   - neues `<option value=\"pt\">pt</option>` in `v7/web/index.html` beim `Lang` Selector
+3. Uebersetzungen ergaenzen:
+   - in `seed_ui_translations()` bei jedem Key das neue Sprachfeld `\"pt\": \"...\"` hinzufuegen
+4. TTS-Sprachmapping:
+   - Piper-Mapping in `v7/docker/piper/app.py` (`pick_voice`)
+   - passendes Env `PIPER_VOICE_PT` in `v7/docker/compose.dev.yml`
+5. Voice-Dateien bereitstellen:
+   - passende `.onnx` + `.onnx.json` nach `${HOME}/models/piper-voices`
+6. Neustarten und pruefen:
+   - `docker compose --project-directory \"$PWD\" -f v7/docker/compose.dev.yml up -d --build`
+   - `curl -s \"http://localhost:8081/api/ui/i18n?user_id=test-user-710&lang=pt\"`
+   - `curl -s http://localhost:8081/tts/voices`
+
+### Hinweise
+- Wenn ein Key in einer Sprache fehlt, faellt die API auf `en` und dann auf den Key selbst zurueck.
+- Deutsche UI-Labels sind ab V7.10 korrekt lokalisiert (z. B. `Aufnehmen`, `Senden`, `Sitzung leeren`).
+
+## 8) Voice-Dateien (wichtig)
 - Modelle (`*.onnx`, `*.onnx.json`) nicht ins Repository committen.
 - Voices lokal unter `${HOME}/models/piper-voices` ablegen (Compose mountet nach `/voices`).
 
-## 8) Admin-Routine pro Release (Pflicht)
+## 9) Admin-Routine pro Release (Pflicht)
 Bei JEDEM Release aktualisieren:
 - `v7/docs/ui/HELP_USER.md`
 - `v7/docs/ui/DEMO_GUIDE.md`

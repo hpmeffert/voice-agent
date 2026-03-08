@@ -43,6 +43,7 @@ curl -s -X POST http://localhost:8081/api/user/settings \
 2. `Admin Docs` im Help-Menue oeffnen.
 3. `Admin Settings` speichern und Reload pruefen.
 4. `Admin Metrics` refreshen.
+5. In `Admin Docs` den Abschnitt zu `seed_ui_translations()` pruefen und nachvollziehen, wie neue Sprachen erweitert werden.
 
 ## Makefile + CI
 ```bash

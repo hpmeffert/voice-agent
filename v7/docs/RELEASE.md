@@ -11,6 +11,7 @@ Diese Seite enthaelt die konsolidierten Release Notes von `v7.0.0` bis `v7.10.0`
 - UI-i18n jetzt DB-basiert ueber `ui_translations`.
 - Neue API-Endpunkte: `GET /api/ui/i18n`, `POST /api/ui/lang`.
 - Piper unterstuetzt FR/IT/ES Voice-Mapping plus `GET /voices`.
+- Deutsche UI-Texte sind jetzt vollstaendig lokalisiert.
 
 ## V7.9.0
 - Persistenter `admin_settings` Store in Mongo.
