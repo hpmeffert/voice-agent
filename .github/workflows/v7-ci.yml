@@ -27,6 +27,9 @@ jobs:
           PYTHONPYCACHEPREFIX=/tmp/pycache python -m py_compile v7/docker/api/app.py
           PYTHONPYCACHEPREFIX=/tmp/pycache python -m py_compile v7/docker/piper/app.py
 
+      - name: Documentation rule check
+        run: ./scripts/check_v7_docs.sh
+
   build:
     name: Build
     runs-on: ubuntu-latest

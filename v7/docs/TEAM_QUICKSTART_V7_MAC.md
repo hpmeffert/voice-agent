@@ -25,6 +25,7 @@ Useful release helpers:
 ```bash
 make v7-pr VERSION=7.3.0
 make v7-post-merge VERSION=7.3.0
+make v7-doc-check
 ```
 
 ## GitHub Actions automation
