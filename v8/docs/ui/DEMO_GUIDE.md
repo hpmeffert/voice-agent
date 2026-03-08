@@ -1,4 +1,4 @@
-# Demo Guide - V8.8.0
+# Demo Guide - V8.9.0
 
 ## Story-Flow 1: Self-Service bis zum Handoff-Moment
 Stell dir vor, ein Kunde startet im Self-Service. Alles laeuft automatisch, bis die Anfrage menschliche Unterstuetzung braucht.

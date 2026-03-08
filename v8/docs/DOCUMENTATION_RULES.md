@@ -23,6 +23,8 @@ Zusatz:
 - Ab `V8.8.0` muss im Admin-Menue der sichtbare Text **Benutzer Handbuch** sein (nicht `Help`).
 - Im Benutzer Handbuch muss jede Funktion mit **Funktionsweise + Beispiel** beschrieben werden.
 - Release Notes Inhalte duerfen nicht im Benutzer Handbuch stehen.
+- Demo Guide und Release Notes muessen im laufenden Admin-Web ueber das Help-Menue erreichbar sein (`/docs/ui/DEMO_GUIDE.md`, `/docs/RELEASE.md`).
+- Der Runtime-Smoke-Test muss diese URL-Erreichbarkeit pruefen.
 
 ## Benutzer Handbuch Pflichtformat (permanent)
 - Pro Funktion:

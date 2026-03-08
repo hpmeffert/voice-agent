@@ -1,4 +1,4 @@
-# TEAM QUICKSTART - V8.8.0 (macOS)
+# TEAM QUICKSTART - V8.9.0 (macOS)
 
 ## Ports
 - Admin UI: `http://localhost:8082`
@@ -8,6 +8,12 @@
 
 ## Start
 ```bash
+docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml up -d --build
+```
+
+## Clean Restart (empfohlen vor Demo)
+```bash
+docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml down --remove-orphans
 docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml up -d --build
 ```
 
@@ -59,3 +65,5 @@ PY
 ## Referenz
 - Channel/Event-Spec: `v8/docs/transport_channels.md`
 - Security-Checkliste: `v8/docs/SECURITY_BASELINE_MAC.md`
+- Migration V7 -> V8: `v8/docs/MIGRATION_V7_TO_V8.md`
+- Release-Template V8: `v8/docs/RELEASE_NOTES_TEMPLATE_V8.md`

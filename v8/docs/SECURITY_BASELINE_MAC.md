@@ -1,4 +1,4 @@
-# Security Baseline (macOS Dev) - V8.8.0
+# Security Baseline (macOS Dev) - V8.9.0
 
 ## Ziel
 Pragmatische Sicherheits-Baseline fuer lokale Entwicklung und Demo-Betrieb.
