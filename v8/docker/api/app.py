@@ -26,7 +26,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v8.2.0"
+APP_VERSION = "v8.3.0"
 
 app = FastAPI(title=f"Voice Agent API {APP_VERSION}")
 
@@ -1563,16 +1563,30 @@ def eventbus_selftest():
 def agent_sessions(
     status: str = Query("active"),
     limit: int = Query(30, ge=1, le=200),
+    user_id: str | None = Query(None),
+    session_id: str | None = Query(None),
+    q: str | None = Query(None),
 ):
     ensure_ready()
-    q: dict[str, Any] = {}
+    query: dict[str, Any] = {}
     status_norm = (status or "active").strip().lower()
     if status_norm == "active":
-        q["last_activity_at"] = {"$gte": now_utc() - timedelta(hours=8)}
+        query["last_activity_at"] = {"$gte": now_utc() - timedelta(hours=8)}
+    if user_id and user_id.strip():
+        query["user_id"] = user_id.strip()
+    if session_id and session_id.strip():
+        query["_id"] = session_id.strip()
+    search_text = (q or "").strip()
+    if search_text:
+        pattern = re.escape(search_text)
+        query["$or"] = [
+            {"_id": {"$regex": pattern, "$options": "i"}},
+            {"user_id": {"$regex": pattern, "$options": "i"}},
+        ]
 
     sessions = list(
         sessions_col.find(
-            q,
+            query,
             {
                 "_id": 1,
                 "user_id": 1,
