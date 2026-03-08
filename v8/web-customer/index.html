@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Customer V8.6.0</title>
+  <title>Voice Agent Customer V8.7.0</title>
   <style>
     body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
     .wrap { max-width: 920px; margin: 20px auto; padding: 0 14px; }
@@ -28,7 +28,7 @@
     <div class="card">
       <div class="hd">
         <div>
-          <b>Voice Agent Customer V8.6.0</b>
+          <b>Voice Agent Customer V8.7.0</b>
           <div class="status" id="status">idle</div>
         </div>
         <div class="status" id="ids">-</div>
@@ -44,9 +44,11 @@
           <button id="btnRecord" class="primary">Record</button>
           <button id="btnStop" disabled>Stop</button>
           <button id="btnSendAudio" disabled>Send Audio</button>
+          <button id="btnRequestHandoff">Menschlichen Agenten anfordern</button>
           <button id="btnEndConversation" class="warn">End Conversation</button>
           <label><input id="listenMode" type="checkbox" /> Listen Mode</label>
           <span class="status">Silence: <b>1300ms</b></span>
+          <span class="status" id="handoffStatus">Handoff: none</span>
           <label>TTS <select id="ttsLang"><option value="auto">auto</option><option>de</option><option>en</option><option>fr</option><option>it</option><option>es</option></select></label>
         </div>
 
@@ -87,7 +89,9 @@ const btnSendAudio = document.getElementById("btnSendAudio");
 const btnSendText = document.getElementById("btnSendText");
 const btnNewSession = document.getElementById("btnNewSession");
 const btnEndConversation = document.getElementById("btnEndConversation");
+const btnRequestHandoff = document.getElementById("btnRequestHandoff");
 const listenModeEl = document.getElementById("listenMode");
+const handoffStatusEl = document.getElementById("handoffStatus");
 
 let mediaRecorder = null;
 let chunks = [];
@@ -101,6 +105,8 @@ let rmsInterval = null;
 let recordStartedAt = 0;
 let speechStartedAt = 0;
 let lastVoiceAt = 0;
+let handoffRequested = false;
+let handoffState = "none";
 
 function setStatus(s){ statusEl.textContent = s; }
 function makeId(){ return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()); }
@@ -108,6 +114,13 @@ function refreshIds(){ idsEl.textContent = `User: ${userIdEl.value} | Session: $
 function persistIds(){ localStorage.setItem(USER_KEY, userIdEl.value); localStorage.setItem(SESSION_KEY, sessionIdEl.value); refreshIds(); }
 function addMsg(cls, title, text){ const d = document.createElement('div'); d.className = `msg ${cls}`; d.textContent = `${title}:\n${text}`; chatEl.appendChild(d); chatEl.scrollTop = chatEl.scrollHeight; }
 function wsUrl(path){ const proto = location.protocol === 'https:' ? 'wss' : 'ws'; return `${proto}://${location.host}${path}`; }
+function setHandoff(state, requested){
+  handoffState = state || "none";
+  handoffRequested = !!requested;
+  const txt = handoffRequested ? `requested (${handoffState})` : handoffState;
+  handoffStatusEl.textContent = `Handoff: ${txt}`;
+  btnRequestHandoff.disabled = handoffRequested;
+}
 
 function stateIdle(){ setStatus(loopActive ? 'listening' : 'idle'); }
 
@@ -137,13 +150,26 @@ function connectSessionWs(){
   ws.onmessage = async (ev) => {
     try {
       const e = JSON.parse(ev.data);
-      if (e.type === 'session.keepalive' || e.type === 'session.connected') return;
+      if (e.type === 'session.keepalive') return;
+      if (e.type === 'session.connected') {
+        const h = (e.payload && e.payload.handoff) || {};
+        setHandoff(h.state || "none", !!h.requested);
+        return;
+      }
       if (e.from === 'agent' && e.payload && e.payload.text && (e.payload.agent_id || e.payload.speak)) {
         addMsg('bot','Agent', String(e.payload.text));
         if (e.payload.speak) await playAgentTts(String(e.payload.text), String(e.payload.tts_lang || ttsLangEl.value || 'de'));
       }
       if (e.from === 'system' && e.type === 'session.joined') {
         addMsg('bot','System', `Agent ${e.payload?.agent_id || ''} joined`);
+      }
+      if (e.type === 'handoff.request') {
+        setHandoff('requested', true);
+        addMsg('bot','System','Handoff requested. Bitte kurz warten, ein Agent uebernimmt.');
+      }
+      if (e.type === 'handoff.accept') {
+        setHandoff('accepted', false);
+        addMsg('bot','System', `Agent ${e.payload?.agent_id || ''} hat den Handoff angenommen.`);
       }
     } catch(_) {}
   };
@@ -256,7 +282,12 @@ async function sendAudio({ fromLoop = false } = {}){
     const transcript = r.headers.get('X-Transcript') || '';
     const answer = r.headers.get('X-Answer') || '';
     const sid = r.headers.get('X-Session-Id') || sessionIdEl.value;
+    const handoffRequestedHeader = r.headers.get('X-Handoff-Requested');
+    const handoffStateHeader = r.headers.get('X-Handoff-State');
     sessionIdEl.value = sid; persistIds(); connectSessionWs();
+    if (handoffRequestedHeader !== null || handoffStateHeader) {
+      setHandoff(handoffStateHeader || "none", handoffRequestedHeader === "1");
+    }
 
     if (transcript) addMsg('me','Kunde',decodeURIComponent(transcript));
     if (answer) addMsg('bot','Agent',decodeURIComponent(answer));
@@ -300,6 +331,7 @@ btnNewSession.onclick = () => {
   sessionIdEl.value = '';
   persistIds();
   connectSessionWs();
+  setHandoff('none', false);
   addMsg('me','System','Neue Session gestartet');
 };
 
@@ -327,6 +359,31 @@ btnEndConversation.onclick = () => {
   stateIdle();
 };
 
+btnRequestHandoff.onclick = async () => {
+  const sid = (sessionIdEl.value || '').trim();
+  const uid = (userIdEl.value || '').trim();
+  if (!sid || !uid) {
+    addMsg('bot','System','Bitte zuerst eine aktive Session starten.');
+    return;
+  }
+  try {
+    const r = await fetch('/api/handoff/request', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session_id: sid, user_id: uid, reason: 'customer_request' }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      addMsg('bot','Fehler', JSON.stringify(data));
+      return;
+    }
+    setHandoff(String(data.handoff_state || 'requested'), !!data.handoff_requested);
+    addMsg('me','System','Menschlicher Agent wurde angefordert.');
+  } catch (e) {
+    addMsg('bot','Fehler', String(e));
+  }
+};
+
 btnSendText.onclick = async () => {
   const text = (textInputEl.value || '').trim();
   if (!text) return;
@@ -347,6 +404,10 @@ btnSendText.onclick = async () => {
   sessionIdEl.value = data.session_id || sessionIdEl.value;
   persistIds();
   connectSessionWs();
+  setHandoff(String(data.handoff_state || "none"), !!data.handoff_requested);
+  if (data.handoff_recommended) {
+    addMsg('bot','System','LLM-Triage empfiehlt Handoff an menschlichen Agenten.');
+  }
   addMsg('bot','Agent', data.answer || '');
   textInputEl.value = '';
   stateIdle();

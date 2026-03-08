@@ -28,7 +28,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v8.6.0"
+APP_VERSION = "v8.7.0"
 
 app = FastAPI(title=f"Voice Agent API {APP_VERSION}")
 
@@ -1136,6 +1136,41 @@ def mark_session_activity(session_id: str, backend: str, model: str | None, lang
     )
 
 
+def get_handoff_state(session_doc: dict[str, Any] | None) -> dict[str, Any]:
+    meta = (session_doc or {}).get("meta") if isinstance(session_doc, dict) else {}
+    if not isinstance(meta, dict):
+        meta = {}
+    return {
+        "requested": bool(meta.get("handoff_requested", False)),
+        "state": str(meta.get("handoff_state") or "none"),
+        "requested_at": dt_iso(meta.get("handoff_requested_at")),
+        "requested_by": meta.get("handoff_requested_by"),
+        "accepted_at": dt_iso(meta.get("handoff_accepted_at")),
+        "accepted_by": meta.get("handoff_accepted_by"),
+    }
+
+
+def triage_handoff_recommended(text: str) -> bool:
+    sample = (text or "").strip().lower()
+    if not sample:
+        return False
+    tokens = [
+        "human",
+        "agent",
+        "mitarbeiter",
+        "menschen",
+        "berater",
+        "beratung",
+        "kuendigung",
+        "kündigung",
+        "beschwerde",
+        "anwalt",
+        "eskalation",
+        "escalation",
+    ]
+    return any(t in sample for t in tokens)
+
+
 def build_prompt_with_history(session_id: str, user_text: str, system_prompt: str, max_messages: int = 20) -> str:
     ensure_ready()
     docs = list(
@@ -1480,6 +1515,17 @@ class AgentMessageRequest(BaseModel):
     tts_lang: str | None = None
 
 
+class HandoffRequest(BaseModel):
+    session_id: str = Field(min_length=8)
+    user_id: str = Field(min_length=8)
+    reason: str | None = Field(default=None, max_length=800)
+
+
+class HandoffAcceptRequest(BaseModel):
+    session_id: str = Field(min_length=8)
+    agent_id: str = Field(min_length=4, max_length=128)
+
+
 # ----------------------------
 # Routes
 # ----------------------------
@@ -1612,6 +1658,12 @@ def agent_sessions(
                 "meta.backend_last": 1,
                 "meta.model_last": 1,
                 "meta.lang_last": 1,
+                "meta.handoff_requested": 1,
+                "meta.handoff_state": 1,
+                "meta.handoff_requested_at": 1,
+                "meta.handoff_requested_by": 1,
+                "meta.handoff_accepted_at": 1,
+                "meta.handoff_accepted_by": 1,
             },
         )
         .sort("last_activity_at", DESCENDING)
@@ -1639,6 +1691,12 @@ def agent_sessions(
                 "backend": (s.get("meta") or {}).get("backend_last"),
                 "model": (s.get("meta") or {}).get("model_last"),
                 "lang": (s.get("meta") or {}).get("lang_last"),
+                "handoff_requested": bool((s.get("meta") or {}).get("handoff_requested", False)),
+                "handoff_state": str((s.get("meta") or {}).get("handoff_state") or "none"),
+                "handoff_requested_at": dt_iso((s.get("meta") or {}).get("handoff_requested_at")),
+                "handoff_requested_by": (s.get("meta") or {}).get("handoff_requested_by"),
+                "handoff_accepted_at": dt_iso((s.get("meta") or {}).get("handoff_accepted_at")),
+                "handoff_accepted_by": (s.get("meta") or {}).get("handoff_accepted_by"),
                 "preview": preview,
             }
         )
@@ -1723,6 +1781,105 @@ def agent_message(req: AgentMessageRequest):
     }
 
 
+@app.post("/handoff/request")
+def handoff_request(req: HandoffRequest):
+    ensure_ready()
+    session = assert_session_owned_by_user(req.session_id, req.user_id)
+    now = now_utc()
+    backend = str((session.get("meta") or {}).get("backend_last") or "ollama")
+    model = (session.get("meta") or {}).get("model_last")
+    lang = (session.get("meta") or {}).get("lang_last") or DEFAULT_UI_LANG
+    reason = (req.reason or "").strip()
+
+    sessions_col.update_one(
+        {"_id": req.session_id, "user_id": req.user_id},
+        {
+            "$set": {
+                "updated_at": now,
+                "last_activity_at": now,
+                "expires_at": session_expiry(),
+                "meta.handoff_requested": True,
+                "meta.handoff_state": "requested",
+                "meta.handoff_requested_at": now,
+                "meta.handoff_requested_by": req.user_id,
+            }
+        },
+    )
+    append_message(
+        user_id=req.user_id,
+        session_id=req.session_id,
+        role="system",
+        content="Human handoff requested" + (f": {reason}" if reason else ""),
+        lang=lang,
+        backend=backend,
+        model=model,
+        meta={"event": "handoff.request", "reason": reason},
+    )
+    publish_session_event(
+        event_type="handoff.request",
+        session_id=req.session_id,
+        from_actor="customer",
+        payload={"user_id": req.user_id, "reason": reason},
+    )
+    return {
+        "ok": True,
+        "session_id": req.session_id,
+        "user_id": req.user_id,
+        "handoff_requested": True,
+        "handoff_state": "requested",
+    }
+
+
+@app.post("/handoff/accept")
+def handoff_accept(req: HandoffAcceptRequest):
+    ensure_ready()
+    session = sessions_col.find_one({"_id": req.session_id})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    now = now_utc()
+    backend = str((session.get("meta") or {}).get("backend_last") or "ollama")
+    model = (session.get("meta") or {}).get("model_last")
+    lang = (session.get("meta") or {}).get("lang_last") or DEFAULT_UI_LANG
+
+    sessions_col.update_one(
+        {"_id": req.session_id},
+        {
+            "$set": {
+                "updated_at": now,
+                "last_activity_at": now,
+                "expires_at": session_expiry(),
+                "meta.handoff_requested": False,
+                "meta.handoff_state": "accepted",
+                "meta.handoff_accepted_at": now,
+                "meta.handoff_accepted_by": req.agent_id,
+            }
+        },
+    )
+    append_message(
+        user_id=str(session.get("user_id") or ""),
+        session_id=req.session_id,
+        role="system",
+        content=f"Human handoff accepted by {req.agent_id}",
+        lang=lang,
+        backend=backend,
+        model=model,
+        meta={"event": "handoff.accept", "agent_id": req.agent_id},
+    )
+    publish_session_event(
+        event_type="handoff.accept",
+        session_id=req.session_id,
+        from_actor="agent",
+        payload={"agent_id": req.agent_id},
+    )
+    return {
+        "ok": True,
+        "session_id": req.session_id,
+        "agent_id": req.agent_id,
+        "handoff_requested": False,
+        "handoff_state": "accepted",
+    }
+
+
 @app.websocket("/ws/session/{session_id}")
 async def ws_session_stream(
     websocket: WebSocket,
@@ -1732,12 +1889,13 @@ async def ws_session_stream(
 ):
     await websocket.accept()
     try:
+        session_doc = sessions_col.find_one({"_id": session_id}, {"meta": 1}) if sessions_col is not None else None
         await websocket.send_json(
             {
                 "type": "session.connected",
                 "session_id": session_id,
                 "from": "system",
-                "payload": {"client": client, "user_id": user_id},
+                "payload": {"client": client, "user_id": user_id, "handoff": get_handoff_state(session_doc)},
                 "ts": now_utc().isoformat(),
             }
         )
@@ -2024,6 +2182,7 @@ def get_session(
             "last_activity_at": dt_iso(session.get("last_activity_at")),
             "meta": session.get("meta", {}),
         },
+        "handoff": get_handoff_state(session),
         "messages": messages,
     }
 
@@ -2387,6 +2546,12 @@ def chat_text(req: TextChatRequest):
         from_actor="customer",
         payload={"text": text, "user_id": uid},
     )
+    handoff_recommended = triage_handoff_recommended(text)
+    if handoff_recommended:
+        sessions_col.update_one(
+            {"_id": sid, "user_id": uid},
+            {"$set": {"meta.handoff_recommended": True}},
+        )
     prompt = build_prompt_with_history(sid, text, SYSTEM_PROMPT)
     answer = llm_generate(backend=backend, prompt=prompt, model_override=model_override)
 
@@ -2430,6 +2595,8 @@ def chat_text(req: TextChatRequest):
         answer=answer,
         status="ok",
     )
+    session_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
+    handoff = get_handoff_state(session_doc)
     return {
         "session_id": sid,
         "user_id": uid,
@@ -2439,6 +2606,9 @@ def chat_text(req: TextChatRequest):
         "tts_lang_selected": selected_tts_lang,
         "transcript": text,
         "answer": answer,
+        "handoff_requested": handoff["requested"],
+        "handoff_state": handoff["state"],
+        "handoff_recommended": handoff_recommended,
         "metrics": metrics,
         "version": APP_VERSION,
     }
@@ -2512,6 +2682,7 @@ async def voice(
     answer = ""
     lang: str | None = None
     tts_lang_selected: str | None = None
+    handoff_recommended = False
 
     allowed_tts_langs = set(SUPPORTED_TTS_LANGS)
     requested_tts_lang = (tts_lang or "").strip().lower()
@@ -2545,7 +2716,17 @@ async def voice(
             "user_id": uid,
             "crm_export_enabled": crm_export_user_enabled,
             "export_generated": False,
+            "handoff_requested": False,
+            "handoff_state": "none",
+            "handoff_recommended": handoff_recommended,
         }
+        try:
+            session_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
+            handoff = get_handoff_state(session_doc)
+            payload["handoff_requested"] = handoff["requested"]
+            payload["handoff_state"] = handoff["state"]
+        except Exception:
+            pass
         if error_code:
             payload["code"] = error_code
         if detail:
@@ -2601,6 +2782,13 @@ async def voice(
                 status_code=400,
                 error=f"Transcript too long (>{MAX_TEXT_CHARS} chars)",
                 error_code="transcript_too_long",
+            )
+
+        handoff_recommended = triage_handoff_recommended(transcript)
+        if handoff_recommended:
+            sessions_col.update_one(
+                {"_id": sid, "user_id": uid},
+                {"$set": {"meta.handoff_recommended": True}},
             )
 
         prompt = build_prompt_with_history(sid, transcript, SYSTEM_PROMPT)
@@ -2720,6 +2908,8 @@ async def voice(
                 answer=answer,
                 status="ok",
             )
+            session_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
+            handoff = get_handoff_state(session_doc)
 
             return FileResponse(
                 tts_wav_path,
@@ -2733,6 +2923,9 @@ async def voice(
                     "X-TTS-Audio-Duration-Ms": str(tts_audio_duration_ms),
                     "X-Crm-Export-Enabled": "1" if crm_export_user_enabled else "0",
                     "X-Export-Generated": "1" if crm_export_user_enabled else "0",
+                    "X-Handoff-Requested": "1" if handoff["requested"] else "0",
+                    "X-Handoff-State": str(handoff["state"]),
+                    "X-Handoff-Recommended": "1" if handoff_recommended else "0",
                 },
                 background=BackgroundTask(cleanup_paths, tts_wav_path),
             )
@@ -2765,6 +2958,8 @@ async def voice(
             answer=answer,
             status="ok",
         )
+        session_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
+        handoff = get_handoff_state(session_doc)
 
         return {
             "session_id": sid,
@@ -2783,6 +2978,9 @@ async def voice(
             "total_ms": metrics["total_ms"],
             "crm_export_enabled": crm_export_user_enabled,
             "export_generated": crm_export_user_enabled,
+            "handoff_requested": handoff["requested"],
+            "handoff_state": handoff["state"],
+            "handoff_recommended": handoff_recommended,
             "export_url": (
                 f"/api/session/{sid}/export?user_id={uid}&format=md" if crm_export_user_enabled else None
             ),

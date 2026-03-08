@@ -1,46 +1,53 @@
-# Help (Benutzer Dokumentation) - V8.6.0
+# Benutzer Handbuch (Help) - V8.7.0
+
+## Wichtig
+- Diese Seite ist das **Benutzer Handbuch**.
+- Historische Versionslisten stehen in einer separaten Release-Dokumentation.
 
 ## Oberflaechen
 - Admin UI: `http://localhost:8082`
 - Customer UI: `http://localhost:8083`
 - Agent UI: `http://localhost:8084`
 
-## Was kann ich hier machen?
-Diese Seite erklaert die Bedienung. Release-Historie steht nur unter **Release Notes**.
+## Funktion: Listen Mode (Customer UI)
+- Wofuer: Freisprech-Dialog ohne staendiges Klicken.
+- So funktioniert es: Aufnahme startet, Stille wird erkannt, Anfrage wird gesendet, Antwort wird abgespielt, dann startet die Aufnahme erneut.
+- Beispiel:
+  1. `Listen Mode` einschalten.
+  2. Du sagst: "Ich brauche Hilfe bei meiner Bestellung."
+  3. Nach kurzer Stille sendet das System automatisch und antwortet.
+- Release-Verweis: verbessert/ausgebaut seit `V8.4.0`.
 
-## Customer UI (Kundenseite)
-- `Listen Mode`:
-  - startet den Hands-free Ablauf: aufnehmen -> senden -> Antwort abspielen -> wieder aufnehmen
-- `Auto-stop on silence`:
-  - beendet Aufnahme automatisch bei Sprachpause
-- `Auto-send after stop`:
-  - sendet nach Auto-Stop direkt an `/api/voice`
-- `Silence threshold (ms)`:
-  - Standard: `1300`
-  - hoeher: wartet laenger vor Stop
-  - niedriger: stoppt frueher
-- `Max recording (s)`:
-  - Schutz gegen zu lange Aufnahme
+## Funktion: Silence Threshold
+- Wofuer: Legt fest, wie lange Stille gewartet wird, bevor die Aufnahme stoppt.
+- Standard: `1300 ms`.
+- Beispiel:
+  - Bei laengeren Denkpausen: Wert erhoehen.
+  - Bei schneller Turn-Uebergabe: Wert senken.
+- Release-Verweis: Standardwert festgelegt und vertraglich gesichert seit `V7.x`/`V8.x`.
 
-## Agent UI (Agentenseite)
-- Suche nach Konversationen:
-  - nach `user_id`
-  - nach `session_id`
-  - nach Textausschnitt
-- Session uebernehmen und Live-Chat fuehren
+## Funktion: Menschlichen Agenten anfordern
+- Wofuer: Uebergabe von Self-Service an einen realen Agenten.
+- So funktioniert es: Klick auf `Menschlichen Agenten anfordern` setzt den Handoff auf `requested`.
+- Beispiel:
+  1. Kunde klickt den Button.
+  2. Agent UI zeigt Badge `handoff requested`.
+  3. Agent uebernimmt.
+- Release-Verweis: eingefuehrt in `V8.7.0`.
 
-## Admin UI (Betrieb)
-- Admin-Token speichern
-- Metriken einsehen
-- Admin-Settings setzen
-- Konversationen suchen (V8.5+):
-  - `search_user_id`
-  - `session_id`
-  - `q` (Volltext)
+## Funktion: Agent-Suche (Agent UI)
+- Wofuer: Aktive Kunden-Sessions schnell finden.
+- So funktioniert es: Suche nach `session_id`, `user_id` oder Freitext.
+- Beispiel:
+  - Sucheingabe: `test-user-870`
+  - Ergebnis: passende Session in der Inbox.
+- Release-Verweis: eingefuehrt in `V8.3.0`, erweitert in spaeteren Releases.
 
-## Help-Menue Struktur
-1. Admin Token speichern
-2. Help
-3. Demo Guide
-4. Admin Docs
-5. Release Notes
+## Funktion: Handoff annehmen (Agent UI)
+- Wofuer: Uebernahme einer vom Kunden angeforderten Uebergabe.
+- So funktioniert es: In der aktiven Session `Handoff annehmen` klicken.
+- Beispiel:
+  1. Session hat Badge `handoff requested`.
+  2. Agent klickt `Handoff annehmen`.
+  3. Kunde sieht Status `accepted`.
+- Release-Verweis: eingefuehrt in `V8.7.0`.
