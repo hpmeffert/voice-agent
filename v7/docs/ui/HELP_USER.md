@@ -1,100 +1,81 @@
-# Benutzer Dokumentation (V7.9.0)
+# Benutzer Dokumentation (V7.10.0)
 
-Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einstellung hat.
+Diese Seite erklaert alle sichtbaren Funktionen im UI in einfacher Sprache.
 
-## Einstieg
+## Wo finde ich was?
 - URL: `http://localhost:8081`
 - Oben rechts im Help-Menue:
   - `Admin Token speichern`
   - `Benutzer Dokumentation` (diese Seite)
   - `Demo Guide`
-  - `Admin Docs` (nur sichtbar bei Admin)
+  - `Admin Docs` (nur Admin)
   - `Release Notes`
 
-## Hauptfunktionen im UI
-- `Record`: startet die Mikrofonaufnahme manuell.
-- `Stop`: stoppt die laufende Aufnahme.
-- `Send`: sendet die letzte Aufnahme an `/api/voice`.
-- `Clear Session`: setzt lokale Session zurueck und startet neuen Konversationskontext.
+## Grundbedienung
+- `Record`: startet Mikrofonaufnahme.
+- `Stop`: beendet laufende Aufnahme.
+- `Send`: sendet die letzte Aufnahme an die API.
+- `Clear Session`: startet eine neue Session ohne alten Verlauf.
 
-## Identitaet und Kontext
-- `User`: wird in localStorage gespeichert und identifiziert den Browser-Nutzer.
-- `Session`: wird in localStorage gespeichert und erhaelt den Gespraechsverlauf.
+## Benutzer + Session
+- `User` identifiziert den aktuellen Browser-Nutzer.
+- `Session` haelt den Gespraechsverlauf.
 - Wirkung:
-  - gleiche Session => Folgefragen mit Verlauf
-  - neue Session => frischer Kontext
+  - gleiche Session: Kontext bleibt erhalten
+  - neue Session: frischer Start
+
+## Sprache (neu in V7.10.0)
+- Oben rechts gibt es `Lang` mit `de`, `en`, `fr`, `it`, `es`.
+- Bei Wechsel wird die UI sofort neu beschriftet.
+- Die Auswahl wird pro `user_id` gespeichert.
 
 ## Einstellungen fuer Gespraechsfluss
 - `Listen Mode`:
-  - Wirkung: startet Aufnahme automatisch, stoppt bei Stille, sendet automatisch und startet nach TTS erneut.
+  - startet den automatischen Dialog-Loop.
 - `Auto-stop on silence`:
-  - Wirkung: Aufnahme stoppt automatisch nach Stillefenster.
+  - stoppt Aufnahme automatisch, wenn Stille erkannt wurde.
 - `Auto-send after stop`:
-  - Wirkung: sendet automatisch nach Auto-Stop.
+  - sendet direkt nach Auto-Stop.
 - `Silence threshold (ms)`:
   - Standard: `1300`
-  - Wirkung: hoeherer Wert = wartet laenger auf weitere Sprache, niedriger = reagiert frueher.
+  - hoeher = wartet laenger, niedriger = reagiert schneller.
 - `Voice threshold (RMS)`:
-  - Wirkung: Empfindlichkeit fuer Sprachbeginn/Sprachende.
-  - Hoeher = weniger empfindlich gegen Hintergrundgeraeusche.
+  - Empfindlichkeit fuer Sprache vs. Hintergrundrauschen.
 - `Max recording seconds`:
-  - Wirkung: Sicherheitslimit fuer lange Aufnahmen.
-- `TTS language`:
-  - `Auto`: nutzt erkannte Sprache.
-  - `de/en/sv/no/fi`: erzwingt die Sprechsprache.
-  - `fr/it/es`: vorbereitet (coming soon).
+  - Sicherheitslimit gegen zu lange Aufnahmen.
 
-## Admin-only Demo Steuerung
-- `Demo Mode` (nur Admin):
-  - Wirkung: startet einen stabilen Demo-Loop (`listen -> send -> speak -> listen`).
-  - Listen Mode wird dabei automatisch erzwungen.
-- `Debug panel` (nur Admin):
-  - Wirkung: blendet `Debug JSON` ein/aus, damit Demos fuer Publikum sauberer wirken.
-- `CRM Export` Toggle (nur Admin):
-  - Wirkung: steuert Transcript-Exportfahigkeit fuer den User.
+## TTS-Sprache
+- Feld `TTS language`:
+  - `Auto`: nutzt erkannte Sprache (oder User-Default)
+  - aktiv verfuegbar: `de,en,fr,it,es,sv,no,fi`
+- Wirkung:
+  - Sie koennen bewusst in einer anderen Sprache ausgeben lassen als gesprochen wurde.
+
+## Admin-only Bereiche
+- `CRM Export`: Export fuer Nutzer aktivieren/deaktivieren.
+- `Demo Mode`: stabiler Demo-Loop (listen -> send -> speak -> listen).
+- `Debug panel`: technische JSON-Ausgabe ein/ausblenden.
 
 ## Ergebnisbereich
-- `Transcript`: erkannter gesprochener Text.
-- `Answer`: Antwort des Assistenten.
-- Metadaten: Session, User, Sprache, Backend, Modell.
-- Latenzpanel: Audio Read, STT, LLM, TTS, Total.
-- `Debug JSON`: technische Rohantwort fuer Analyse.
-- Wirkung:
-  - Im Alltag lesen Sie nur `Transcript` und `Answer`.
-  - Fuer Technik-Checks nutzen Sie `Debug JSON` und die Latenzen.
+- `Transcript`: erkannter Text
+- `Answer`: Assistentenantwort
+- Metadaten: Session, User, Sprache, Backend, Modell
+- `Latency`: Audio Read, STT, LLM, TTS, Total
+- `Debug JSON`: Rohdaten fuer Technik-Checks
 
-## Status-Phasen (V7.6.0)
-- `idle`: bereit, keine aktive Aufnahme.
-- `recording`: Mikrofonaufnahme laeuft.
-- `sending`: Audio wird an die API gesendet.
-- `thinking`: STT/LLM verarbeitet die Anfrage.
-- `speaking`: TTS-Antwort wird abgespielt.
-- `listening`: wartet auf naechste Spracheingabe.
+## Statusanzeige
+- `idle`, `recording`, `sending`, `thinking`, `speaking`, `listening`
+- So sehen Sie immer, was der Agent gerade tut.
 
 ## Autoplay-Hinweis
-- Manche Browser blockieren Auto-Play.
-- Dann erscheint ein Banner mit Hinweis auf manuellen `Play`-Klick.
-- Nach einem erfolgreichen manuellen Klick verschwindet der Hinweis.
+- Manche Browser blockieren automatische Wiedergabe.
+- Dann erscheint ein Banner.
+- Einmal manuell auf `Play` klicken, danach laeuft der Flow normal.
 
-## Exportfunktionen
-- `CRM Export` Toggle:
-  - Wirkung: aktiviert/deaktiviert Transcript-Export pro User.
-- `Download Transcript`:
-  - Format waehlbar (md/json je nach Serverkonfiguration).
-- `Download Protocol`:
-  - laedt strukturierten Protokoll-Export.
-
-## Audio-Zuverlaessigkeit (V7.2.0)
-- Browser nutzt bevorzugt `audio/webm;codecs=opus`.
-- Server konvertiert Uploads mit ffmpeg in stabiles `16kHz mono WAV` vor Whisper.
-- Wirkung: deutlich weniger STT-Decode-Fehler wie `EOFError: End of file`.
+## Downloads
+- Transcript Download (`md/json`, je nach Server-Konfig)
+- Protocol Download (strukturierter Export)
 
 ## Fehlerverhalten
 - API-Fehler kommen als JSON.
-- Auch bei API-Upstream-Problemen liefert `/api/*` JSON statt HTML-Seite.
-
-## Hinweis fuer laufende Releases
-- Bei jeder neuen V7-Version werden drei Help-Menue-Dokumente aktualisiert:
-  - Benutzer Dokumentation
-  - Demo Guide
-  - Release Notes
+- Keine HTML-Fehlerseite im `/api/*`-Pfad.

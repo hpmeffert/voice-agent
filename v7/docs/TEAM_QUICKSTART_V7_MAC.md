@@ -1,120 +1,56 @@
-# TEAM QUICKSTART - V7.9.0 (macOS, isolated scaffold)
+# TEAM QUICKSTART - V7.10.0 (macOS, isolated scaffold)
 
-V7 is isolated under `v7/` and can run in parallel to V6.
+V7 laeuft isoliert unter `v7/` und kann parallel zu V6 laufen.
 
-## Ports (V7 dev defaults)
+## Ports (V7 defaults)
 - Web: `8081` -> container `8080`
 - API: `8001` -> container `8000`
 - Piper: `5003` -> container `5002`
 - Mongo: `27018` -> container `27017`
 
-## Run
+## Start / Stop
 ```bash
 docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml up -d --build
+docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml down --remove-orphans
 ```
 
-## Makefile automation (Topic 2)
-You can run the same flow with one command:
-
-```bash
-make v7-test
-```
-
-Useful release helpers:
-
-```bash
-make v7-pr VERSION=7.3.0
-make v7-post-merge VERSION=7.3.0
-make v7-doc-check
-```
-
-## GitHub Actions automation
-- PR checks are defined in:
-  - `.github/workflows/v7-ci.yml`
-- Tag-based release automation is defined in:
-  - `.github/workflows/release.yml`
-- Trigger release workflow automatically by pushing a tag:
-
-```bash
-git tag -a v7.3.0 -m "Voice Agent V7.3.0"
-git push origin v7.3.0
-```
-
-## Health checks
+## Schnelle Checks
 ```bash
 curl -s http://localhost:8081/api/health
 curl -s http://localhost:8081/api/models
-curl -s "http://localhost:8081/api/whoami?user_id=test-user-700"
-curl -s "http://localhost:8081/api/user/test-user-700"
+curl -s "http://localhost:8081/api/ui/i18n?user_id=test-user-710"
+curl -s http://localhost:8081/tts/health
+curl -s http://localhost:8081/tts/voices
+```
+
+## User + Settings
+```bash
+curl -s "http://localhost:8081/api/user/test-user-710"
 curl -s -X POST http://localhost:8081/api/user/settings \
   -H 'Content-Type: application/json' \
-  -d '{"user_id":"test-user-700","listen_mode_default":true,"silence_ms":1300,"threshold":0.012}'
-docker compose -f v7/docker/compose.dev.yml exec mongo mongosh --eval 'db.runCommand({ ping: 1 })'
+  -d '{"user_id":"test-user-710","listen_mode_default":true,"silence_ms":1300,"threshold":0.012}'
 ```
 
-## STT hardening checks (V7.2.0+)
+## UI Smoke
+1. `http://localhost:8081` oeffnen.
+2. `Lang` auf `fr`, `it`, `es` wechseln und Label-Update pruefen.
+3. `Listen Mode` aktivieren und Hands-free-Zyklus pruefen.
+4. `TTS language` auf `fr`, `it`, `es` testen.
+5. Ergebnisbereich pruefen (`Transcript`, `Answer`, `Latency`, `Debug JSON`).
+
+## Admin Smoke
+1. Admin anmelden (Token oder DEV mode).
+2. `Admin Docs` im Help-Menue oeffnen.
+3. `Admin Settings` speichern und Reload pruefen.
+4. `Admin Metrics` refreshen.
+
+## Makefile + CI
 ```bash
-# Empty upload -> structured JSON error
-curl -s -F "file=@/dev/null;filename=empty.webm" http://localhost:8081/api/voice
-
-# Upload browser-like webm clip -> should decode via ffmpeg -> Whisper
-curl -s -F "file=@sample.webm" http://localhost:8081/api/voice
+make v7-doc-check
+make v7-lint
+make v7-test
 ```
 
-## UI test
-1. Open `http://localhost:8081`.
-2. Enable `Listen Mode`.
-3. Speak, then stay silent.
-4. Verify: auto-stop -> auto-send -> reply plays -> recording auto-starts again.
-5. Disable `Listen Mode` and verify manual `Record -> Stop -> Send` still works.
-6. Verify `Result` area shows:
-  - `Transcript`
-  - `Answer`
-  - `Latency breakdown`
-  - `Debug JSON` collapsible section
-7. Als Admin `Demo Mode` aktivieren und den auto-resume Loop pruefen.
-8. `Debug panel` Toggle pruefen (ein/aus).
-9. Falls Audio nicht automatisch startet:
-  - einmal manuell `Play` klicken
-  - Autoplay-Banner muss danach verschwinden.
-10. TTS-Override testen:
-  - `TTS language` auf `en` setzen
-  - deutsch sprechen
-  - englische TTS-Ausgabe erwarten.
-11. Admin Metrics testen:
-  - als Admin einloggen
-  - `Admin Metrics` Panel muss sichtbar sein
-  - `Refresh` zeigt Recent-Liste und 24h-Zusammenfassung.
-12. Admin Settings testen:
-  - Menu: `Admin Settings`
-  - Werte aendern und speichern
-  - Seite reloaden
-  - Werte muessen erhalten bleiben.
-
-## Persistence check
-```bash
-curl -s "http://localhost:8081/api/session/<SESSION_ID>?user_id=<USER_ID>&limit=20"
-```
-
-## Notes
-- V7 keeps Mongo schema concepts from V6.
-- Demo users are `admin` by default in this scaffold release.
-- Listen mode settings are persisted per user in `users.settings`:
-  - `listen_mode_default`
-  - `silence_ms`
-  - `threshold`
-- Default `silence_ms` in V7.3 is `1300`.
-- API and nginx now normalize upstream failures as JSON for `/api/*` routes (no HTML error page in UI path).
-- Use V7 docs in Help menu:
-  - `/docs/ui/HELP_USER.md`
-  - `/docs/ui/DEMO_GUIDE.md`
-  - `/docs/admin/HELP_ADMIN.md`
-
-## CRM export templates (V7.4.0)
-- Default template path in API:
-  - `/app/templates/exports/transcript_default.md.tpl`
-- Repo location to customize:
-  - `v7/templates/exports/`
-- Export endpoints:
-  - `GET /api/session/{session_id}/export?user_id=...&format=md`
-  - `GET /api/session/{session_id}/export?user_id=...&format=json`
+Workflows:
+- `.github/workflows/v7-ci.yml`
+- `.github/workflows/release.yml`

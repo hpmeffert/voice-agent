@@ -16,11 +16,14 @@ services:
     ports:
       - "5003:5002"
     environment:
-      VOICE_DE: "/voices/de_DE-thorsten-medium.onnx"
-      VOICE_EN: "/voices/en_GB-northern_english_male-medium.onnx"
-      VOICE_SV: "/voices/sv_SE-nst-medium.onnx"
-      VOICE_NO: "/voices/no_NO-talesyntese-medium.onnx"
-      VOICE_FI: "/voices/fi_FI-harri-medium.onnx"
+      PIPER_VOICE_DE: "/voices/de_DE-thorsten-medium.onnx"
+      PIPER_VOICE_EN: "/voices/en_GB-northern_english_male-medium.onnx"
+      PIPER_VOICE_SV: "/voices/sv_SE-nst-medium.onnx"
+      PIPER_VOICE_NO: "/voices/no_NO-talesyntese-medium.onnx"
+      PIPER_VOICE_FI: "/voices/fi_FI-harri-medium.onnx"
+      PIPER_VOICE_FR: "/voices/fr_FR-upmc-medium.onnx"
+      PIPER_VOICE_IT: "/voices/it_IT-riccardo-x_low.onnx"
+      PIPER_VOICE_ES: "/voices/es_ES-carlfm-x_low.onnx"
     volumes:
       - ${PIPER_VOICES_HOST_PATH:-$HOME/models/piper-voices}:/voices:ro
 
@@ -60,8 +63,11 @@ services:
       CRM_EXPORT_WEBHOOK_URL: "${CRM_EXPORT_WEBHOOK_URL:-}"
       ADMIN_DEV_MODE: "${ADMIN_DEV_MODE:-1}"
       ADMIN_UI_TOKEN: "${ADMIN_UI_TOKEN:-}"
-      UI_VERSION: "${UI_VERSION:-v7.9.0}"
+      UI_VERSION: "${UI_VERSION:-v7.10.0}"
       UI_BUILD: "${UI_BUILD:-}"
+      DEFAULT_UI_LANG: "${DEFAULT_UI_LANG:-de}"
+      SUPPORTED_UI_LANGS: "${SUPPORTED_UI_LANGS:-de,en,fr,it,es}"
+      SUPPORTED_TTS_LANGS: "${SUPPORTED_TTS_LANGS:-de,en,fr,it,es,sv,no,fi}"
       CRM_PROTOCOL_ENABLED: "${CRM_PROTOCOL_ENABLED:-1}"
       CRM_PROTOCOL_TEMPLATE: "${CRM_PROTOCOL_TEMPLATE:-crm_protocol_default.md.j2}"
       CRM_PROTOCOL_FORMAT: "${CRM_PROTOCOL_FORMAT:-md}"

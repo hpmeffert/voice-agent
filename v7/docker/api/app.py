@@ -23,7 +23,7 @@ from starlette.background import BackgroundTask
 
 from protocol_renderer import render_protocol
 
-app = FastAPI(title="Voice Agent API V7.9.0")
+app = FastAPI(title="Voice Agent API V7.10.0")
 
 # ----------------------------
 # Config / ENV
@@ -78,8 +78,11 @@ MAX_EXPORT_MESSAGES = int(os.getenv("MAX_EXPORT_MESSAGES", "200"))
 MAX_EXPORT_BYTES = int(os.getenv("MAX_EXPORT_BYTES", str(1_500_000)))
 ADMIN_DEV_MODE = os.getenv("ADMIN_DEV_MODE", "0").strip() == "1"
 ADMIN_UI_TOKEN = os.getenv("ADMIN_UI_TOKEN", "").strip()
-UI_VERSION = os.getenv("UI_VERSION", "v7.9.0").strip() or "v7.9.0"
+UI_VERSION = os.getenv("UI_VERSION", "v7.10.0").strip() or "v7.10.0"
 UI_BUILD = os.getenv("UI_BUILD", "").strip()
+DEFAULT_UI_LANG = os.getenv("DEFAULT_UI_LANG", "de").strip().lower() or "de"
+SUPPORTED_UI_LANGS = [s.strip().lower() for s in os.getenv("SUPPORTED_UI_LANGS", "de,en,fr,it,es").split(",") if s.strip()]
+SUPPORTED_TTS_LANGS = [s.strip().lower() for s in os.getenv("SUPPORTED_TTS_LANGS", "de,en,fr,it,es,sv,no,fi").split(",") if s.strip()]
 LISTEN_MODE_DEFAULT = os.getenv("LISTEN_MODE_DEFAULT", "0").strip().lower() in {"1", "true", "yes", "on"}
 LISTEN_SILENCE_MS_DEFAULT = int(os.getenv("LISTEN_SILENCE_MS_DEFAULT", "1300"))
 LISTEN_THRESHOLD_DEFAULT = float(os.getenv("LISTEN_THRESHOLD_DEFAULT", "0.012"))
@@ -99,6 +102,12 @@ if CRM_PROTOCOL_FORMAT not in {"md", "txt", "json"}:
     CRM_PROTOCOL_FORMAT = "md"
 LISTEN_SILENCE_MS_DEFAULT = max(300, min(5000, LISTEN_SILENCE_MS_DEFAULT))
 LISTEN_THRESHOLD_DEFAULT = max(0.001, min(0.2, LISTEN_THRESHOLD_DEFAULT))
+if not SUPPORTED_UI_LANGS:
+    SUPPORTED_UI_LANGS = ["de", "en", "fr", "it", "es"]
+if DEFAULT_UI_LANG not in SUPPORTED_UI_LANGS:
+    DEFAULT_UI_LANG = SUPPORTED_UI_LANGS[0]
+if not SUPPORTED_TTS_LANGS:
+    SUPPORTED_TTS_LANGS = ["de", "en", "fr", "it", "es", "sv", "no", "fi"]
 
 SYSTEM_PROMPT = (
     "Du bist ein hilfreicher, präziser Assistent. Antworte kurz, klar und korrekt. "
@@ -118,6 +127,7 @@ messages_col: Collection | None = None
 telemetry_col: Collection | None = None
 metrics_logs_col: Collection | None = None
 admin_settings_col: Collection | None = None
+ui_translations_col: Collection | None = None
 
 
 # ----------------------------
@@ -176,6 +186,7 @@ def ensure_ready() -> None:
         or messages_col is None
         or telemetry_col is None
         or admin_settings_col is None
+        or ui_translations_col is None
     ):
         raise RuntimeError("MongoDB not initialized")
 
@@ -451,7 +462,7 @@ def build_export_payload(
     }
 
     json_payload = {
-        "version": "v7.9.0",
+        "version": "v7.10.0",
         "session": {
             "session_id": session.get("_id"),
             "user_id": session.get("user_id"),
@@ -639,7 +650,7 @@ def normalized_listen_settings(raw: Any) -> dict[str, Any]:
 # ----------------------------
 @app.on_event("startup")
 def on_startup() -> None:
-    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col, admin_settings_col
+    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col, admin_settings_col, ui_translations_col
 
     whisper = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type=WHISPER_COMPUTE)
 
@@ -653,6 +664,7 @@ def on_startup() -> None:
     metrics_logs_col = mongo_db["metrics_logs"]
     telemetry_col = metrics_logs_col
     admin_settings_col = mongo_db["admin_settings"]
+    ui_translations_col = mongo_db["ui_translations"]
 
     users_col.create_index([("updated_at", DESCENDING)])
 
@@ -670,7 +682,9 @@ def on_startup() -> None:
     metrics_logs_col.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
     metrics_logs_col.create_index([("status", ASCENDING), ("created_at", DESCENDING)])
     admin_settings_col.create_index([("updated_at", DESCENDING)])
+    ui_translations_col.create_index([("updated_at", DESCENDING)])
     get_admin_settings()
+    seed_ui_translations()
 
 
 @app.on_event("shutdown")
@@ -731,6 +745,7 @@ def upsert_user(user_id: str) -> None:
                 "created_at": ts,
                 "role": "admin",  # V7 demo default: all newly created users are admins.
                 "prefs.crm_export_enabled": CRM_EXPORT_DEFAULT_ENABLED,
+                "prefs.ui_lang": DEFAULT_UI_LANG,
                 "settings": default_listen_settings(),
             },
         },
@@ -829,11 +844,90 @@ def set_user_settings(user_id: str, patch: dict[str, Any]) -> dict[str, Any]:
                 "created_at": ts,
                 "role": "admin",
                 "prefs.crm_export_enabled": CRM_EXPORT_DEFAULT_ENABLED,
+                "prefs.ui_lang": DEFAULT_UI_LANG,
             },
         },
         upsert=True,
     )
     return next_settings
+
+
+def get_user_ui_lang(user_id: str) -> str:
+    ensure_ready()
+    doc = users_col.find_one({"_id": user_id}, {"prefs.ui_lang": 1})
+    if not doc:
+        upsert_user(user_id)
+        return DEFAULT_UI_LANG
+    prefs = doc.get("prefs") or {}
+    lang = str(prefs.get("ui_lang") or "").strip().lower()
+    if lang in SUPPORTED_UI_LANGS:
+        return lang
+    users_col.update_one(
+        {"_id": user_id},
+        {"$set": {"updated_at": now_utc(), "prefs.ui_lang": DEFAULT_UI_LANG}},
+    )
+    return DEFAULT_UI_LANG
+
+
+def set_user_ui_lang(user_id: str, ui_lang: str) -> str:
+    ensure_ready()
+    lang = (ui_lang or "").strip().lower()
+    if lang not in SUPPORTED_UI_LANGS:
+        raise HTTPException(status_code=400, detail=f"Unsupported ui_lang: {lang}")
+    ts = now_utc()
+    users_col.update_one(
+        {"_id": user_id},
+        {
+            "$set": {"updated_at": ts, "last_seen_at": ts, "prefs.ui_lang": lang},
+            "$setOnInsert": {
+                "_id": user_id,
+                "created_at": ts,
+                "role": "admin",
+                "prefs.crm_export_enabled": CRM_EXPORT_DEFAULT_ENABLED,
+                "settings": default_listen_settings(),
+            },
+        },
+        upsert=True,
+    )
+    return lang
+
+
+def seed_ui_translations() -> None:
+    ensure_ready()
+    ts = now_utc()
+    docs = [
+        {"_id": "app.title", "de": "Voice Agent", "en": "Voice Agent", "fr": "Agent Vocal", "it": "Agente Vocale", "es": "Agente de Voz"},
+        {"_id": "menu.admin_token", "de": "Admin Token speichern", "en": "Save Admin Token", "fr": "Enregistrer Token Admin", "it": "Salva Token Admin", "es": "Guardar Token Admin"},
+        {"_id": "menu.user_docs", "de": "Benutzer Dokumentation", "en": "User Documentation", "fr": "Documentation Utilisateur", "it": "Documentazione Utente", "es": "Documentacion de Usuario"},
+        {"_id": "menu.demo_guide", "de": "Demo Guide", "en": "Demo Guide", "fr": "Guide Demo", "it": "Guida Demo", "es": "Guia Demo"},
+        {"_id": "menu.admin_docs", "de": "Admin Docs", "en": "Admin Docs", "fr": "Docs Admin", "it": "Documenti Admin", "es": "Docs Admin"},
+        {"_id": "menu.admin_settings", "de": "Admin Settings", "en": "Admin Settings", "fr": "Parametres Admin", "it": "Impostazioni Admin", "es": "Configuracion Admin"},
+        {"_id": "menu.release_notes", "de": "Release Notes", "en": "Release Notes", "fr": "Notes de Version", "it": "Note di Rilascio", "es": "Notas de Version"},
+        {"_id": "label.record", "de": "Record", "en": "Record", "fr": "Enregistrer", "it": "Registra", "es": "Grabar"},
+        {"_id": "label.stop", "de": "Stop", "en": "Stop", "fr": "Arreter", "it": "Stop", "es": "Detener"},
+        {"_id": "label.send", "de": "Send", "en": "Send", "fr": "Envoyer", "it": "Invia", "es": "Enviar"},
+        {"_id": "label.clear", "de": "Clear Session", "en": "Clear Session", "fr": "Effacer Session", "it": "Pulisci Sessione", "es": "Limpiar Sesion"},
+    ]
+    for d in docs:
+        ui_translations_col.update_one(
+            {"_id": d["_id"]},
+            {"$set": {**d, "updated_at": ts}},
+            upsert=True,
+        )
+
+
+def get_ui_translations(lang: str) -> dict[str, str]:
+    ensure_ready()
+    chosen = lang if lang in SUPPORTED_UI_LANGS else DEFAULT_UI_LANG
+    docs = list(ui_translations_col.find({}, {"_id": 1, chosen: 1, "en": 1}))
+    out: dict[str, str] = {}
+    for d in docs:
+        key = d.get("_id")
+        if not key:
+            continue
+        value = d.get(chosen) or d.get("en") or key
+        out[str(key)] = str(value)
+    return out
 
 
 def is_crm_export_enabled_for_user(user_id: str) -> bool:
@@ -1245,7 +1339,8 @@ class UserDeleteRequest(BaseModel):
 
 class UserPrefsRequest(BaseModel):
     user_id: str = Field(min_length=8)
-    crm_export_enabled: bool
+    crm_export_enabled: bool | None = None
+    ui_lang: str | None = Field(default=None, min_length=2, max_length=8)
 
 
 class UserSettingsUpdateRequest(BaseModel):
@@ -1264,6 +1359,11 @@ class AdminSettingsUpdateRequest(BaseModel):
     crm_export_enabled: bool | None = None
     crm_protocol_enabled: bool | None = None
     debug_panel_default: bool | None = None
+
+
+class UiLangUpdateRequest(BaseModel):
+    user_id: str = Field(min_length=8)
+    ui_lang: str = Field(min_length=2, max_length=8)
 
 
 # ----------------------------
@@ -1297,6 +1397,13 @@ def models():
             "available": bool(OPENAI_API_KEY),
             "default_model": OPENAI_MODEL,
         },
+        "ui": {
+            "langs": SUPPORTED_UI_LANGS,
+            "default": DEFAULT_UI_LANG,
+        },
+        "tts": {
+            "langs": SUPPORTED_TTS_LANGS,
+        },
     }
 
 
@@ -1324,6 +1431,9 @@ def config(user_id: str | None = Query(None)):
         "listen_silence_ms_default": int(listen_defaults.get("silence_ms", LISTEN_SILENCE_MS_DEFAULT)),
         "listen_threshold_default": float(listen_defaults.get("threshold", LISTEN_THRESHOLD_DEFAULT)),
         "admin_settings": admin_settings,
+        "ui_lang_default": DEFAULT_UI_LANG,
+        "ui_langs_supported": SUPPORTED_UI_LANGS,
+        "tts_langs_supported": SUPPORTED_TTS_LANGS,
         "ui": {
             "admin": is_admin_user(user_id),
             "version": UI_VERSION,
@@ -1340,6 +1450,32 @@ def whoami(
     role = get_user_role(user_id)
     is_admin = role == "admin" or is_admin_token_valid(admin_token)
     return {"user_id": user_id, "role": role, "is_admin": is_admin}
+
+
+@app.get("/ui/i18n")
+def ui_i18n(
+    lang: str | None = Query(None),
+    user_id: str | None = Query(None),
+):
+    preferred = (lang or "").strip().lower()
+    if not preferred and user_id and len(user_id.strip()) >= 8:
+        preferred = get_user_ui_lang(user_id.strip())
+    if preferred not in SUPPORTED_UI_LANGS:
+        preferred = DEFAULT_UI_LANG
+    return {
+        "supported_langs": SUPPORTED_UI_LANGS,
+        "fallback_lang": "en",
+        "default_lang": DEFAULT_UI_LANG,
+        "lang": preferred,
+        "user_id": user_id,
+        "translations": get_ui_translations(preferred),
+    }
+
+
+@app.post("/ui/lang")
+def ui_lang_set(req: UiLangUpdateRequest):
+    lang = set_user_ui_lang(req.user_id.strip(), req.ui_lang.strip().lower())
+    return {"ok": True, "user_id": req.user_id.strip(), "ui_lang": lang}
 
 
 @app.get("/admin/docs/help")
@@ -1403,14 +1539,27 @@ def admin_settings_update(
 
 @app.get("/user/prefs")
 def get_user_prefs(user_id: str = Query(..., min_length=8)):
-    enabled = get_user_crm_export_enabled(user_id)
-    return {"user_id": user_id, "crm_export_enabled": enabled}
+    return {
+        "user_id": user_id,
+        "crm_export_enabled": get_user_crm_export_enabled(user_id),
+        "ui_lang": get_user_ui_lang(user_id),
+    }
 
 
 @app.post("/user/prefs")
 def set_user_prefs(req: UserPrefsRequest):
-    set_user_crm_export_enabled(req.user_id, req.crm_export_enabled)
-    return {"ok": True, "user_id": req.user_id, "crm_export_enabled": bool(req.crm_export_enabled)}
+    if req.crm_export_enabled is None and req.ui_lang is None:
+        raise HTTPException(status_code=400, detail="No preference fields provided")
+    if req.crm_export_enabled is not None:
+        set_user_crm_export_enabled(req.user_id, bool(req.crm_export_enabled))
+    if req.ui_lang is not None:
+        set_user_ui_lang(req.user_id, req.ui_lang)
+    return {
+        "ok": True,
+        "user_id": req.user_id,
+        "crm_export_enabled": get_user_crm_export_enabled(req.user_id),
+        "ui_lang": get_user_ui_lang(req.user_id),
+    }
 
 
 @app.get("/user/{user_id}")
@@ -1422,7 +1571,10 @@ def get_user(user_id: str):
     return {
         "user_id": uid,
         "role": get_user_role(uid),
-        "prefs": {"crm_export_enabled": get_user_crm_export_enabled(uid)},
+        "prefs": {
+            "crm_export_enabled": get_user_crm_export_enabled(uid),
+            "ui_lang": get_user_ui_lang(uid),
+        },
         "settings": settings,
     }
 
@@ -1740,7 +1892,7 @@ def download_protocol(
             "format": format or CRM_PROTOCOL_FORMAT,
             "template": CRM_PROTOCOL_TEMPLATE,
             "tz": tz,
-            "export_version": "v7.9.0",
+            "export_version": "v7.10.0",
         },
     )
 
@@ -1831,7 +1983,7 @@ async def voice(
     lang: str | None = None
     tts_lang_selected: str | None = None
 
-    allowed_tts_langs = {"de", "en", "sv", "no", "fi", "fr", "it", "es"}
+    allowed_tts_langs = set(SUPPORTED_TTS_LANGS)
     requested_tts_lang = (tts_lang or "").strip().lower()
     if requested_tts_lang in allowed_tts_langs:
         tts_lang_selected = requested_tts_lang
@@ -1905,7 +2057,11 @@ async def voice(
         except Exception:
             return error_response(status_code=400, error="Unsupported/invalid audio", error_code="stt_decode_failed")
         transcript = "".join(seg.text for seg in segments).strip()
-        lang = str(getattr(info, "language", "") or "") or None
+        lang = str(getattr(info, "language", "") or "").strip().lower() or None
+        if not lang:
+            lang = get_user_ui_lang(uid)
+        if not lang:
+            lang = DEFAULT_UI_LANG
 
         if not transcript:
             return error_response(status_code=400, error="No speech detected", error_code="no_speech")

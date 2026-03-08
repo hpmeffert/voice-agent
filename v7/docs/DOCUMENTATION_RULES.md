@@ -28,9 +28,11 @@ Vor Merge/Tag muessen diese Seiten aktualisiert werden:
 
 ## Qualitaets-Check vor Release
 1. Help-Menue zeigt alle 4 Punkte korrekt:
-   - Help (Benutzer Dokumentation)
+   - Admin Token speichern
+   - Benutzer Dokumentation
    - Demo Guide
    - Admin Docs
    - Release Notes
+   - (optional nur Admin) Admin Settings
 2. Inhalte passen zur aktuellen Version.
 3. Release Notes enthalten alle V7-Versionen von `v7.0.0` bis aktuell.
