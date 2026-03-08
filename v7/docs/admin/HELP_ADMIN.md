@@ -1,4 +1,4 @@
-# Admin Dokumentation (V7.7.0)
+# Admin Dokumentation (V7.8.0)
 
 Diese Seite ist fuer Admins geschrieben.
 Ziel: schnell starten, sauber testen, alle Einstellungen verstehen.
@@ -106,6 +106,17 @@ Erwartung:
    - UI-Feld `TTS language` auf `en` setzen.
    - Deutsche Anfrage sprechen.
    - Englische TTS-Antwort erwarten.
+
+### Schritt I: Metrics Logs + Admin Endpunkte
+```bash
+curl -s "http://localhost:8081/api/admin/metrics/recent?user_id=<USER_ID>&limit=20" \
+  -H "X-Admin-Token: <TOKEN>"
+curl -s "http://localhost:8081/api/admin/metrics/summary?user_id=<USER_ID>&window=24h" \
+  -H "X-Admin-Token: <TOKEN>"
+```
+Erwartung:
+- `recent` liefert letzte Metrics-Eintraege.
+- `summary` liefert Aggregation fuer `24h` oder `7d`.
 
 ## 5) Alle einstellbaren Parameter (Admin)
 

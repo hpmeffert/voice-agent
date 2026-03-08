@@ -296,7 +296,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V7.7.0</h1>
+        <h1>Voice Agent V7.8.0</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
@@ -474,6 +474,15 @@
             </div>
           </div>
 
+          <div id="adminMetricsPanel" class="latencyBox" style="display:none;">
+            <div class="row" style="justify-content:space-between;">
+              <div class="muted">Admin Metrics (metrics_logs)</div>
+              <button id="btnMetricsRefresh">Refresh</button>
+            </div>
+            <div id="adminMetricsSummary" class="muted" style="margin-top:6px;">-</div>
+            <pre id="adminMetricsRecent" style="margin-top:8px; max-height:220px; overflow:auto;">-</pre>
+          </div>
+
           <details id="debugBox" class="debugBox">
             <summary>Debug JSON</summary>
             <pre id="debugJson">-</pre>
@@ -549,6 +558,10 @@ const btnExport = el("btnExport");
 const btnProtocol = el("btnProtocol");
 const debugBoxEl = el("debugBox");
 const autoplayBanner = el("autoplayBanner");
+const adminMetricsPanel = el("adminMetricsPanel");
+const adminMetricsSummary = el("adminMetricsSummary");
+const adminMetricsRecent = el("adminMetricsRecent");
+const btnMetricsRefresh = el("btnMetricsRefresh");
 
 const backendSel = el("backend");
 const modelSel = el("model");
@@ -605,7 +618,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v7.7.0";
+let uiVersionText = "v7.8.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 let appState = "idle";
@@ -895,6 +908,7 @@ function updateAdminControls() {
   demoModeLabel.style.display = showAdmin ? "inline-flex" : "none";
   demoModeHint.style.display = showAdmin ? "inline" : "none";
   debugPanelLabel.style.display = showAdmin ? "inline-flex" : "none";
+  adminMetricsPanel.style.display = showAdmin ? "block" : "none";
   if (!showAdmin) {
     demoModeEnabled = false;
     localStorage.removeItem(DEMO_MODE_KEY);
@@ -903,6 +917,8 @@ function updateAdminControls() {
     debugPanelEnabled = true;
     localStorage.removeItem(DEBUG_PANEL_KEY);
     applyDebugPanelVisibility();
+    adminMetricsSummary.textContent = "-";
+    adminMetricsRecent.textContent = "-";
   }
   demoGuideBanner.style.display = demoModeEnabled && showAdmin ? "block" : "none";
 }
@@ -1069,6 +1085,35 @@ function updateMenuUi() {
   updateAdminControls();
 }
 
+async function loadAdminMetrics() {
+  if (!uiAdmin || !userId) return;
+  try {
+    const [recentResp, summaryResp] = await Promise.all([
+      fetch(`/api/admin/metrics/recent?user_id=${encodeURIComponent(userId)}&limit=20`, {
+        headers: authHeaders(),
+        cache: "no-store",
+      }),
+      fetch(`/api/admin/metrics/summary?user_id=${encodeURIComponent(userId)}&window=24h`, {
+        headers: authHeaders(),
+        cache: "no-store",
+      }),
+    ]);
+    if (!recentResp.ok || !summaryResp.ok) {
+      throw new Error(`metrics fetch failed: ${recentResp.status}/${summaryResp.status}`);
+    }
+    const recentData = await recentResp.json();
+    const summaryData = await summaryResp.json();
+    const avg = summaryData?.avg_ms || {};
+    adminMetricsSummary.textContent =
+      `24h count=${summaryData.count || 0}, ok=${summaryData.ok_count || 0}, err=${summaryData.error_count || 0}, ` +
+      `avg_total=${avg.total_ms || 0}ms, avg_stt=${avg.stt_ms || 0}ms, avg_llm=${avg.llm_ms || 0}ms, avg_tts=${avg.tts_ms || 0}ms`;
+    adminMetricsRecent.textContent = JSON.stringify(recentData?.items || [], null, 2);
+  } catch (err) {
+    adminMetricsSummary.textContent = "Metrics unavailable";
+    adminMetricsRecent.textContent = String(err);
+  }
+}
+
 async function loadModels() {
   setAppState("listening");
   showError("");
@@ -1101,7 +1146,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v7.7.0";
+    const ver = cfg?.ui?.version || "v7.8.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
   } catch (_) {
@@ -1109,13 +1154,14 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v7.7.0";
+    uiVersionText = "v7.8.0";
   }
   await loadWhoAmI();
   recomputeCrmExportEnabled();
   updateExportUi();
   updateProtocolUi();
   updateMenuUi();
+  await loadAdminMetrics();
 }
 
 async function loadWhoAmI() {
@@ -1255,6 +1301,7 @@ adminTokenSave.onclick = async () => {
   delete helpDocCache["/api/admin/docs/help"];
   await loadWhoAmI();
   updateMenuUi();
+  await loadAdminMetrics();
 };
 
 adminTokenInput.addEventListener("keydown", async (ev) => {
@@ -1641,6 +1688,10 @@ btnProtocol.onclick = async () => {
   }
 };
 
+btnMetricsRefresh.onclick = async () => {
+  await loadAdminMetrics();
+};
+
 async function sendRecording() {
   if (!recordedBlob || recordedBlob.size === 0) {
     showError("No recorded audio available.");
@@ -1740,6 +1791,7 @@ async function sendRecording() {
       }
 
       showError("");
+      await loadAdminMetrics();
       break;
     }
   } catch (err) {
