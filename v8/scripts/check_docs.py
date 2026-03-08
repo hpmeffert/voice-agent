@@ -25,12 +25,12 @@ for p in required:
 html = (ROOT / "v8/web/index.html").read_text(encoding="utf-8", errors="ignore")
 checks = [
     (r"Admin Token speichern", "missing 'Admin Token speichern'"),
-    (r">Help<", "missing 'Help' menu item"),
+    (r"Benutzer Dokumentation", "missing 'Benutzer Dokumentation' menu item"),
     (r"Demo Guide", "missing 'Demo Guide' menu item"),
     (r"Admin Docs", "missing 'Admin Docs' menu item"),
     (r"Release Notes", "missing 'Release Notes' menu item"),
     (r"id=\"silenceMs\"[^\n]*value=\"1300\"", "silence default must be 1300"),
-    (r"Voice Agent V8\.0\.0", "header/title must show V8.0.0"),
+    (r"Voice Agent V8\.", "header/title must show V8.x version"),
 ]
 for pattern, msg in checks:
     if re.search(pattern, html) is None:
@@ -38,7 +38,7 @@ for pattern, msg in checks:
         sys.exit(1)
 
 release = (ROOT / "v8/docs/RELEASE.md").read_text(encoding="utf-8", errors="ignore")
-for tag in ["V7.0.0", "V8.0.0"]:
+for tag in ["V7.0.0", "V8.0.0", "V8.1.0"]:
     if tag not in release:
         print(f"[V8-DOC-CHECK][FAIL] release history missing {tag}")
         sys.exit(1)

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Voice Agent Customer V8.1.0</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
+    .wrap { max-width: 900px; margin: 20px auto; padding: 0 14px; }
+    .card { background:#fff; border:1px solid #d9e1ee; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.06); }
+    .hd { padding:12px 14px; border-bottom:1px solid #d9e1ee; display:flex; justify-content:space-between; align-items:center; }
+    .bd { padding:14px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    input, textarea, select, button { border:1px solid #cfd8e6; border-radius:8px; padding:8px 10px; }
+    textarea { width:100%; min-height:84px; }
+    button.primary { background:#0f766e; color:#fff; border-color:#0f766e; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .status { color:#6b7280; font-size:12px; }
+    .chat { margin-top:12px; display:grid; gap:10px; }
+    .msg { padding:10px; border-radius:10px; border:1px solid #dbe3f0; background:#fff; white-space:pre-wrap; }
+    .me { background:#eefbf8; }
+    .bot { background:#f8f4ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="hd">
+        <div>
+          <b>Voice Agent Customer V8.1.0</b>
+          <div class="status" id="status">idle</div>
+        </div>
+        <div class="status" id="ids">-</div>
+      </div>
+      <div class="bd">
+        <div class="row">
+          <label>User <input id="userId" size="30" /></label>
+          <label>Session <input id="sessionId" size="30" /></label>
+          <button id="btnNewSession">Neue Session</button>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <button id="btnRecord" class="primary">Record</button>
+          <button id="btnStop" disabled>Stop</button>
+          <button id="btnSendAudio" disabled>Send Audio</button>
+          <label>TTS <select id="ttsLang"><option value="auto">auto</option><option>de</option><option>en</option><option>fr</option><option>it</option><option>es</option></select></label>
+        </div>
+
+        <div style="margin-top:10px;">
+          <textarea id="textInput" placeholder="Text eingeben und senden..."></textarea>
+          <div class="row" style="margin-top:8px;">
+            <button id="btnSendText" class="primary">Send Text</button>
+          </div>
+        </div>
+
+        <audio id="audio" controls style="width:100%; margin-top:12px;"></audio>
+
+        <div id="chat" class="chat"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const USER_KEY = "v8_customer_user_id";
+const SESSION_KEY = "v8_customer_session_id";
+const userIdEl = document.getElementById("userId");
+const sessionIdEl = document.getElementById("sessionId");
+const idsEl = document.getElementById("ids");
+const statusEl = document.getElementById("status");
+const chatEl = document.getElementById("chat");
+const audioEl = document.getElementById("audio");
+const ttsLangEl = document.getElementById("ttsLang");
+const textInputEl = document.getElementById("textInput");
+const btnRecord = document.getElementById("btnRecord");
+const btnStop = document.getElementById("btnStop");
+const btnSendAudio = document.getElementById("btnSendAudio");
+const btnSendText = document.getElementById("btnSendText");
+const btnNewSession = document.getElementById("btnNewSession");
+
+let mediaRecorder = null;
+let chunks = [];
+let lastBlob = null;
+
+function setStatus(s){ statusEl.textContent = s; }
+function makeId(){ return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()); }
+function refreshIds(){ idsEl.textContent = `User: ${userIdEl.value} | Session: ${sessionIdEl.value || "-"}`; }
+function persistIds(){ localStorage.setItem(USER_KEY, userIdEl.value); localStorage.setItem(SESSION_KEY, sessionIdEl.value); refreshIds(); }
+function addMsg(cls, title, text){ const d = document.createElement('div'); d.className = `msg ${cls}`; d.textContent = `${title}:\n${text}`; chatEl.appendChild(d); chatEl.scrollTop = chatEl.scrollHeight; }
+
+userIdEl.value = localStorage.getItem(USER_KEY) || makeId();
+sessionIdEl.value = localStorage.getItem(SESSION_KEY) || "";
+refreshIds();
+
+userIdEl.addEventListener('change', persistIds);
+sessionIdEl.addEventListener('change', persistIds);
+btnNewSession.onclick = () => { sessionIdEl.value = ""; persistIds(); addMsg('me','System','Neue Session gestartet'); };
+
+btnRecord.onclick = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      lastBlob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      btnSendAudio.disabled = !lastBlob;
+      stream.getTracks().forEach(t => t.stop());
+    };
+    mediaRecorder.start();
+    setStatus('recording');
+    btnRecord.disabled = true; btnStop.disabled = false;
+  } catch (e) { setStatus(`error: ${e}`); }
+};
+
+btnStop.onclick = () => {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  setStatus('idle');
+  btnRecord.disabled = false; btnStop.disabled = true;
+};
+
+btnSendAudio.onclick = async () => {
+  if (!lastBlob) return;
+  setStatus('sending-audio');
+  const fd = new FormData();
+  fd.append('file', lastBlob, 'speech.webm');
+  fd.append('user_id', userIdEl.value);
+  fd.append('session_id', sessionIdEl.value || '');
+  fd.append('return_audio', '1');
+  if (ttsLangEl.value !== 'auto') fd.append('tts_lang', ttsLangEl.value);
+  const r = await fetch('/api/voice', { method:'POST', body: fd });
+  if (!r.ok) { setStatus(`error ${r.status}`); return; }
+  const blob = await r.blob();
+  const transcript = r.headers.get('X-Transcript') || '';
+  const answer = r.headers.get('X-Answer') || '';
+  const sid = r.headers.get('X-Session-Id') || sessionIdEl.value;
+  sessionIdEl.value = sid; persistIds();
+  if (transcript) addMsg('me','Kunde',decodeURIComponent(transcript));
+  if (answer) addMsg('bot','Agent',decodeURIComponent(answer));
+  audioEl.src = URL.createObjectURL(blob);
+  try { await audioEl.play(); } catch(_){}
+  setStatus('idle');
+};
+
+btnSendText.onclick = async () => {
+  const text = (textInputEl.value || '').trim();
+  if (!text) return;
+  addMsg('me','Kunde',text);
+  setStatus('thinking');
+  const r = await fetch('/api/chat/text', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      text,
+      user_id: userIdEl.value,
+      session_id: sessionIdEl.value || '',
+      tts_lang: ttsLangEl.value === 'auto' ? '' : ttsLangEl.value,
+    })
+  });
+  const data = await r.json();
+  if (!r.ok) { addMsg('bot','Fehler', JSON.stringify(data)); setStatus('error'); return; }
+  sessionIdEl.value = data.session_id || sessionIdEl.value;
+  persistIds();
+  addMsg('bot','Agent', data.answer || '');
+  textInputEl.value = '';
+  setStatus('idle');
+};
+</script>
+</body>
+</html>

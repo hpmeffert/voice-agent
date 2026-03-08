@@ -1,13 +1,28 @@
-# Demo Guide (V8.0.0)
+# Demo Guide (V8.1.0)
 
-Stellen Sie sich vor, ein Kunde spricht und der Agent antwortet ohne Menue-Chaos, mit klaren Statuswechseln.
+Ziel: In 5-7 Minuten zeigen, warum Voice Agent im Alltag und im Support wirklich hilft.
 
-## Flow 1: Self-Service
-1. Starten Sie mit einer einfachen Kundenfrage.
-2. Zeigen Sie `Record -> Stop -> Send`.
-3. Zeigen Sie Transcript + Antwort + Audioausgabe.
+## Demo Story 1: "Der hektische Vormittag"
+Stell dir vor, ein Kunde ruft an, waehrend bereits drei Tickets offen sind.
+Du oeffnest die Customer UI (`8083`) und startest direkt:
+1. Begruessung per Spracheingabe (`Record` -> `Stop` -> `Send`).
+2. Kunde nennt Problem in eigenen Worten.
+3. Agent antwortet strukturiert und ruhig.
+4. Optional Textnachricht nachschieben ueber `/api/chat/text`-Flow in der UI.
 
-## Flow 2: Technikfokus
-1. Oeffnen Sie das Help-Menue.
-2. Zeigen Sie, dass Doku, Demo Guide, Admin Docs und Release Notes getrennt sind.
-3. Zeigen Sie unter `/api/eventbus/health`, dass der Transport-Sidecar aktiv ist.
+Spannungsbogen:
+- Anfang: Stress, unklare Lage.
+- Mitte: klare, schnelle Interaktion.
+- Ende: sauberer, nachvollziehbarer Gespraechsverlauf.
+
+## Demo Story 2: "Admin rettet die Live-Demo"
+"Stell dir vor, kurz vor einem Kundentermin wirkt alles instabil."
+1. Admin UI (`8082`) oeffnen.
+2. `api/health`, `api/models`, `eventbus/health` pruefen.
+3. Kurzer Testcall in Customer UI.
+4. Ergebnis live zeigen: System ist messbar gesund und einsatzbereit.
+
+## Demo-Hinweise
+- Starte mit einem klaren Use Case, nicht mit Technikdetails.
+- Erklaere jede sichtbare Einstellung in einem Satz.
+- Zeige am Ende immer den Mehrwert: schneller, reproduzierbar, teamfaehig.
