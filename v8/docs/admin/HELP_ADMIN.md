@@ -1,4 +1,4 @@
-# Admin Handbuch - V8.8.0
+# Admin Handbuch - V8.9.0
 
 ## Ziel dieses Handbuchs
 Dieses Dokument erklaert alle admin-relevanten Funktionen in V8: wofuer sie gut sind, welche Parameter gesetzt werden koennen, wie du die Installation startest und wie du die Betriebsfaehigkeit Schritt fuer Schritt testest.
@@ -123,6 +123,21 @@ curl -I http://localhost:8082/
 for i in $(seq 1 35); do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8082/api/models; done
 ```
 - Release-Verweis: V8.8.0.
+
+### Funktion: V7 -> V8 Migration
+- Wofuer gut: sicherer Umstieg von V7 auf V8 ohne Port-/Compose-Konflikte.
+- Dokument: `v8/docs/MIGRATION_V7_TO_V8.md`
+- Enthaltene Parameter:
+  - Ports (`8002`, `8082`, `8083`, `8084`, `5004`, `27019`, `6381`)
+  - Kern-ENV (`MONGO_URL`, `VALKEY_URL`, `VALKEY_CHANNEL_PREFIX`, `UI_VERSION`)
+  - Limits/Security (`MAX_AUDIO_BYTES`, `MAX_REQUEST_BYTES`, `RATE_LIMIT_*`)
+- Test:
+```bash
+docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml down --remove-orphans
+docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml up -d --build
+curl -s http://localhost:8082/api/health
+```
+- Release-Verweis: V8.9.0.
 
 ## 5) Alle admin-einstellbaren Parameter (Compose/API)
 - Plattform/Betrieb:
