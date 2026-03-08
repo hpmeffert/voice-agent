@@ -14,6 +14,7 @@ required = [
     ROOT / "v8/docs/admin/HELP_ADMIN.md",
     ROOT / "v8/docs/RELEASE.md",
     ROOT / "v8/docs/TEAM_QUICKSTART_V8_MAC.md",
+    ROOT / "v8/docs/transport_channels.md",
 ]
 
 for p in required:
@@ -60,10 +61,11 @@ for pattern, msg in checks:
         sys.exit(1)
 
 doc_rules = [
-    (ROOT / "v8/docs/ui/HELP_USER.md", [r"^# .*V8\.6\.0", r"Help-Menue Struktur"], "help user"),
+    (ROOT / "v8/docs/ui/HELP_USER.md", [r"^# .*V8\.7\.0", r"Help-Menue Struktur", r"Handoff"], "help user"),
     (ROOT / "v8/docs/ui/DEMO_GUIDE.md", [r"Story-Flow 1", r"Story-Flow 2"], "demo guide"),
-    (ROOT / "v8/docs/admin/HELP_ADMIN.md", [r"## 2\) Start / Stop", r"Whisper", r"Ollama", r"Piper", r"Mongo", r"Valkey"], "admin docs"),
-    (ROOT / "v8/docs/RELEASE.md", [r"V7\.0\.0", r"V8\.6\.0"], "release notes"),
+    (ROOT / "v8/docs/admin/HELP_ADMIN.md", [r"## 2\) Start / Stop", r"Whisper", r"Ollama", r"Piper", r"Mongo", r"Valkey", r"Handoff"], "admin docs"),
+    (ROOT / "v8/docs/RELEASE.md", [r"V7\.0\.0", r"V8\.7\.0"], "release notes"),
+    (ROOT / "v8/docs/transport_channels.md", [r"session\.<session_id>", r"handoff\.request", r"handoff\.accept"], "transport channels"),
 ]
 for path, patterns, label in doc_rules:
     text = path.read_text(encoding="utf-8", errors="ignore")
@@ -78,7 +80,7 @@ if re.search(r"Listen Mode", customer_html) is None:
     sys.exit(1)
 
 release = (ROOT / "v8/docs/RELEASE.md").read_text(encoding="utf-8", errors="ignore")
-for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0", "V8.3.0", "V8.4.0", "V8.5.0", "V8.6.0"]:
+for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0", "V8.3.0", "V8.4.0", "V8.5.0", "V8.6.0", "V8.7.0"]:
     if tag not in release:
         print(f"[V8-DOC-CHECK][FAIL] release history missing {tag}")
         sys.exit(1)

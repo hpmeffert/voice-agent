@@ -37,3 +37,11 @@ Zusatz:
   - `GET /api/admin/conversations/search`
   - Admin-Token erforderlich
   - Ohne Filter muss die API 400 liefern
+
+## V8.7.x Zusatzvertrag
+- Channel/Event-Spec muss vorhanden sein:
+  - `v8/docs/transport_channels.md`
+- Handoff-Events muessen dokumentiert sein:
+  - `handoff.request`
+  - `handoff.accept`
+- Handoff-Status muss nach Refresh nachvollziehbar sein (persistiert in `sessions.meta`).

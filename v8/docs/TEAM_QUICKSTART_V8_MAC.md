@@ -1,4 +1,4 @@
-# TEAM QUICKSTART - V8.6.0 (macOS)
+# TEAM QUICKSTART - V8.7.0 (macOS)
 
 ## Ports
 - Admin UI: `http://localhost:8082`
@@ -16,34 +16,15 @@ docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml up -d --b
 curl -s http://localhost:8082/api/health
 curl -s http://localhost:8082/api/models
 curl -s http://localhost:8082/api/eventbus/health
-curl -s http://localhost:8083/ >/dev/null
-curl -s http://localhost:8084/ >/dev/null
 python3 v8/scripts/check_docs.py
 ```
 
-## V8.4 Hands-free Test
-1. Customer UI (`8083`) -> `Listen Mode` aktivieren.
-2. Drei Sprach-Turns ohne manuelle Send-Clicks.
-3. Beobachten: Aufnahme startet nach Audio-Ende automatisch neu.
-4. `End Conversation` stoppt den Loop sofort.
+## V8.7 Handoff Test
+1. Customer UI (`8083`): Session starten, kurze Nachricht senden.
+2. `Menschlichen Agenten anfordern` klicken.
+3. Agent UI (`8084`): Session mit Badge `handoff requested` finden.
+4. `Handoff annehmen` klicken.
+5. Beide UIs aktualisieren: Handoff-Status bleibt erhalten.
 
-## V8.5 Admin-Konversationssuche
-1. Admin UI (`8082`) oeffnen.
-2. Im Bereich `Conversation Search` einen Filter setzen:
-   - `search_user_id` oder
-   - `session_id` oder
-   - `q` (Textausschnitt).
-3. `Search Conversations` klicken.
-4. Erwartung:
-   - Trefferanzahl > 0 (falls Daten vorhanden)
-   - Session-Summary + Message-Treffer im JSON-Output.
-
-## V8.6 Doku-Hardening Check
-1. Help-Menue pruefen (5 Punkte in Reihenfolge):
-   - Admin Token speichern
-   - Help
-   - Demo Guide
-   - Admin Docs
-   - Release Notes
-2. Jede Seite oeffnen und pruefen, dass Inhalt nicht leer ist.
-3. `python3 v8/scripts/check_docs.py` muss gruen sein.
+## Referenz
+- Channel/Event-Spec: `v8/docs/transport_channels.md`

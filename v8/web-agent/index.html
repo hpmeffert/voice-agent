@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Agent UI V8.6.0</title>
+  <title>Voice Agent Agent UI V8.7.0</title>
   <style>
     body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
     .wrap { max-width: 1200px; margin: 18px auto; padding: 0 14px; }
@@ -19,6 +19,8 @@
     .session { border:1px solid #dbe3f0; border-radius:10px; padding:10px; cursor:pointer; background:#fff; }
     .session.active { border-color:#0f766e; background:#eefbf8; }
     .session .small { font-size:12px; color:#64748b; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
+    .badge.handoff { background:#fff7ed; color:#9a3412; border:1px solid #fdba74; }
     .chat { max-height: 55vh; overflow:auto; display:grid; gap:8px; margin-top:10px; }
     .msg { padding:10px; border-radius:10px; border:1px solid #dbe3f0; background:#fff; white-space:pre-wrap; }
     .msg.customer { background:#eef2ff; }
@@ -31,7 +33,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:10px;">
       <div>
-        <h2 style="margin:0;">Voice Agent Agent UI V8.6.0</h2>
+        <h2 style="margin:0;">Voice Agent Agent UI V8.7.0</h2>
         <div class="muted">Inbox + Live Chat (Call-Center Handoff MVP)</div>
       </div>
       <div class="row">
@@ -74,6 +76,7 @@
             <div class="row" style="margin-top:8px;">
               <label><input id="speak" type="checkbox" /> Speak to customer</label>
               <label>TTS <select id="ttsLang"><option value="de">de</option><option value="en">en</option><option value="fr">fr</option><option value="it">it</option><option value="es">es</option></select></label>
+              <button id="btnAcceptHandoff">Handoff annehmen</button>
               <button id="sendBtn" class="primary">Send Agent Message</button>
             </div>
           </div>
@@ -99,6 +102,7 @@ const searchBtn = document.getElementById('searchBtn');
 const clearSearchBtn = document.getElementById('clearSearchBtn');
 const speakEl = document.getElementById('speak');
 const ttsLangEl = document.getElementById('ttsLang');
+const btnAcceptHandoff = document.getElementById('btnAcceptHandoff');
 
 const AGENT_KEY = 'v8_agent_id';
 agentIdEl.value = localStorage.getItem(AGENT_KEY) || 'agent-01';
@@ -109,6 +113,9 @@ let activeSessionUserId = '';
 let ws = null;
 let currentSearch = '';
 let currentSearchType = 'all';
+let activeHandoffRequested = false;
+let activeHandoffState = 'none';
+btnAcceptHandoff.disabled = true;
 
 function addMsg(role, text, ts) {
   const d = document.createElement('div');
@@ -120,6 +127,11 @@ function addMsg(role, text, ts) {
 }
 
 function clearChat() { chatEl.innerHTML = ''; }
+function setActiveHandoff(state, requested){
+  activeHandoffState = state || 'none';
+  activeHandoffRequested = !!requested;
+  btnAcceptHandoff.disabled = !activeSessionId || !activeHandoffRequested;
+}
 
 function wsUrl(path){
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -141,7 +153,8 @@ async function loadSessions(){
   for (const s of sessions) {
     const card = document.createElement('div');
     card.className = `session ${s.session_id === activeSessionId ? 'active' : ''}`;
-    card.innerHTML = `<b>${s.session_id}</b><div class="small">User: ${s.user_id || '-'}</div><div class="small">${s.preview || ''}</div>`;
+    const badge = s.handoff_requested ? '<span class="badge handoff">handoff requested</span>' : '';
+    card.innerHTML = `<div class="row" style="justify-content:space-between;"><b>${s.session_id}</b>${badge}</div><div class="small">User: ${s.user_id || '-'}</div><div class="small">${s.preview || ''}</div>`;
     card.onclick = () => joinSession(s);
     sessionsEl.appendChild(card);
   }
@@ -150,8 +163,10 @@ async function loadSessions(){
 async function joinSession(s){
   activeSessionId = s.session_id;
   activeSessionUserId = s.user_id || '';
+  setActiveHandoff(String(s.handoff_state || 'none'), !!s.handoff_requested);
   chatTitleEl.textContent = `Session ${s.session_id}`;
-  chatMetaEl.textContent = `User ${s.user_id || '-'} | Last: ${s.last_activity_at || '-'}`;
+  const handoffTxt = activeHandoffRequested ? 'handoff=requested' : `handoff=${activeHandoffState}`;
+  chatMetaEl.textContent = `User ${s.user_id || '-'} | Last: ${s.last_activity_at || '-'} | ${handoffTxt}`;
   clearChat();
 
   await fetch('/api/agent/join', {
@@ -185,7 +200,20 @@ function connectWs(){
   ws.onmessage = (ev) => {
     try {
       const e = JSON.parse(ev.data);
-      if (e.type === 'session.keepalive' || e.type === 'session.connected') return;
+      if (e.type === 'session.keepalive') return;
+      if (e.type === 'session.connected') {
+        const h = (e.payload && e.payload.handoff) || {};
+        setActiveHandoff(String(h.state || 'none'), !!h.requested);
+        return;
+      }
+      if (e.type === 'handoff.request') {
+        setActiveHandoff('requested', true);
+        chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=requested`;
+      }
+      if (e.type === 'handoff.accept') {
+        setActiveHandoff('accepted', false);
+        chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=accepted`;
+      }
       const role = e.from || 'system';
       const text = (e.payload && e.payload.text) || JSON.stringify(e.payload || {});
       addMsg(role, text, e.ts);
@@ -213,6 +241,27 @@ sendBtn.onclick = async () => {
     return;
   }
   msgInputEl.value = '';
+};
+
+btnAcceptHandoff.onclick = async () => {
+  if (!activeSessionId || !activeHandoffRequested) return;
+  const payload = {
+    session_id: activeSessionId,
+    agent_id: agentIdEl.value || 'agent-01',
+  };
+  const r = await fetch('/api/handoff/accept', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await r.json();
+  if (!r.ok) {
+    addMsg('system', `Error: ${JSON.stringify(data)}`, new Date().toISOString());
+    return;
+  }
+  setActiveHandoff(String(data.handoff_state || 'accepted'), !!data.handoff_requested);
+  chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=accepted`;
+  await loadSessions();
 };
 
 refreshBtn.onclick = () => loadSessions();
