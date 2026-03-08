@@ -1,4 +1,4 @@
-# Admin Dokumentation (V7.2.0)
+# Admin Dokumentation (V7.4.0)
 
 Diese Seite ist fuer Admins geschrieben.
 Ziel: schnell starten, sauber testen, alle Einstellungen verstehen.
@@ -9,6 +9,7 @@ Ziel: schnell starten, sauber testen, alle Einstellungen verstehen.
 - Web UI: `v7/web/index.html`
 - Compose: `v7/docker/compose.dev.yml`
 - Templates: `v7/templates/`
+  - Export Templates: `v7/templates/exports/`
 - Admin Doku (diese Datei): `v7/docs/admin/HELP_ADMIN.md`
 
 ## 2) Start der Loesung (Admin)
@@ -81,8 +82,12 @@ curl -s "http://localhost:8081/api/user/test-admin-1"
 ```bash
 curl -s "http://localhost:8081/api/session/<SESSION_ID>?user_id=<USER_ID>&limit=20"
 curl -L -o transcript.md "http://localhost:8081/api/session/<SESSION_ID>/export?user_id=<USER_ID>&format=md"
+curl -L -o transcript.json "http://localhost:8081/api/session/<SESSION_ID>/export?user_id=<USER_ID>&format=json"
 curl -L -o protocol.md "http://localhost:8081/api/protocol/<SESSION_ID>?user_id=<USER_ID>&format=md"
 ```
+Erwartung:
+- Export nur fuer eigene Session/User-Kombination (Ownership-Check).
+- Markdown/JSON enthalten geordnete Turns.
 
 ## 5) Alle einstellbaren Parameter (Admin)
 
@@ -125,6 +130,15 @@ curl -L -o protocol.md "http://localhost:8081/api/protocol/<SESSION_ID>?user_id=
 - `CRM_PROTOCOL_FORMAT`
 - `CRM_PROTOCOL_TIMEZONE`
 - `PROTOCOL_TEMPLATE_PATH`
+
+### Template-Anpassung fuer CRM-Export
+- API-Standardpfad:
+  - `/app/templates/exports/transcript_default.md.tpl`
+- Repository-Pfad:
+  - `v7/templates/exports/transcript_default.md.tpl`
+- Empfehlung:
+  - Nur Text-Templates verwenden.
+  - Platzhalter beibehalten (`{{session_id}}`, `{{user_id}}`, `{{messages}}` usw.).
 
 ### Admin / UI
 - `ADMIN_DEV_MODE`

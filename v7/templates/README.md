@@ -1,6 +1,10 @@
-# Transcript Templates (V6.4.1)
+# Transcript Templates (V7.4.0)
 
-Default Markdown transcript template:
+Default export templates:
+- `exports/transcript_default.md.tpl`
+- `exports/transcript_default.json.schema.json`
+
+Legacy compatibility path:
 - `transcript_default.md.tpl`
 
 Supported placeholders:
@@ -16,3 +20,9 @@ Supported placeholders:
 - `{{messages}}`
 
 Message block format is rendered by API and injected into `{{messages}}`.
+
+## Customization
+- Preferred location for CRM export templates:
+  - `v7/templates/exports/`
+- API default:
+  - `/app/templates/exports/transcript_default.md.tpl`
