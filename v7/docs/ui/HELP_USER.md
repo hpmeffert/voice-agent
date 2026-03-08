@@ -1,4 +1,4 @@
-# Benutzer Dokumentation (V7.7.0)
+# Benutzer Dokumentation (V7.8.0)
 
 Diese Dokumentation erklaert die Funktionen im UI und welche Wirkung jede Einstellung hat.
 

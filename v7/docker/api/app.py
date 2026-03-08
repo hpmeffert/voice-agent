@@ -49,7 +49,12 @@ MESSAGE_RETENTION_DAYS = int(os.getenv("MESSAGE_RETENTION_DAYS", "30"))
 SESSION_RETENTION_DAYS = int(os.getenv("SESSION_RETENTION_DAYS", "90"))
 MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
 MAX_TEXT_CHARS = int(os.getenv("MAX_TEXT_CHARS", "8000"))
-TELEMETRY_RETENTION_DAYS = int(os.getenv("TELEMETRY_RETENTION_DAYS", "30"))
+METRICS_RETENTION_DAYS = int(
+    os.getenv(
+        "METRICS_RETENTION_DAYS",
+        os.getenv("TELEMETRY_RETENTION_DAYS", "30"),
+    )
+)
 CRM_EXPORT_ENABLED = os.getenv("CRM_EXPORT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
 CRM_EXPORT_DEFAULT_ENABLED = os.getenv("CRM_EXPORT_DEFAULT_ENABLED", "true").strip().lower() in {
     "1",
@@ -73,7 +78,7 @@ MAX_EXPORT_MESSAGES = int(os.getenv("MAX_EXPORT_MESSAGES", "200"))
 MAX_EXPORT_BYTES = int(os.getenv("MAX_EXPORT_BYTES", str(1_500_000)))
 ADMIN_DEV_MODE = os.getenv("ADMIN_DEV_MODE", "0").strip() == "1"
 ADMIN_UI_TOKEN = os.getenv("ADMIN_UI_TOKEN", "").strip()
-UI_VERSION = os.getenv("UI_VERSION", "v7.7.0").strip() or "v7.7.0"
+UI_VERSION = os.getenv("UI_VERSION", "v7.8.0").strip() or "v7.8.0"
 UI_BUILD = os.getenv("UI_BUILD", "").strip()
 LISTEN_MODE_DEFAULT = os.getenv("LISTEN_MODE_DEFAULT", "0").strip().lower() in {"1", "true", "yes", "on"}
 LISTEN_SILENCE_MS_DEFAULT = int(os.getenv("LISTEN_SILENCE_MS_DEFAULT", "1300"))
@@ -111,6 +116,7 @@ users_col: Collection | None = None
 sessions_col: Collection | None = None
 messages_col: Collection | None = None
 telemetry_col: Collection | None = None
+metrics_logs_col: Collection | None = None
 
 
 # ----------------------------
@@ -148,7 +154,7 @@ def session_expiry() -> datetime:
 
 
 def telemetry_expiry() -> datetime:
-    return now_utc() + timedelta(days=TELEMETRY_RETENTION_DAYS)
+    return now_utc() + timedelta(days=METRICS_RETENTION_DAYS)
 
 
 def ensure_ready() -> None:
@@ -426,7 +432,7 @@ def build_export_payload(
     }
 
     json_payload = {
-        "version": "v7.7.0",
+        "version": "v7.8.0",
         "session": {
             "session_id": session.get("_id"),
             "user_id": session.get("user_id"),
@@ -492,7 +498,7 @@ def normalized_listen_settings(raw: Any) -> dict[str, Any]:
 # ----------------------------
 @app.on_event("startup")
 def on_startup() -> None:
-    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col
+    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col
 
     whisper = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type=WHISPER_COMPUTE)
 
@@ -503,7 +509,8 @@ def on_startup() -> None:
     users_col = mongo_db["users"]
     sessions_col = mongo_db["sessions"]
     messages_col = mongo_db["messages"]
-    telemetry_col = mongo_db["telemetry_logs"]
+    metrics_logs_col = mongo_db["metrics_logs"]
+    telemetry_col = metrics_logs_col
 
     users_col.create_index([("updated_at", DESCENDING)])
 
@@ -516,10 +523,10 @@ def on_startup() -> None:
     messages_col.create_index([("session_id", ASCENDING), ("t", ASCENDING)])
     messages_col.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
 
-    telemetry_col.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
-    telemetry_col.create_index([("created_at", DESCENDING)])
-    telemetry_col.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
-    telemetry_col.create_index([("status", ASCENDING), ("created_at", DESCENDING)])
+    metrics_logs_col.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
+    metrics_logs_col.create_index([("created_at", DESCENDING)])
+    metrics_logs_col.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
+    metrics_logs_col.create_index([("status", ASCENDING), ("created_at", DESCENDING)])
 
 
 @app.on_event("shutdown")
@@ -704,6 +711,14 @@ def is_admin_token_valid(admin_token: str | None) -> bool:
     if not ADMIN_UI_TOKEN:
         return False
     return token == ADMIN_UI_TOKEN
+
+
+def assert_admin_access(user_id: str | None, admin_token: str | None) -> None:
+    if is_admin_token_valid(admin_token):
+        return
+    if is_admin_user(user_id):
+        return
+    raise HTTPException(status_code=403, detail="Admin access required")
 
 
 def get_or_create_session(session_id: str | None, user_id: str, backend: str | None, model: str | None) -> str:
@@ -1137,7 +1152,8 @@ def config(user_id: str | None = Query(None)):
         "crm_protocol_enabled": CRM_PROTOCOL_ENABLED,
         "crm_protocol_format": CRM_PROTOCOL_FORMAT,
         "protocol_template_path": PROTOCOL_TEMPLATE_PATH,
-        "telemetry_retention_days": TELEMETRY_RETENTION_DAYS,
+        "telemetry_retention_days": METRICS_RETENTION_DAYS,
+        "metrics_retention_days": METRICS_RETENTION_DAYS,
         "listen_mode_default": LISTEN_MODE_DEFAULT,
         "listen_silence_ms_default": LISTEN_SILENCE_MS_DEFAULT,
         "listen_threshold_default": LISTEN_THRESHOLD_DEFAULT,
@@ -1339,6 +1355,65 @@ def metrics_recent(
     return {"user_id": user_id, "count": len(out), "items": out}
 
 
+@app.get("/admin/metrics/recent")
+def admin_metrics_recent(
+    user_id: str = Query(..., min_length=8),
+    limit: int = Query(200, ge=1, le=500),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    ensure_ready()
+    assert_admin_access(user_id, admin_token)
+    docs = list(
+        metrics_logs_col.find({}, {"_id": 0})
+        .sort("created_at", DESCENDING)
+        .limit(limit)
+    )
+    return {"count": len(docs), "items": docs}
+
+
+@app.get("/admin/metrics/summary")
+def admin_metrics_summary(
+    user_id: str = Query(..., min_length=8),
+    window: str = Query("24h", pattern="^(24h|7d)$"),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    ensure_ready()
+    assert_admin_access(user_id, admin_token)
+    now = now_utc()
+    since = now - timedelta(hours=24 if window == "24h" else 24 * 7)
+    docs = list(
+        metrics_logs_col.find(
+            {"created_at": {"$gte": since}},
+            {"_id": 0, "metrics": 1, "status": 1, "backend": 1, "model": 1},
+        )
+    )
+    count = len(docs)
+    ok_count = sum(1 for d in docs if (d.get("status") or "") == "ok")
+    err_count = count - ok_count
+    if count == 0:
+        return {
+            "window": window,
+            "count": 0,
+            "ok_count": 0,
+            "error_count": 0,
+            "avg_ms": {"audio_read_ms": 0, "stt_ms": 0, "llm_ms": 0, "tts_ms": 0, "total_ms": 0},
+        }
+
+    sums = {"audio_read_ms": 0, "stt_ms": 0, "llm_ms": 0, "tts_ms": 0, "total_ms": 0}
+    for d in docs:
+        m = d.get("metrics") or {}
+        for key in sums:
+            sums[key] += safe_ms(m.get(key))
+    avg = {k: int(round(v / count)) for k, v in sums.items()}
+    return {
+        "window": window,
+        "count": count,
+        "ok_count": ok_count,
+        "error_count": err_count,
+        "avg_ms": avg,
+    }
+
+
 @app.get("/session/{session_id}/export")
 def export_session(
     session_id: str,
@@ -1451,7 +1526,7 @@ def download_protocol(
             "format": format or CRM_PROTOCOL_FORMAT,
             "template": CRM_PROTOCOL_TEMPLATE,
             "tz": tz,
-            "export_version": "v7.7.0",
+            "export_version": "v7.8.0",
         },
     )
 

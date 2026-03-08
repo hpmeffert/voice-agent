@@ -1,4 +1,4 @@
-# TEAM QUICKSTART - V7.7.0 (macOS, isolated scaffold)
+# TEAM QUICKSTART - V7.8.0 (macOS, isolated scaffold)
 
 V7 is isolated under `v7/` and can run in parallel to V6.
 
@@ -81,6 +81,10 @@ curl -s -F "file=@sample.webm" http://localhost:8081/api/voice
   - `TTS language` auf `en` setzen
   - deutsch sprechen
   - englische TTS-Ausgabe erwarten.
+11. Admin Metrics testen:
+  - als Admin einloggen
+  - `Admin Metrics` Panel muss sichtbar sein
+  - `Refresh` zeigt Recent-Liste und 24h-Zusammenfassung.
 
 ## Persistence check
 ```bash

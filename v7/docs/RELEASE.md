@@ -3,7 +3,27 @@
 Diese Seite enthaelt die konsolidierten Release Notes von `v7.0.0` bis zur aktuellen Version.
 
 ## Aktuell
-- Version: `v7.7.0`
+- Version: `v7.8.0`
+
+## V7.8.0
+### Highlights
+- Eigene Metrics-Collection `metrics_logs` mit TTL fuer Admin-Telemetrie.
+- Neue Admin-API fuer Recent- und Summary-Metriken.
+- Admin-Metrics-Panel direkt im UI.
+
+### Added
+- `METRICS_RETENTION_DAYS` (default `30`).
+- Endpunkte:
+  - `GET /api/admin/metrics/recent`
+  - `GET /api/admin/metrics/summary`
+
+### Changed
+- Metrik-Logs werden in `metrics_logs` geschrieben.
+- Config liefert zusaetzlich `metrics_retention_days`.
+- UI-Version-Defaults auf `v7.8.0` angehoben.
+
+### Fixed
+- Schnellere Admin-Diagnose ohne direkten DB-Zugriff.
 
 ## V7.7.0
 ### Highlights
