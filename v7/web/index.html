@@ -296,7 +296,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V7.6.0</h1>
+        <h1>Voice Agent V7.7.0</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
@@ -376,6 +376,20 @@
 
             <label class="muted">Max recording seconds
               <input id="maxRecordSec" type="number" min="5" max="120" step="1" value="45" />
+            </label>
+
+            <label class="muted">TTS language
+              <select id="ttsLang">
+                <option value="auto" selected>Auto (detected)</option>
+                <option value="de">de</option>
+                <option value="en">en</option>
+                <option value="sv">sv</option>
+                <option value="no">no</option>
+                <option value="fi">fi</option>
+                <option value="fr" disabled>fr (coming soon)</option>
+                <option value="it" disabled>it (coming soon)</option>
+                <option value="es" disabled>es (coming soon)</option>
+              </select>
             </label>
 
             <label id="debugPanelLabel" class="muted">Debug panel
@@ -571,6 +585,7 @@ const silenceMsInput = el("silenceMs");
 const listenModeChk = el("listenMode");
 const voiceThresholdInput = el("voiceThreshold");
 const maxRecordSecInput = el("maxRecordSec");
+const ttsLangSel = el("ttsLang");
 
 const SESSION_KEY = "voice_agent_session_id";
 const USER_KEY = "voice_agent_user_id";
@@ -590,7 +605,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v7.6.0";
+let uiVersionText = "v7.7.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 let appState = "idle";
@@ -724,6 +739,7 @@ function setBusy(isBusy) {
   btnClear.disabled = isBusy;
   backendSel.disabled = isBusy;
   modelSel.disabled = isBusy;
+  ttsLangSel.disabled = isBusy;
   crmExportToggle.disabled = isBusy || !crmExportGlobalEnabled || !uiAdmin;
   autoStopChk.disabled = isBusy;
   autoSendChk.disabled = isBusy || !autoStopChk.checked;
@@ -1085,7 +1101,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v7.6.0";
+    const ver = cfg?.ui?.version || "v7.7.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
   } catch (_) {
@@ -1093,7 +1109,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v7.6.0";
+    uiVersionText = "v7.7.0";
   }
   await loadWhoAmI();
   recomputeCrmExportEnabled();
@@ -1648,6 +1664,9 @@ async function sendRecording() {
       fd.append("user_id", userId);
       fd.append("backend", backendSel.value);
       fd.append("model", modelSel.value);
+      if (ttsLangSel.value && ttsLangSel.value !== "auto") {
+        fd.append("tts_lang", ttsLangSel.value);
+      }
       return fd;
     }
 
@@ -1698,7 +1717,10 @@ async function sendRecording() {
       const tts = await fetch("/tts/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: data.answer, lang: data.lang }),
+        body: JSON.stringify({
+          text: data.answer,
+          lang: ttsLangSel.value !== "auto" ? ttsLangSel.value : (data.tts_lang_selected || data.lang),
+        }),
       });
       if (!tts.ok) throw new Error(`Piper /tts failed: ${tts.status} ${await tts.text()}`);
 
