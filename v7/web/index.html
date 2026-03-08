@@ -313,7 +313,7 @@
           <button id="adminTokenSave" class="menuItem">Admin Token speichern</button>
           <button class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Benutzer Dokumentation">Benutzer Dokumentation</button>
           <button class="menuItem" data-help-doc="/docs/ui/DEMO_GUIDE.md" data-help-title="Demo Guide">Demo Guide</button>
-          <button id="adminGuideItem" class="menuItem" data-help-endpoint="/api/admin/docs/help" data-help-title="Admin Docs" style="display:none;">Admin Docs</button>
+          <button id="adminGuideItem" class="menuItem" data-help-doc="/docs/admin/HELP_ADMIN.md" data-help-title="Admin Docs">Admin Docs</button>
           <button class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V7">Release Notes</button>
         </div>
       </div>
@@ -912,7 +912,7 @@ function closeHelpModal() {
 }
 
 function updateMenuUi() {
-  adminGuideItem.style.display = uiAdmin ? "block" : "none";
+  adminGuideItem.style.display = "block";
   menuVersion.textContent = `Version: ${uiVersionText}`;
   adminTokenInput.value = adminToken;
 }

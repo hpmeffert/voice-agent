@@ -40,7 +40,13 @@ done
 must_contain v7/web/index.html 'Admin Token speichern' 'Help menu: missing admin token menu item text'
 must_contain v7/web/index.html 'data-help-doc="/docs/ui/HELP_USER.md"' 'Help menu: Help must point to user docs'
 must_contain v7/web/index.html 'data-help-doc="/docs/ui/DEMO_GUIDE.md"' 'Help menu: Demo Guide missing'
-must_contain v7/web/index.html 'data-help-endpoint="/api/admin/docs/help"' 'Help menu: Admin Docs endpoint missing'
+if has_pattern 'data-help-endpoint="/api/admin/docs/help"' v7/web/index.html; then
+  :
+elif has_pattern 'data-help-doc="/docs/admin/HELP_ADMIN.md"' v7/web/index.html; then
+  :
+else
+  fail 'Help menu: Admin Docs link/endpoint missing'
+fi
 must_contain v7/web/index.html 'data-help-doc="/docs/RELEASE.md"' 'Help menu: Release Notes link missing'
 
 # Silence threshold defaults
@@ -52,8 +58,10 @@ must_contain v7/docker/api/app.py 'LISTEN_SILENCE_MS_DEFAULT.*"1300"' 'API defau
 must_contain v7/docs/ui/HELP_USER.md 'Benutzer Dokumentation' 'User help title missing/incorrect'
 must_contain v7/docs/ui/HELP_USER.md 'Einstellungen fuer Gespraechsfluss' 'User help must explain settings and effects'
 must_contain v7/docs/ui/DEMO_GUIDE.md 'Stellen Sie sich' 'Demo guide must include story-language hook'
-must_contain v7/docs/admin/HELP_ADMIN.md 'Installation und Start' 'Admin docs must include installation/start'
-must_contain v7/docs/admin/HELP_ADMIN.md 'Empfohlene Admin-Tests' 'Admin docs must include test guidance'
+must_contain v7/docs/admin/HELP_ADMIN.md 'Start der Loesung|Installation und Start' 'Admin docs must include installation/start'
+must_contain v7/docs/admin/HELP_ADMIN.md 'Admin-Checkliste|Empfohlene Admin-Tests' 'Admin docs must include test guidance'
+must_contain v7/docs/admin/HELP_ADMIN.md 'Alle einstellbaren Parameter' 'Admin docs must list all configurable parameters'
+must_contain v7/docs/admin/HELP_ADMIN.md 'Reihenfolge' 'Admin docs must describe test order'
 
 # Release notes coverage: must include timeline from v7.0.0 to latest release note file
 must_contain v7/docs/RELEASE.md 'V7\.0\.0' 'Release overview must include v7.0.0'

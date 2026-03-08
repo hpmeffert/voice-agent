@@ -1,70 +1,74 @@
-# Admin Docs (V7.2.0)
+# Admin Dokumentation (V7.2.0)
 
-Diese Seite beschreibt alle relevanten Admin-Einstellungen, Installation/Start und empfohlene Tests.
+Diese Seite ist fuer Admins geschrieben.
+Ziel: schnell starten, sauber testen, alle Einstellungen verstehen.
 
-## 1) Installation und Start (Admin)
-Im Repo-Root ausfuehren:
+## 1) Wo liegt was? (Verzeichnisse)
+- V7 Hauptverzeichnis: `v7/`
+- API Code: `v7/docker/api/app.py`
+- Web UI: `v7/web/index.html`
+- Compose: `v7/docker/compose.dev.yml`
+- Templates: `v7/templates/`
+- Admin Doku (diese Datei): `v7/docs/admin/HELP_ADMIN.md`
+
+## 2) Start der Loesung (Admin)
+Im Projekt-Root ausfuehren:
 
 ```bash
 docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml up -d --build
 ```
 
-Pruefen:
+Stoppen:
 
+```bash
+docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml down --remove-orphans
+```
+
+## 3) Ports und Dienste
+- Web (nginx): `http://localhost:8081`
+- API (FastAPI): `http://localhost:8001` (im Web via `/api`)
+- Piper (TTS): `http://localhost:5003`
+- MongoDB: `localhost:27018`
+
+## 4) Admin-Checkliste: Produkt fuer Produkt testen (Reihenfolge)
+### Schritt A: Grundzustand
 ```bash
 curl -s http://localhost:8081/api/health
 curl -s http://localhost:8081/api/config
 docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml ps
 ```
 
-## 2) Ports und Dienste
-- Web: `8081`
-- API: `8001` (hinter `/api`)
-- Piper: `5003`
-- MongoDB: `27018`
-
-## 3) Admin-Modell in V7
-- V7 Demo-Modus: neue User werden mit `role=admin` angelegt.
-- Rolleninfo:
-  - `GET /api/whoami?user_id=...`
-- Zusatztoken (optional) im Help-Menue:
-  - `Admin Token speichern`
-  - Header: `X-Admin-Token`
-
-## 4) Wichtige Admin-Endpunkte
-- `GET /api/config`
-- `GET /api/whoami?user_id=...`
-- `GET /api/user/{user_id}`
-- `POST /api/user/settings`
-- `GET /api/session/{session_id}`
-- `GET /api/session/{session_id}/export`
-- `GET /api/protocol/{session_id}`
-
-## 5) Relevante ENV-Einstellungen
-- Audio/STT:
-  - `MAX_AUDIO_BYTES`
-  - `WHISPER_MODEL`
-  - `LISTEN_SILENCE_MS_DEFAULT` (Standard: `1300`)
-  - `LISTEN_THRESHOLD_DEFAULT`
-- Export:
-  - `CRM_EXPORT_ENABLED`
-  - `CRM_EXPORT_DEFAULT_ENABLED`
-  - `CRM_EXPORT_FORMAT`
-  - `CRM_PROTOCOL_ENABLED`
-- Admin/UI:
-  - `ADMIN_DEV_MODE`
-  - `ADMIN_UI_TOKEN`
-  - `UI_VERSION`
-
-## 6) Empfohlene Admin-Tests
-### A. Basis
+### Schritt B: Modelle/LLM-Verfuegbarkeit
 ```bash
-curl -s http://localhost:8081/api/health
 curl -s http://localhost:8081/api/models
-curl -s http://localhost:8081/api/config
+```
+Erwartung:
+- `ollama.available=true`
+- `openai.available` je nach API-Key
+
+### Schritt C: Whisper/STT + Audio-Pipeline
+```bash
+# Fehlerfall 1: leeres Audio
+curl -s -F "file=@/dev/null;filename=empty.webm" http://localhost:8081/api/voice
+
+# Fehlerfall 2: ungueltiges Audio
+curl -s -F "file=@v7/docs/RELEASE.md;filename=bad.webm" http://localhost:8081/api/voice
+```
+Erwartung:
+- strukturierte JSON-Fehler
+- keine HTML-Fehlerseite
+
+### Schritt D: Piper/TTS
+- Im Browser normale Sprachanfrage senden.
+- Erwartung: Antwort wird gesprochen (Audio-Player / TTS).
+
+### Schritt E: MongoDB/Persistenz
+```bash
+docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml exec mongo \
+  mongosh --eval 'db.runCommand({ ping: 1 })'
 ```
 
-### B. User-Settings
+### Schritt F: User-Settings
 ```bash
 curl -s "http://localhost:8081/api/user/test-admin-1"
 curl -s -X POST http://localhost:8081/api/user/settings \
@@ -73,21 +77,74 @@ curl -s -X POST http://localhost:8081/api/user/settings \
 curl -s "http://localhost:8081/api/user/test-admin-1"
 ```
 
-### C. Audio-Fehlerpfad (JSON-Normalisierung)
+### Schritt G: Session/Export
 ```bash
-curl -s -F "file=@/dev/null;filename=empty.webm" http://localhost:8081/api/voice
-curl -s -F "file=@v7/docs/RELEASE.md;filename=bad.webm" http://localhost:8081/api/voice
+curl -s "http://localhost:8081/api/session/<SESSION_ID>?user_id=<USER_ID>&limit=20"
+curl -L -o transcript.md "http://localhost:8081/api/session/<SESSION_ID>/export?user_id=<USER_ID>&format=md"
+curl -L -o protocol.md "http://localhost:8081/api/protocol/<SESSION_ID>?user_id=<USER_ID>&format=md"
 ```
-Erwartung: strukturierte JSON-Antwort, keine HTML-Fehlerseite.
 
-### D. Upstream-Ausfalltest
-- API kurz stoppen, dann `/api/health` auf Web-Port aufrufen.
-- Erwartung: JSON `{"error":"API upstream unavailable", ...}`
+## 5) Alle einstellbaren Parameter (Admin)
 
-## 7) Betriebshinweise
-- V7 strikt isoliert unter `v7/` halten.
-- Bei jedem Release Help-Menue-Dokumente aktualisieren:
-  - Benutzer Dokumentation
-  - Demo Guide
-  - Admin Docs
-  - Release Notes (vollstaendige V7-Historie)
+### API / LLM / STT
+- `OLLAMA_BASE_URL`
+- `OLLAMA_MODEL`
+- `OLLAMA_TEMPERATURE`
+- `OLLAMA_NUM_PREDICT`
+- `OLLAMA_NUM_CTX`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `WHISPER_MODEL`
+- `WHISPER_COMPUTE`
+
+### Limits / Retention
+- `MAX_AUDIO_BYTES`
+- `MAX_TEXT_CHARS`
+- `MESSAGE_RETENTION_DAYS`
+- `SESSION_RETENTION_DAYS`
+- `TELEMETRY_RETENTION_DAYS`
+
+### Listen Mode Defaults
+- `LISTEN_MODE_DEFAULT`
+- `LISTEN_SILENCE_MS_DEFAULT` (Standard: `1300`)
+- `LISTEN_THRESHOLD_DEFAULT`
+
+### CRM Export / Protocol
+- `CRM_EXPORT_ENABLED`
+- `CRM_EXPORT_DEFAULT_ENABLED`
+- `CRM_EXPORT_MODE`
+- `CRM_EXPORT_WEBHOOK_URL`
+- `CRM_EXPORT_FORMAT`
+- `CRM_EXPORT_TEMPLATE_MD`
+- `CRM_EXPORT_INCLUDE_TIMESTAMPS`
+- `CRM_EXPORT_TIMEZONE`
+- `MAX_EXPORT_MESSAGES`
+- `MAX_EXPORT_BYTES`
+- `CRM_PROTOCOL_ENABLED`
+- `CRM_PROTOCOL_TEMPLATE`
+- `CRM_PROTOCOL_FORMAT`
+- `CRM_PROTOCOL_TIMEZONE`
+- `PROTOCOL_TEMPLATE_PATH`
+
+### Admin / UI
+- `ADMIN_DEV_MODE`
+- `ADMIN_UI_TOKEN`
+- `UI_VERSION`
+- `UI_BUILD`
+
+## 6) Admin-Ansicht (naechster Ausbau)
+Das aktuelle Benutzer-Interface wird die Basis fuer die kuenftige Admin-Umgebung.
+Zielbild:
+- sichtbare Performance-Parameter im UI (STT/LLM/TTS/Total)
+- schnellere Diagnose von Modell-/Audio-Problemen
+- konfigurierbare Betriebsprofile fuer Demo vs. Produktion
+
+## 7) Verpflichtende Doku-Pflege je Release
+Bei **jedem** Release aktualisieren:
+- `v7/docs/ui/HELP_USER.md`
+- `v7/docs/ui/DEMO_GUIDE.md`
+- `v7/docs/admin/HELP_ADMIN.md`
+- `v7/docs/RELEASE.md` (V7.0.0 bis aktuell)
+
+Die verbindliche Regel steht in:
+- `v7/docs/DOCUMENTATION_RULES.md`
