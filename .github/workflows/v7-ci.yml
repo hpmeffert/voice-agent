@@ -1,0 +1,91 @@
+name: V7 CI
+
+on:
+  pull_request:
+    branches:
+      - release/v5.4-azure-stable
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Syntax lint (py_compile)
+        run: |
+          PYTHONPYCACHEPREFIX=/tmp/pycache python -m py_compile v7/docker/api/app.py
+          PYTHONPYCACHEPREFIX=/tmp/pycache python -m py_compile v7/docker/piper/app.py
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker compose config check
+        run: docker compose --project-directory "$GITHUB_WORKSPACE" -f v7/docker/compose.dev.yml config
+
+      - name: Build V7 images
+        run: docker compose --project-directory "$GITHUB_WORKSPACE" -f v7/docker/compose.dev.yml build api piper web
+
+  api-smoke:
+    name: API Smoke
+    runs-on: ubuntu-latest
+    needs: [lint, build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start V7 stack
+        run: docker compose --project-directory "$GITHUB_WORKSPACE" -f v7/docker/compose.dev.yml up -d --build
+
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8081/api/health >/dev/null; then
+              echo "V7 is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Health check timed out"
+          docker compose --project-directory "$GITHUB_WORKSPACE" -f v7/docker/compose.dev.yml ps || true
+          docker compose --project-directory "$GITHUB_WORKSPACE" -f v7/docker/compose.dev.yml logs --tail=200 || true
+          exit 1
+
+      - name: Smoke checks
+        run: |
+          curl -fsS http://localhost:8081/api/health
+          curl -fsS http://localhost:8081/api/config
+
+      - name: Empty-audio JSON error check
+        run: |
+          RESP=$(curl -sS -F "file=@/dev/null;filename=empty.webm" http://localhost:8081/api/voice)
+          export RESP
+          python - <<'PY'
+          import json, os
+          data = json.loads(os.environ["RESP"])
+          assert data.get("error") == "Empty audio upload", data
+          assert data.get("code") == "empty_audio", data
+          print("Empty audio check OK")
+          PY
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: docker compose --project-directory "$GITHUB_WORKSPACE" -f v7/docker/compose.dev.yml logs --tail=200
+
+      - name: Stop V7 stack
+        if: always()
+        run: docker compose --project-directory "$GITHUB_WORKSPACE" -f v7/docker/compose.dev.yml down --remove-orphans

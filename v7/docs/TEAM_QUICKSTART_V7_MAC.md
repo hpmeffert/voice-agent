@@ -27,6 +27,18 @@ make v7-pr VERSION=7.3.0
 make v7-post-merge VERSION=7.3.0
 ```
 
+## GitHub Actions automation
+- PR checks are defined in:
+  - `.github/workflows/v7-ci.yml`
+- Tag-based release automation is defined in:
+  - `.github/workflows/release.yml`
+- Trigger release workflow automatically by pushing a tag:
+
+```bash
+git tag -a v7.3.0 -m "Voice Agent V7.3.0"
+git push origin v7.3.0
+```
+
 ## Health checks
 ```bash
 curl -s http://localhost:8081/api/health
