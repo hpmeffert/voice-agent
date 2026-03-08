@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent V7.0.0</title>
+  <title>Voice Agent V7.10.0</title>
   <style>
     :root {
       --bg:#f4f7fb;
@@ -296,7 +296,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V7.9.0</h1>
+        <h1>Voice Agent V7.10.0</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
@@ -307,15 +307,23 @@
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
+        <label class="muted" for="uiLang">Lang</label>
+        <select id="uiLang">
+          <option value="de">de</option>
+          <option value="en">en</option>
+          <option value="fr">fr</option>
+          <option value="it">it</option>
+          <option value="es">es</option>
+        </select>
         <div id="menuPanel" class="menuPanel">
           <div id="menuVersion" class="menuHeader">Version: -</div>
           <input id="adminTokenInput" type="password" placeholder="Admin token (optional)" />
-          <button id="adminTokenSave" class="menuItem">Admin Token speichern</button>
-          <button class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Benutzer Dokumentation">Benutzer Dokumentation</button>
-          <button class="menuItem" data-help-doc="/docs/ui/DEMO_GUIDE.md" data-help-title="Demo Guide">Demo Guide</button>
-          <button id="adminGuideItem" class="menuItem" data-help-doc="/docs/admin/HELP_ADMIN.md" data-help-title="Admin Docs">Admin Docs</button>
-          <button id="adminSettingsMenuItem" class="menuItem">Admin Settings</button>
-          <button class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V7">Release Notes</button>
+          <button id="adminTokenSave" class="menuItem" data-i18n="menu.admin_token">Admin Token speichern</button>
+          <button id="menuUserDocs" class="menuItem" data-help-doc="/docs/ui/HELP_USER.md" data-help-title="Benutzer Dokumentation" data-i18n="menu.user_docs">Benutzer Dokumentation</button>
+          <button id="menuDemoGuide" class="menuItem" data-help-doc="/docs/ui/DEMO_GUIDE.md" data-help-title="Demo Guide" data-i18n="menu.demo_guide">Demo Guide</button>
+          <button id="adminGuideItem" class="menuItem" data-help-doc="/docs/admin/HELP_ADMIN.md" data-help-title="Admin Docs" data-i18n="menu.admin_docs">Admin Docs</button>
+          <button id="adminSettingsMenuItem" class="menuItem" data-i18n="menu.admin_settings">Admin Settings</button>
+          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V7" data-i18n="menu.release_notes">Release Notes</button>
         </div>
       </div>
     </div>
@@ -387,9 +395,9 @@
                 <option value="sv">sv</option>
                 <option value="no">no</option>
                 <option value="fi">fi</option>
-                <option value="fr" disabled>fr (coming soon)</option>
-                <option value="it" disabled>it (coming soon)</option>
-                <option value="es" disabled>es (coming soon)</option>
+                <option value="fr">fr</option>
+                <option value="it">it</option>
+                <option value="es">es</option>
               </select>
             </label>
 
@@ -430,10 +438,10 @@
           </div>
 
           <div class="row">
-            <button id="btnRecord" class="primary">Record</button>
-            <button id="btnStop" disabled>Stop</button>
-            <button id="btnSend" class="good" disabled>Send</button>
-            <button id="btnClear">Clear Session</button>
+            <button id="btnRecord" class="primary" data-i18n="label.record">Record</button>
+            <button id="btnStop" disabled data-i18n="label.stop">Stop</button>
+            <button id="btnSend" class="good" disabled data-i18n="label.send">Send</button>
+            <button id="btnClear" data-i18n="label.clear">Clear Session</button>
           </div>
 
           <div class="row" id="transcriptRow" style="margin-top:10px;">
@@ -608,6 +616,7 @@ const adminSettingsStatus = el("adminSettingsStatus");
 const backendSel = el("backend");
 const modelSel = el("model");
 const themeSel = el("themeMode");
+const uiLangSel = el("uiLang");
 const menuBtn = el("menuBtn");
 const menuPanel = el("menuPanel");
 const menuVersion = el("menuVersion");
@@ -661,13 +670,29 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v7.9.0";
+let uiVersionText = "v7.10.0";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 let appState = "idle";
+let currentUiLang = "de";
+let uiTranslations = {};
 
 demoModeEnabled = localStorage.getItem(DEMO_MODE_KEY) === "1";
 debugPanelEnabled = localStorage.getItem(DEBUG_PANEL_KEY) !== "0";
+
+function t(key, fallback = "") {
+  const value = uiTranslations[key];
+  if (value && typeof value === "string") return value;
+  return fallback || key;
+}
+
+function applyI18n() {
+  for (const node of document.querySelectorAll("[data-i18n]")) {
+    const key = node.getAttribute("data-i18n");
+    if (!key) continue;
+    node.textContent = t(key, node.textContent);
+  }
+}
 
 function shortId(value) {
   if (!value) return "-";
@@ -1208,7 +1233,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v7.9.0";
+    const ver = cfg?.ui?.version || "v7.10.0";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
     applyAdminSettingsForm(cfg?.admin_settings || {});
@@ -1217,7 +1242,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v7.9.0";
+    uiVersionText = "v7.10.0";
     applyAdminSettingsForm({});
   }
   await loadWhoAmI();
@@ -1226,6 +1251,31 @@ async function loadConfig() {
   updateProtocolUi();
   updateMenuUi();
   await loadAdminMetrics();
+}
+
+async function loadUiI18n(langOverride = "") {
+  try {
+    const q = new URLSearchParams();
+    q.set("user_id", userId);
+    if (langOverride) q.set("lang", langOverride);
+    const r = await fetch(`/api/ui/i18n?${q.toString()}`, { cache: "no-store" });
+    if (!r.ok) return;
+    const data = await r.json();
+    const supported = Array.isArray(data?.supported_langs) ? data.supported_langs : ["de", "en"];
+    uiLangSel.innerHTML = "";
+    for (const l of supported) {
+      const o = document.createElement("option");
+      o.value = l;
+      o.textContent = l;
+      uiLangSel.appendChild(o);
+    }
+    currentUiLang = data?.lang || supported[0] || "de";
+    uiTranslations = data?.translations || {};
+    uiLangSel.value = currentUiLang;
+    applyI18n();
+  } catch (_) {
+    // i18n is optional for base functionality.
+  }
 }
 
 async function loadWhoAmI() {
@@ -1346,6 +1396,7 @@ backendSel.onchange = () => {
 
 loadModels()
   .then(() => loadConfig())
+  .then(() => loadUiI18n())
   .then(() => loadUserProfile())
   .then(() => scheduleListenModeAutoStart("init"))
   .catch((err) => {
@@ -1354,6 +1405,21 @@ loadModels()
     setAppState("listening");
     showError(String(err));
   });
+
+uiLangSel.onchange = async () => {
+  const lang = (uiLangSel.value || "").trim().toLowerCase();
+  try {
+    const r = await fetch("/api/ui/lang", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, ui_lang: lang }),
+    });
+    if (!r.ok) throw new Error(`ui/lang failed: ${r.status}`);
+    await loadUiI18n(lang);
+  } catch (err) {
+    showError(String(err));
+  }
+};
 
 adminTokenSave.onclick = async () => {
   adminToken = (adminTokenInput.value || "").trim();

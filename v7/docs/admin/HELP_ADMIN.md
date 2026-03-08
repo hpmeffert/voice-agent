@@ -1,18 +1,18 @@
-# Admin Dokumentation (V7.9.0)
+# Admin Dokumentation (V7.10.0)
 
-Diese Seite ist fuer Admins geschrieben.
-Ziel: schnell starten, sauber testen, alle Einstellungen verstehen.
+Diese Seite ist fuer Admins geschrieben. Ziel: schnell starten, sauber testen, alle einstellbaren Parameter verstehen.
 
-## 1) Wo liegt was? (Verzeichnisse)
-- V7 Hauptverzeichnis: `v7/`
-- API Code: `v7/docker/api/app.py`
+## 1) Verzeichnisse
+- Projekt-Root: `voice-agent/`
+- V7 Baum: `v7/`
+- API: `v7/docker/api/app.py`
+- Piper: `v7/docker/piper/app.py`
 - Web UI: `v7/web/index.html`
 - Compose: `v7/docker/compose.dev.yml`
 - Templates: `v7/templates/`
-  - Export Templates: `v7/templates/exports/`
-- Admin Doku (diese Datei): `v7/docs/admin/HELP_ADMIN.md`
+- Admin-Doku (diese Datei): `v7/docs/admin/HELP_ADMIN.md`
 
-## 2) Start der Loesung (Admin)
+## 2) Installation und Start (macOS)
 Im Projekt-Root ausfuehren:
 
 ```bash
@@ -25,114 +25,82 @@ Stoppen:
 docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml down --remove-orphans
 ```
 
-## 3) Ports und Dienste
-- Web (nginx): `http://localhost:8081`
-- API (FastAPI): `http://localhost:8001` (im Web via `/api`)
-- Piper (TTS): `http://localhost:5003`
-- MongoDB: `localhost:27018`
+Status:
 
-## 4) Admin-Checkliste: Produkt fuer Produkt testen (Reihenfolge)
-### Schritt A: Grundzustand
 ```bash
-curl -s http://localhost:8081/api/health
-curl -s http://localhost:8081/api/config
 docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml ps
 ```
 
-### Schritt B: Modelle/LLM-Verfuegbarkeit
+## 3) Ports und Services
+- Web: `http://localhost:8081`
+- API: `http://localhost:8001` (im Browser via `/api/*`)
+- Piper: `http://localhost:5003` (im Browser via `/tts/*`)
+- Mongo: `localhost:27018`
+
+## 4) Admin-Checkliste in Reihenfolge (Produkt fuer Produkt)
+### Schritt A: Basis
 ```bash
+curl -s http://localhost:8081/api/health
+curl -s http://localhost:8081/api/config
 curl -s http://localhost:8081/api/models
 ```
-Erwartung:
-- `ollama.available=true`
-- `openai.available` je nach API-Key
 
-### Schritt C: Whisper/STT + Audio-Pipeline
+### Schritt B: UI-i18n + User-Sprache
 ```bash
-# Fehlerfall 1: leeres Audio
-curl -s -F "file=@/dev/null;filename=empty.webm" http://localhost:8081/api/voice
+curl -s "http://localhost:8081/api/ui/i18n?user_id=test-user-710"
+curl -s -X POST http://localhost:8081/api/ui/lang \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":"test-user-710","ui_lang":"fr"}'
+```
 
-# Fehlerfall 2: ungueltiges Audio
+### Schritt C: Piper verfuegbare Voices
+```bash
+curl -s http://localhost:8081/tts/health
+curl -s http://localhost:8081/tts/voices
+```
+Erwartung:
+- `voices` listet vorhandene `.onnx` Dateien.
+- Fehlt eine Voice, meldet `/api/voice` einen klaren 400-Fehler mit erwarteter Datei.
+
+### Schritt D: STT/Audiopipeline
+```bash
+curl -s -F "file=@/dev/null;filename=empty.webm" http://localhost:8081/api/voice
 curl -s -F "file=@v7/docs/RELEASE.md;filename=bad.webm" http://localhost:8081/api/voice
 ```
 Erwartung:
-- strukturierte JSON-Fehler
+- strukturierte JSON-Fehler (`empty_audio`, `stt_decode_failed` etc.)
 - keine HTML-Fehlerseite
 
-### Schritt D: Piper/TTS
-- Im Browser normale Sprachanfrage senden.
-- Erwartung: Antwort wird gesprochen (Audio-Player / TTS).
-
-### Schritt E: MongoDB/Persistenz
+### Schritt E: Mongo
 ```bash
 docker compose --project-directory "$PWD" -f v7/docker/compose.dev.yml exec mongo \
   mongosh --eval 'db.runCommand({ ping: 1 })'
 ```
 
-### Schritt F: User-Settings
+### Schritt F: Admin-Endpunkte
 ```bash
-curl -s "http://localhost:8081/api/user/test-admin-1"
-curl -s -X POST http://localhost:8081/api/user/settings \
-  -H 'Content-Type: application/json' \
-  -d '{"user_id":"test-admin-1","listen_mode_default":true,"silence_ms":1300,"threshold":0.012}'
-curl -s "http://localhost:8081/api/user/test-admin-1"
+curl -s "http://localhost:8081/api/whoami?user_id=test-user-710"
+curl -s "http://localhost:8081/api/admin/settings?user_id=test-user-710" -H "X-Admin-Token: <TOKEN>"
+curl -s "http://localhost:8081/api/admin/metrics/recent?user_id=test-user-710&limit=20" -H "X-Admin-Token: <TOKEN>"
 ```
 
-### Schritt G: Session/Export
+### Schritt G: Export/Protocol
 ```bash
 curl -s "http://localhost:8081/api/session/<SESSION_ID>?user_id=<USER_ID>&limit=20"
 curl -L -o transcript.md "http://localhost:8081/api/session/<SESSION_ID>/export?user_id=<USER_ID>&format=md"
 curl -L -o transcript.json "http://localhost:8081/api/session/<SESSION_ID>/export?user_id=<USER_ID>&format=json"
 curl -L -o protocol.md "http://localhost:8081/api/protocol/<SESSION_ID>?user_id=<USER_ID>&format=md"
 ```
-Erwartung:
-- Export nur fuer eigene Session/User-Kombination (Ownership-Check).
-- Markdown/JSON enthalten geordnete Turns.
 
-### Schritt H: Demo-Admin-UI pruefen
-1. Browser auf `http://localhost:8081` oeffnen.
-2. Sicherstellen, dass Admin erkannt ist (`ADMIN_DEV_MODE=1` oder gueltiger Token).
-3. Pruefen, dass sichtbar sind:
-   - `CRM Export` Toggle
-   - `Demo Mode` Toggle
-   - `Debug panel` Toggle
-4. `Demo Mode` aktivieren:
-   - Listen Mode muss erzwungen sein.
-   - Demo-Hinweisbanner muss sichtbar sein.
-5. TTS-Autoplay pruefen:
-   - Falls Browser blockiert, muss Autoplay-Banner erscheinen.
-   - Nach manuellem `Play` soll der Hinweis verschwinden.
-6. TTS-Override pruefen:
-   - UI-Feld `TTS language` auf `en` setzen.
-   - Deutsche Anfrage sprechen.
-   - Englische TTS-Antwort erwarten.
+## 5) Admin UI (was kann der Admin direkt bedienen)
+- `Admin Token speichern`
+- `CRM Export`
+- `Demo Mode`
+- `Debug panel`
+- `Admin Metrics` (recent + summary)
+- `Admin Settings` (Retention, Listen-Defaults, Templates, Feature Toggles)
 
-### Schritt I: Metrics Logs + Admin Endpunkte
-```bash
-curl -s "http://localhost:8081/api/admin/metrics/recent?user_id=<USER_ID>&limit=20" \
-  -H "X-Admin-Token: <TOKEN>"
-curl -s "http://localhost:8081/api/admin/metrics/summary?user_id=<USER_ID>&window=24h" \
-  -H "X-Admin-Token: <TOKEN>"
-```
-Erwartung:
-- `recent` liefert letzte Metrics-Eintraege.
-- `summary` liefert Aggregation fuer `24h` oder `7d`.
-
-### Schritt J: Admin Settings API + UI
-```bash
-curl -s "http://localhost:8081/api/admin/settings?user_id=<USER_ID>" \
-  -H "X-Admin-Token: <TOKEN>"
-curl -s -X POST "http://localhost:8081/api/admin/settings" \
-  -H "Content-Type: application/json" \
-  -H "X-Admin-Token: <TOKEN>" \
-  -d '{"user_id":"<USER_ID>","retention_days":45,"listen_silence_ms_default":1400}'
-```
-Erwartung:
-- `GET` und `POST` liefern JSON und sind Admin-geschuetzt.
-- Werte bleiben nach Reload/Restart erhalten (`admin_settings` Collection).
-
-## 5) Alle einstellbaren Parameter (Admin)
-
+## 6) Alle einstellbaren Parameter
 ### API / LLM / STT
 - `OLLAMA_BASE_URL`
 - `OLLAMA_MODEL`
@@ -149,14 +117,29 @@ Erwartung:
 - `MAX_TEXT_CHARS`
 - `MESSAGE_RETENTION_DAYS`
 - `SESSION_RETENTION_DAYS`
-- `TELEMETRY_RETENTION_DAYS`
+- `METRICS_RETENTION_DAYS`
 
-### Listen Mode Defaults
+### Listen-Defaults
 - `LISTEN_MODE_DEFAULT`
 - `LISTEN_SILENCE_MS_DEFAULT` (Standard: `1300`)
 - `LISTEN_THRESHOLD_DEFAULT`
 
-### CRM Export / Protocol
+### Sprache / i18n
+- `DEFAULT_UI_LANG` (Standard `de`)
+- `SUPPORTED_UI_LANGS` (Standard `de,en,fr,it,es`)
+- `SUPPORTED_TTS_LANGS` (Standard `de,en,fr,it,es,sv,no,fi`)
+
+### Piper Voices
+- `PIPER_VOICE_DE`
+- `PIPER_VOICE_EN`
+- `PIPER_VOICE_FR`
+- `PIPER_VOICE_IT`
+- `PIPER_VOICE_ES`
+- `PIPER_VOICE_SV`
+- `PIPER_VOICE_NO`
+- `PIPER_VOICE_FI`
+
+### Export / Protocol
 - `CRM_EXPORT_ENABLED`
 - `CRM_EXPORT_DEFAULT_ENABLED`
 - `CRM_EXPORT_MODE`
@@ -173,34 +156,19 @@ Erwartung:
 - `CRM_PROTOCOL_TIMEZONE`
 - `PROTOCOL_TEMPLATE_PATH`
 
-### Template-Anpassung fuer CRM-Export
-- API-Standardpfad:
-  - `/app/templates/exports/transcript_default.md.tpl`
-- Repository-Pfad:
-  - `v7/templates/exports/transcript_default.md.tpl`
-- Empfehlung:
-  - Nur Text-Templates verwenden.
-  - Platzhalter beibehalten (`{{session_id}}`, `{{user_id}}`, `{{messages}}` usw.).
-
 ### Admin / UI
 - `ADMIN_DEV_MODE`
 - `ADMIN_UI_TOKEN`
 - `UI_VERSION`
 - `UI_BUILD`
 
-## 6) Admin-Ansicht (naechster Ausbau)
-Das aktuelle Benutzer-Interface wird die Basis fuer die kuenftige Admin-Umgebung.
-Zielbild:
-- sichtbare Performance-Parameter im UI (STT/LLM/TTS/Total)
-- schnellere Diagnose von Modell-/Audio-Problemen
-- konfigurierbare Betriebsprofile fuer Demo vs. Produktion
+## 7) Voice-Dateien (wichtig)
+- Modelle (`*.onnx`, `*.onnx.json`) nicht ins Repository committen.
+- Voices lokal unter `${HOME}/models/piper-voices` ablegen (Compose mountet nach `/voices`).
 
-## 7) Verpflichtende Doku-Pflege je Release
-Bei **jedem** Release aktualisieren:
+## 8) Admin-Routine pro Release (Pflicht)
+Bei JEDEM Release aktualisieren:
 - `v7/docs/ui/HELP_USER.md`
 - `v7/docs/ui/DEMO_GUIDE.md`
 - `v7/docs/admin/HELP_ADMIN.md`
-- `v7/docs/RELEASE.md` (V7.0.0 bis aktuell)
-
-Die verbindliche Regel steht in:
-- `v7/docs/DOCUMENTATION_RULES.md`
+- `v7/docs/RELEASE.md` (von `v7.0.0` bis aktuell)

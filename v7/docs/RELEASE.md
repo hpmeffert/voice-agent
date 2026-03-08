@@ -1,202 +1,56 @@
 # Release Notes (V7.x Gesamtueberblick)
 
-Diese Seite enthaelt die konsolidierten Release Notes von `v7.0.0` bis zur aktuellen Version.
+Diese Seite enthaelt die konsolidierten Release Notes von `v7.0.0` bis `v7.10.0`.
 
 ## Aktuell
-- Version: `v7.9.0`
+- Version: `v7.10.0`
+
+## V7.10.0
+### Highlights
+- Neue Sprachen `fr`, `it`, `es` end-to-end fuer UI + TTS.
+- UI-i18n jetzt DB-basiert ueber `ui_translations`.
+- Neue API-Endpunkte: `GET /api/ui/i18n`, `POST /api/ui/lang`.
+- Piper unterstuetzt FR/IT/ES Voice-Mapping plus `GET /voices`.
 
 ## V7.9.0
-### Highlights
-- Persistenter `admin_settings` Store in Mongo eingefuehrt.
+- Persistenter `admin_settings` Store in Mongo.
 - Admin API zum Lesen/Schreiben von Runtime-Einstellungen.
-- Admin Settings UI direkt im Web-Menu.
-
-### Added
-- Endpunkte:
-  - `GET /api/admin/settings`
-  - `POST /api/admin/settings`
-- Collection:
-  - `admin_settings` (`_id=global`)
-
-### Changed
-- Laufzeitparameter koennen zentral durch Admin verwaltet werden.
-- `/api/config` liefert `admin_settings` mit aus.
-- UI-Version-Defaults auf `v7.9.0` angehoben.
-
-### Fixed
-- Keine manuellen Mongo-Edits mehr noetig, um zentrale Runtime-Defaults anzupassen.
+- Admin Settings UI im Web-Menue.
 
 ## V7.8.0
-### Highlights
-- Eigene Metrics-Collection `metrics_logs` mit TTL fuer Admin-Telemetrie.
-- Neue Admin-API fuer Recent- und Summary-Metriken.
-- Admin-Metrics-Panel direkt im UI.
-
-### Added
-- `METRICS_RETENTION_DAYS` (default `30`).
-- Endpunkte:
-  - `GET /api/admin/metrics/recent`
-  - `GET /api/admin/metrics/summary`
-
-### Changed
-- Metrik-Logs werden in `metrics_logs` geschrieben.
-- Config liefert zusaetzlich `metrics_retention_days`.
-- UI-Version-Defaults auf `v7.8.0` angehoben.
-
-### Fixed
-- Schnellere Admin-Diagnose ohne direkten DB-Zugriff.
+- Eigene Metrics-Collection `metrics_logs` mit TTL.
+- Neue Admin-Endpunkte fuer `recent` und `summary`.
+- Admin-Metrics-Panel im UI.
 
 ## V7.7.0
-### Highlights
-- TTS-Sprach-Override im UI: `Auto`, `de`, `en`, `sv`, `no`, `fi`.
+- TTS-Sprach-Override im UI.
 - API akzeptiert `tts_lang` und liefert `tts_lang_selected`.
-- Platzhalter fuer `fr/it/es` sind vorbereitet.
-
-### Added
-- Neues UI-Feld `TTS language`.
-- API-Feld `tts_lang_selected` in `/api/voice`-Antworten.
-
-### Changed
-- TTS-Ausgabe kann bewusst von erkannter STT-Sprache abweichen (Demo-Use-Case).
-- UI-Version-Defaults auf `v7.7.0` angehoben.
-
-### Fixed
-- Mehr Kontrolle ueber die Sprechstimme bei Demo-Szenarien.
 
 ## V7.6.0
-### Highlights
-- Explizite UI-State-Machine fuer den Live-Betrieb:
-  - `idle`, `recording`, `sending`, `thinking`, `speaking`, `listening`
-- Autoplay-Fallback-Banner bei Browser-Blockade von Audio-Wiedergabe.
-
-### Added
-- Zentrale Statuslogik mit klaren Zustandswechseln.
-- Sichtbarer Hinweis fuer manuelles Play bei Autoplay-Block.
-
-### Changed
-- Einheitliche Statusuebergaenge in Manual- und Listen-Mode-Flows.
-- UI-Version-Defaults auf `v7.6.0` angehoben.
-
-### Fixed
-- Weniger Risiko fuer inkonsistente Status-/Button-Zustaende waehrend Demos.
+- Explizite UI-State-Machine.
+- Autoplay-Fallback-Banner fuer Browser-Blockaden.
 
 ## V7.5.0
-### Highlights
-- Admin-only Demo Mode fuer gefuehrte Hands-free Praesentationen.
-- Admin-only Debug-Panel Toggle fuer saubere/non-technical Demoansicht.
-
-### Added
-- `Demo Mode` Toggle:
-  - erzwingt Listen Mode
-  - aktiviert Auto-stop und Auto-send
-  - zeigt Demo-Hinweisbanner
-- `Debug panel` Toggle (Admin-only) zum Ein-/Ausblenden von `Debug JSON`.
-
-### Changed
-- CRM Export Toggle ist im UI jetzt ebenfalls Admin-only.
-- UI-Version-Defaults auf `v7.5.0` angehoben.
-
-### Fixed
-- Weniger Fehlbedienung bei Live-Demos durch klare Admin-Steuerung.
+- Admin-only Demo Mode.
+- Admin-only Debug-Panel Toggle.
 
 ## V7.4.0
-### Highlights
-- CRM-Export nutzt jetzt bevorzugt repo-eigene MIT-Templates unter `v7/templates/exports/`.
-- Export-Endpoint bleibt kompatibel (`md`/`json`) und ist klar fuer Template-Anpassung dokumentiert.
-
-### Added
-- Neue Template-Struktur:
-  - `v7/templates/exports/transcript_default.md.tpl`
-  - `v7/templates/exports/transcript_default.json.schema.json`
-- Doku fuer Template-Anpassung im Admin-/Quickstart-Kontext erweitert.
-
-### Changed
-- API-Default fuer `CRM_EXPORT_TEMPLATE_MD` zeigt auf:
-  - `/app/templates/exports/transcript_default.md.tpl`
-- Compose-Default wurde entsprechend angepasst.
-
-### Fixed
-- Eindeutiger und reproduzierbarer Standardpfad fuer CRM-Export-Templates.
+- CRM-Export nutzt repo-eigene MIT-Templates (`v7/templates/exports`).
 
 ## V7.3.0
-### Highlights
-- Ergebnisanzeige ist klar gegliedert in Transcript, Answer und Metrics.
-- Rohdaten bleiben im einklappbaren `Debug JSON` erhalten.
-- Demo-Dokumentation erklaert die Latenzwerte fuer Praesentationen.
-
-### Added
-- Sichtbares Metrics-Panel:
-  - `audio_read_ms`
-  - `stt_ms`
-  - `llm_ms`
-  - `tts_ms`
-  - `total_ms`
-- Kollabierbarer Bereich `Debug JSON`.
-
-### Changed
-- Hauptausgabe priorisiert lesbaren Inhalt statt Rohdaten.
-- `metrics`-Objekt wird als bevorzugtes API-Format genutzt (abwaertskompatibel).
-
-### Fixed
-- Verwechslungsgefahr durch rohe Escape-Ausgaben im Hauptbereich reduziert.
-- Klarere Trennung zwischen Nutzeransicht und Entwickler-Diagnose.
+- Ergebnisanzeige fokussiert auf Transcript/Answer + Metrics + Debug JSON.
 
 ## V7.2.0
-### Highlights
-- Audio-Pipeline gehaertet fuer stabilere STT-Verarbeitung.
-- Browser-Audio wird serverseitig per ffmpeg in stabiles WAV normalisiert.
-- Fehlerausgaben im API-Pfad sind durchgaengig JSON.
-
-### Added
-- Bevorzugte MediaRecorder-MIME-Wahl (`audio/webm;codecs=opus`, falls verfuegbar).
-- Globale API-Exception-Handler fuer konsistente JSON-Fehler.
-
-### Changed
-- Leere Uploads werden klar mit `empty_audio` abgewiesen.
-- Ungueltige Audiofiles liefern strukturierte Fehler mit Detailtext.
-- Nginx liefert bei API-Upstream-Fehlern JSON statt HTML.
-
-### Fixed
-- Weniger STT-Fehler wie `EOFError: End of file` bei Browser-Aufnahmen.
-- UI bekommt im Fehlerfall maschinenlesbare Antworten.
+- Audio-Pipeline gehaertet (ffmpeg-Normalisierung).
+- JSON-Fehler im API-Pfad vereinheitlicht.
 
 ## V7.1.0
-### Highlights
-- Listen Mode fuer natuerlichen, kontinuierlichen Dialogfluss.
-- Auto-Start, Silence Auto-Stop, Auto-Send und Auto-Resume nach TTS.
+- Listen Mode mit Auto-Stop/Auto-Send/Auto-Resume.
 - Persistente User-Settings in Mongo.
 
-### Added
-- `GET /api/user/{user_id}`
-- `POST /api/user/settings`
-- Settings-Felder:
-  - `listen_mode_default`
-  - `silence_ms`
-  - `threshold`
-
-### Changed
-- UI erweitert um Listen Mode und RMS-Schwellwert.
-- Statusfluss klar: `Listening / Recording / Sending / Speaking`.
-
-### Fixed
-- User-spezifische Settings bleiben nach Reload erhalten.
-
 ## V7.0.0
-### Highlights
 - Vollstaendig isolierter V7-Tree unter `v7/`.
-- Eigene Ports ohne Konflikte zu V6/V5.
-- V7-Dokumentationsstream im Help-Menue eingefuehrt.
-
-### Added
-- V7 Compose/API/Web/Piper Scaffold.
-- V7 Quickstart und Release-Dokumentation.
-
-### Changed
-- `/api/whoami` liefert `role` und `is_admin`.
-- Demo-Admin-Default fuer schnelle Tests im V7-Scaffold.
-
-### Fixed
-- Compose/Port-Kollisionen durch getrennte V7-Defaults.
+- Eigene Ports ohne Konflikt zu V6/V5.
 
 ## Betriebsnotiz
 V7 immer so starten:
@@ -212,4 +66,4 @@ Bei jedem neuen V7-Release werden mindestens diese Help-Menue-Seiten aktualisier
 - `v7/docs/admin/HELP_ADMIN.md`
 - `v7/docs/RELEASE.md` (mit kompletter V7-Historie)
 
-- Verbindliche Regel: siehe `v7/docs/DOCUMENTATION_RULES.md`
+Verbindliche Detailregel: `v7/docs/DOCUMENTATION_RULES.md`
