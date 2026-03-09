@@ -1,0 +1,92 @@
+# Demo Guide (EN) - V9.0.0
+
+## Demo goal
+Show how international support works when customers and agents keep their own language while the platform handles translation and voice routing.
+
+## Story Flow 1: "Have you seen this?" Customer DE, Agent EN
+Imagine: customer speaks German, but the available agent is English-native.
+
+### Setup
+1. Open Customer UI (`8086`).
+2. Open Agent UI (`8087`).
+3. In Agent UI set:
+   - `Demo User = agenten-02 (EN)`
+   - `Agent ID = agenten-02`
+   - `Agent Sprache = en`
+   - `Play incoming on agent = ON`
+   - `Play customer output on agent = OFF`
+   - `Customer output lang = auto`
+
+### Demo steps
+1. Customer says/types: "Ich brauche Hilfe mit meiner Rechnung."
+2. Agent receives the message in English.
+3. Agent replies in English.
+4. Customer receives German text + German voice.
+5. Agent chat shows both:
+   - `Original: ...`
+   - `Translation: ...`
+
+### Audience takeaway
+- Agent does not need German.
+- Customer experience remains local and natural.
+
+## Story Flow 2: Customer EN, Agent DE
+Imagine: your team is German-speaking, but an English customer contacts support.
+
+### Setup
+1. Set agent:
+   - `Demo User = agent-de-01 (DE)`
+   - `Agent ID = agent-de-01`
+   - `Agent Sprache = de`
+   - `Customer output lang = auto`
+2. Customer speaks/types English.
+
+### Demo steps
+1. Agent receives translated German content.
+2. Agent replies in German.
+3. System translates back to English.
+4. Customer hears English voice output.
+
+### Audience takeaway
+- Local teams can support global customers without language switching stress.
+
+## Story Flow 3: Manual override in a live case
+Imagine: supervisor wants to force a specific output language for verification.
+
+### Demo steps
+1. Customer starts in German.
+2. Agent sets `Customer output lang = en`.
+3. Agent replies in own language.
+4. Customer receives English text + English voice.
+
+### Audience takeaway
+- Auto mode for production.
+- Manual override for edge cases, QA, and controlled workflows.
+
+## Admin demo (required)
+1. Open Admin UI (`8085`).
+2. Verify Help menu order:
+   1. Save Admin Token
+   2. User Guide
+   3. Demo Guide
+   4. Admin Docs
+   5. Release Notes
+3. Show version in header and Help.
+4. Run quick checks:
+   - `/api/health`
+   - `/api/models`
+   - agent language test with `agenten-02`.
+
+## Presenter tip (build a narrative arc)
+- Start with pain: language mismatch in support.
+- Show the live language bridge in <2 minutes.
+- End with impact: faster handling, less misunderstanding, better global scalability.
+
+## V9.1.0 stage focus
+- In Agent UI, show clearly separated blocks:
+  - `Original`
+  - `Translation`
+- Turn on `Play incoming on agent`:
+  - Only translated agent-lane audio should be spoken.
+- Let the agent reply:
+  - Customer must see/hear only customer-lane output in customer language.

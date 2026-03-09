@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+requests
+faster-whisper
+numpy
+python-multipart
+pydantic
+pymongo
+Jinja2>=3.1
+redis>=5.0
