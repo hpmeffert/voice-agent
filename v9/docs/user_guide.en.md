@@ -158,3 +158,21 @@ If customer language is detected, the response language and customer voice profi
 - User-facing benefit:
   - faster troubleshooting
   - fewer interruptions during live operation.
+
+## New in V9.1.9: Cleaner Agent UI
+- Agent now has a consistent top header:
+  - connection status + version
+  - always-visible search (`q` + mode)
+  - admin button
+- Search is always available and uses `/api/admin/search`.
+- Admin settings are grouped in a Drawer with safe dropdown/toggle controls to reduce mistakes.
+- Compact performance strip shows:
+  - `STT avg/p95`
+  - `LLM avg/p95`
+  - `Total avg/p95`
+
+### Example
+1. Agent enters `fe774f*` in search and keeps mode `auto`.
+2. Result list shows session id, snippet, and timestamp.
+3. Clicking a result opens that session directly.
+4. Agent opens `Admin ⚙︎` to adjust and save settings.

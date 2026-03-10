@@ -122,3 +122,13 @@ Stellen Sie sich vor: Sie wollen bewusst eine andere Kundensprache ausliefern (z
   - dann Textfragment.
 - Oeffnen Sie den Treffer mit `Open Session` und zeigen Sie den direkten Sprung.
 - Danach Logging wieder deaktivieren.
+
+## V9.1.9 Demo Fokus: Clean Agent Desk
+1. Zeigen Sie die neue Agent-Oberflaeche mit immer sichtbarem Header.
+2. Geben Sie `fe774f*` in die Suche ein (Mode `auto`) und starten Sie die Suche.
+3. Oeffnen Sie einen Treffer direkt per Klick aus der Ergebnisliste.
+4. Oeffnen Sie `Admin ⚙︎` und zeigen Sie den Drawer:
+   - sichere Controls statt Freitext
+   - Save/Cancel
+   - Quick Link zu Admin Docs
+5. Zeigen Sie den Performance-Header (`STT/LLM/Total avg+p95`) und erlaeutern Sie den Nutzen fuer Live-Betrieb.

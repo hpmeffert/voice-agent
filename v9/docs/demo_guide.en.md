@@ -117,3 +117,13 @@ Imagine: supervisor wants to force a specific output language for verification.
   - then text fragment search.
 - Open a hit using `Open Session` and show direct navigation.
 - Turn logging OFF again after the demo.
+
+## V9.1.9 Demo Focus: Clean Agent Desk
+1. Show the new Agent layout with always-visible sticky header.
+2. Enter `fe774f*` in search (mode `auto`) and run search.
+3. Open one result directly from the result list.
+4. Open `Admin ⚙︎` and walk through the Drawer:
+   - safe controls (dropdowns/toggles) instead of free text
+   - Save/Cancel flow
+   - quick link to Admin Docs
+5. Point to the performance strip (`STT/LLM/Total avg+p95`) and explain why it helps during live support.

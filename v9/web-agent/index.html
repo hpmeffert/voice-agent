@@ -3,241 +3,524 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Agent UI V9.1.2</title>
+  <title>Voice Agent Agent UI</title>
   <style>
-    body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
-    .wrap { max-width: 1200px; margin: 18px auto; padding: 0 14px; }
-    .grid { display:grid; grid-template-columns: 360px 1fr; gap:12px; }
-    .card { background:#fff; border:1px solid #d9e1ee; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.06); }
-    .hd { padding:12px 14px; border-bottom:1px solid #d9e1ee; display:flex; justify-content:space-between; align-items:center; }
-    .bd { padding:14px; }
-    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    input, button, textarea, select { border:1px solid #cfd8e6; border-radius:8px; padding:8px 10px; }
-    button.primary { background:#0f766e; color:#fff; border-color:#0f766e; }
-    .muted { color:#6b7280; font-size:12px; }
-    .sessions { max-height: 70vh; overflow:auto; display:grid; gap:8px; }
-    .session { border:1px solid #dbe3f0; border-radius:10px; padding:10px; cursor:pointer; background:#fff; }
-    .session.active { border-color:#0f766e; background:#eefbf8; }
-    .session .small { font-size:12px; color:#64748b; }
-    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
-    .badge.handoff { background:#fff7ed; color:#9a3412; border:1px solid #fdba74; }
-    .chat { max-height: 55vh; overflow:auto; display:grid; gap:8px; margin-top:10px; }
-    .msg { padding:10px; border-radius:10px; border:1px solid #dbe3f0; background:#fff; white-space:pre-wrap; }
+    :root {
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --line:#dbe3f0;
+      --brand:#0f766e;
+      --ok:#16a34a;
+      --warn:#b45309;
+      --shadow:0 8px 24px rgba(0,0,0,.08);
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui; background:var(--bg); color:var(--text); }
+    .wrap { max-width:1280px; margin:0 auto; padding:12px; }
+    .headerBar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      background:rgba(245,247,251,.95);
+      backdrop-filter: blur(3px);
+      border-bottom:1px solid var(--line);
+      padding:10px 0;
+    }
+    .headerLeft { display:flex; align-items:center; gap:8px; min-width:230px; }
+    .pill { border:1px solid var(--line); border-radius:999px; padding:4px 9px; font-size:12px; background:#fff; }
+    .pill.ok { color:var(--ok); border-color:#86efac; }
+    .pill.off { color:#991b1b; border-color:#fecaca; }
+    .headerCenter { flex:1; display:flex; align-items:center; gap:8px; }
+    .headerCenter input, .headerCenter select { padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+    .headerCenter input { flex:1; min-width:220px; }
+    .headerRight { display:flex; align-items:center; gap:8px; }
+    button { border:1px solid var(--line); border-radius:10px; background:#fff; padding:8px 10px; cursor:pointer; }
+    button.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+    .perfStrip {
+      display:grid;
+      grid-template-columns: repeat(3, minmax(140px, 1fr));
+      gap:8px;
+      margin:10px 0;
+    }
+    .perfCell { background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+    .perfCell .name { font-size:12px; color:var(--muted); }
+    .perfCell .value { font-size:13px; font-weight:600; }
+    .mainGrid { display:grid; grid-template-columns:360px 1fr; gap:12px; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); }
+    .hd { padding:10px 12px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+    .bd { padding:12px; }
+    .sessions, .results { max-height:35vh; overflow:auto; display:grid; gap:8px; }
+    .session, .resultItem { border:1px solid var(--line); border-radius:10px; background:#fff; padding:8px; cursor:pointer; }
+    .session.active { border-color:var(--brand); background:#eefbf8; }
+    .small { font-size:12px; color:var(--muted); }
+    .chat { max-height:50vh; overflow:auto; display:grid; gap:8px; margin-bottom:10px; }
+    .msg { border:1px solid var(--line); border-radius:10px; padding:8px; background:#fff; white-space:pre-wrap; }
     .msg.customer { background:#eef2ff; }
     .msg.agent { background:#eefbf8; }
     .msg.system { background:#fff7ed; }
-    textarea { width:100%; min-height:84px; }
-    .modalBackdrop { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none; align-items:center; justify-content:center; padding:18px; z-index:40; }
-    .modalBackdrop.show { display:flex; }
-    .modal { width:min(860px, 96vw); max-height:84vh; overflow:auto; background:#fff; border:1px solid #d9e1ee; border-radius:12px; box-shadow:0 18px 44px rgba(0,0,0,.22); }
-    .modalHd { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid #d9e1ee; }
-    .modalBd { padding:14px; white-space:normal; line-height:1.45; }
-    .modalBd pre { background:#f4f7fb; border:1px solid #d9e1ee; border-radius:8px; padding:10px; overflow:auto; }
-    .modalBd code { background:#f4f7fb; padding:1px 4px; border-radius:4px; }
+    textarea, select, input { border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+    textarea { width:100%; min-height:92px; }
+    .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .split { border:1px dashed #94a3b8; border-radius:8px; padding:8px; margin-top:6px; }
+    .split.trans { border-style:solid; border-color:#86efac; }
+    .muted { font-size:12px; color:var(--muted); }
+    .drawerBackdrop { position:fixed; inset:0; background:rgba(15,23,42,.35); display:none; z-index:100; }
+    .drawerBackdrop.show { display:block; }
+    .drawer {
+      position:fixed;
+      top:0;
+      right:-460px;
+      width:min(460px, 96vw);
+      height:100vh;
+      background:#fff;
+      border-left:1px solid var(--line);
+      box-shadow:var(--shadow);
+      transition:right .2s ease;
+      z-index:101;
+      display:flex;
+      flex-direction:column;
+    }
+    .drawer.show { right:0; }
+    .drawerHd { padding:12px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+    .drawerBd { padding:12px; overflow:auto; display:grid; gap:14px; }
+    .group { border:1px solid var(--line); border-radius:10px; padding:10px; display:grid; gap:8px; }
+    .groupTitle { font-weight:700; font-size:13px; }
+    .danger button { border-color:#fecaca; color:#991b1b; }
+    .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12px; }
+    .debugPanel { display:none; margin-top:10px; }
+    .debugPanel.show { display:block; }
+    .debugPanel pre { border:1px solid var(--line); border-radius:10px; padding:8px; background:#f8fafc; max-height:180px; overflow:auto; }
+    .helpModal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:120; }
+    .helpModal.show { display:flex; }
+    .helpCard { width:min(920px,96vw); max-height:86vh; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:12px; }
+    .helpHd { padding:10px 12px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+    .helpBd { padding:12px; line-height:1.45; }
+    @media (max-width:980px) {
+      .mainGrid { grid-template-columns:1fr; }
+      .headerBar { flex-wrap:wrap; }
+      .headerLeft, .headerCenter, .headerRight { width:100%; }
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="row" style="justify-content:space-between; margin-bottom:10px;">
-      <div>
-        <h2 style="margin:0;">Voice Agent Agent UI V9.1.2</h2>
-        <div class="muted">Inbox + Live Chat (Call-Center Handoff MVP)</div>
+    <div class="headerBar">
+      <div class="headerLeft">
+        <span id="agentHeaderTitle" class="pill">Voice Agent Agent Client v9.1.9</span>
+        <span id="wsState" class="pill off">WS: offline</span>
+        <span id="versionBadge" class="pill">Version: v9.1.9</span>
       </div>
-      <div class="row">
-        <label>Demo User
-          <select id="agentPreset">
-            <option value="">-- waehlen --</option>
-            <option value="agenten-02">agenten-02 (EN)</option>
-            <option value="agent-de-01">agent-de-01 (DE)</option>
-            <option value="agent-01">agent-01</option>
-          </select>
-        </label>
-        <label>Agent ID <input id="agentId" size="24" /></label>
-        <label>Agent Sprache
-          <select id="agentLang">
-            <option value="de">de</option>
-            <option value="en">en</option>
-            <option value="no">no</option>
-            <option value="sv">sv</option>
-            <option value="fi">fi</option>
-          </select>
-        </label>
-        <label><input id="agentVoiceIncoming" type="checkbox" checked /> Empfang auf Agent sprechen</label>
-        <label><input id="agentVoiceCustomerOut" type="checkbox" /> Kunden-Ausgabe auf Agent sprechen</label>
-        <label>Suche <input id="searchInput" size="26" placeholder="session_id oder user_id" /></label>
-        <label>Typ
-          <select id="searchType">
-            <option value="all">Alle</option>
-            <option value="session">Session ID</option>
-            <option value="user">User ID</option>
-          </select>
-        </label>
-        <button id="searchBtn">Suchen</button>
-        <button id="clearSearchBtn">Reset</button>
-        <button id="refreshBtn">Refresh Inbox</button>
-        <label><input id="autoRefresh" type="checkbox" checked /> Auto-Refresh</label>
-        <span id="refreshState" class="muted">Auto-Refresh: an (5s)</span>
-        <label><input id="cleanDisplay" type="checkbox" checked /> Anzeige bereinigen (Sonderzeichen ausblenden)</label>
+      <div class="headerCenter">
+        <input id="searchInput" placeholder="Search q (supports wildcard *)" />
+        <select id="searchMode">
+          <option value="auto">auto</option>
+          <option value="session_id">session_id</option>
+          <option value="user_id">user_id</option>
+          <option value="text">text</option>
+        </select>
+        <button id="searchBtn" class="primary">Search</button>
+        <button id="searchResetBtn">Reset</button>
+      </div>
+      <div class="headerRight">
         <button id="helpBtn">Benutzer Handbuch</button>
+        <button id="adminBtn" class="primary">Admin ⚙︎</button>
       </div>
     </div>
 
-    <div class="grid">
+    <div id="perfStrip" class="perfStrip">
+      <div class="perfCell"><div class="name">STT avg/p95</div><div id="perfStt" class="value">- / -</div></div>
+      <div class="perfCell"><div class="name">LLM avg/p95</div><div id="perfLlm" class="value">- / -</div></div>
+      <div class="perfCell"><div class="name">Total avg/p95</div><div id="perfTotal" class="value">- / -</div></div>
+    </div>
+
+    <div class="mainGrid">
       <div class="card">
-        <div class="hd"><b>Inbox (aktive Sessions)</b><span id="inboxCount" class="muted">0</span></div>
-        <div class="bd">
-          <div id="sessions" class="sessions"></div>
-        </div>
+        <div class="hd"><b>Search Results</b><span id="searchMeta" class="small">0</span></div>
+        <div class="bd"><div id="searchResults" class="results"></div></div>
+        <div class="hd"><b>Inbox (active sessions)</b><span id="inboxCount" class="small">0</span></div>
+        <div class="bd"><div id="sessions" class="sessions"></div></div>
       </div>
 
       <div class="card">
         <div class="hd">
           <div>
             <b id="chatTitle">Kein Chat ausgewaehlt</b>
-            <div id="chatMeta" class="muted">Waehle links eine Session.</div>
-            <div id="customerLangMeta" class="muted">Customer language: - | Voice profile: -</div>
+            <div id="chatMeta" class="small">Waehle links eine Session.</div>
+            <div id="customerLangMeta" class="small">Customer language: -</div>
           </div>
-          <div id="wsState" class="muted">WS: offline</div>
         </div>
         <div class="bd">
-          <div class="chat" id="chat"></div>
-
-          <div style="margin-top:10px;">
-            <textarea id="msgInput" placeholder="Agent-Antwort schreiben..."></textarea>
-            <div class="row" style="margin-top:8px;">
-              <label><input id="speak" type="checkbox" /> Speak to customer</label>
-              <label>Customer output lang
-                <select id="ttsLang">
-                  <option value="">auto (detected customer profile)</option>
-                  <option value="de">de</option>
-                  <option value="en">en</option>
-                  <option value="no">no</option>
-                  <option value="sv">sv</option>
-                  <option value="fi">fi</option>
-                </select>
-              </label>
-              <button id="btnAcceptHandoff">Handoff annehmen</button>
-              <button id="sendBtn" class="primary">Send Agent Message</button>
-            </div>
+          <div id="chat" class="chat"></div>
+          <textarea id="msgInput" placeholder="Agent-Antwort schreiben..."></textarea>
+          <div class="row" style="margin-top:8px;">
+            <button id="btnAcceptHandoff">Handoff annehmen</button>
+            <label><input id="speak" type="checkbox" /> Speak to customer</label>
+            <label>Customer output lang
+              <select id="ttsLang">
+                <option value="">auto (detected customer profile)</option>
+                <option value="de">de</option><option value="en">en</option><option value="no">no</option><option value="sv">sv</option><option value="fi">fi</option>
+              </select>
+            </label>
+            <button id="sendBtn" class="primary">Send</button>
+          </div>
+          <div id="debugPanel" class="debugPanel">
+            <div class="muted">Last WS events</div>
+            <pre id="debugBox"></pre>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="helpModalBackdrop" class="modalBackdrop" role="dialog" aria-modal="true" aria-label="Benutzer Handbuch">
-    <div class="modal">
-      <div class="modalHd">
-        <b>Benutzer Handbuch</b>
-        <button id="helpCloseBtn">Schliessen</button>
+  <div id="drawerBackdrop" class="drawerBackdrop"></div>
+  <aside id="adminDrawer" class="drawer" aria-label="Admin Settings">
+    <div class="drawerHd"><b>Admin Settings</b><button id="drawerCloseBtn">Close</button></div>
+    <div class="drawerBd">
+      <div class="group">
+        <div class="groupTitle">Identity</div>
+        <label>Demo User
+          <select id="agentPreset">
+            <option value="agenten-02">agenten-02 (EN)</option>
+            <option value="agent-de-01">agent-de-01 (DE)</option>
+            <option value="agent-01">agent-01</option>
+          </select>
+        </label>
+        <label>Agent ID <input id="agentId" /></label>
+        <label>Agent Sprache
+          <select id="agentLang"><option value="de">de</option><option value="en">en</option><option value="no">no</option><option value="sv">sv</option><option value="fi">fi</option></select>
+        </label>
+        <div class="muted">Customer language preview: <span id="customerLangPreview" class="mono">-</span></div>
       </div>
-      <div id="helpBody" class="modalBd">Lade Benutzer Handbuch...</div>
+
+      <div class="group">
+        <div class="groupTitle">Model Defaults</div>
+        <label>Backend
+          <select id="backendSelect"><option value="ollama">ollama</option><option value="openai">openai</option></select>
+        </label>
+        <label>Model
+          <select id="modelSelect"></select>
+        </label>
+      </div>
+
+      <div class="group">
+        <div class="groupTitle">Toggles</div>
+        <label><input id="agentVoiceIncoming" type="checkbox" /> Incoming speak on agent</label>
+        <label><input id="agentVoiceCustomerOut" type="checkbox" /> Customer output speak on agent</label>
+        <label><input id="showDebugPanel" type="checkbox" /> Show debug panels</label>
+        <label><input id="showMetricsPanel" type="checkbox" checked /> Show metrics panel</label>
+        <label><input id="autoRefresh" type="checkbox" checked /> Auto-refresh inbox</label>
+        <label><input id="perfMetricsEnabled" type="checkbox" /> Enable perf metrics</label>
+      </div>
+
+      <div class="group">
+        <div class="groupTitle">Admin Token + Search</div>
+        <input id="adminTokenInput" type="password" placeholder="Admin token (optional)" />
+        <label>Search max results <input id="searchLimit" type="number" min="1" max="200" value="50" /></label>
+        <label><input id="allowRegexFallback" type="checkbox" checked /> Allow text regex fallback</label>
+      </div>
+
+      <div class="group row">
+        <button id="adminSaveBtn" class="primary">Save</button>
+        <button id="adminCancelBtn">Cancel</button>
+      </div>
+
+      <div class="group danger">
+        <div class="groupTitle">Danger Zone</div>
+        <button id="btnResetSessionView">Reset session view</button>
+        <button id="btnClearLocal">Clear local storage</button>
+        <button id="btnOpenAdminDocs">Open Admin Docs</button>
+      </div>
+    </div>
+  </aside>
+
+  <div id="helpModal" class="helpModal">
+    <div class="helpCard">
+      <div class="helpHd"><b>Benutzer Handbuch</b><span id="helpVersion" class="muted">Version: v9.1.9</span><button id="helpCloseBtn">Schliessen</button></div>
+      <div id="helpBody" class="helpBd">Lade Benutzer Handbuch...</div>
     </div>
   </div>
 
 <script>
-const sessionsEl = document.getElementById('sessions');
-const inboxCountEl = document.getElementById('inboxCount');
-const chatEl = document.getElementById('chat');
-const chatTitleEl = document.getElementById('chatTitle');
-const chatMetaEl = document.getElementById('chatMeta');
-const customerLangMetaEl = document.getElementById('customerLangMeta');
-const wsStateEl = document.getElementById('wsState');
-const agentPresetEl = document.getElementById('agentPreset');
-const agentIdEl = document.getElementById('agentId');
-const msgInputEl = document.getElementById('msgInput');
-const sendBtn = document.getElementById('sendBtn');
-const refreshBtn = document.getElementById('refreshBtn');
-const autoRefreshEl = document.getElementById('autoRefresh');
-const refreshStateEl = document.getElementById('refreshState');
-const cleanDisplayEl = document.getElementById('cleanDisplay');
-const searchInputEl = document.getElementById('searchInput');
-const searchTypeEl = document.getElementById('searchType');
-const searchBtn = document.getElementById('searchBtn');
-const clearSearchBtn = document.getElementById('clearSearchBtn');
-const speakEl = document.getElementById('speak');
-const ttsLangEl = document.getElementById('ttsLang');
-const agentLangEl = document.getElementById('agentLang');
-const agentVoiceIncomingEl = document.getElementById('agentVoiceIncoming');
-const agentVoiceCustomerOutEl = document.getElementById('agentVoiceCustomerOut');
-const btnAcceptHandoff = document.getElementById('btnAcceptHandoff');
-const helpBtn = document.getElementById('helpBtn');
-const helpModalBackdrop = document.getElementById('helpModalBackdrop');
-const helpCloseBtn = document.getElementById('helpCloseBtn');
-const helpBody = document.getElementById('helpBody');
-
-const AGENT_KEY = 'v8_agent_id';
+const AGENT_KEY = 'v9_agent_id';
 const AGENT_LANG_KEY = 'v9_agent_lang';
 const AGENT_VOICE_INCOMING_KEY = 'v9_agent_voice_incoming';
 const AGENT_VOICE_CUSTOMER_OUT_KEY = 'v9_agent_voice_customer_out';
 const AGENT_AUTO_REFRESH_KEY = 'v9_agent_auto_refresh';
-const AGENT_CLEAN_DISPLAY_KEY = 'v9_agent_clean_display';
-agentIdEl.value = localStorage.getItem(AGENT_KEY) || 'agent-01';
-agentLangEl.value = localStorage.getItem(AGENT_LANG_KEY) || 'de';
-agentVoiceIncomingEl.checked = localStorage.getItem(AGENT_VOICE_INCOMING_KEY) !== '0';
-agentVoiceCustomerOutEl.checked = localStorage.getItem(AGENT_VOICE_CUSTOMER_OUT_KEY) === '1';
-autoRefreshEl.checked = localStorage.getItem(AGENT_AUTO_REFRESH_KEY) !== '0';
-cleanDisplayEl.checked = localStorage.getItem(AGENT_CLEAN_DISPLAY_KEY) !== '0';
-if ([...agentPresetEl.options].some(o => o.value === agentIdEl.value)) {
-  agentPresetEl.value = agentIdEl.value;
-}
+const AGENT_ADMIN_TOKEN_KEY = 'v9_admin_token';
+const AGENT_SHOW_DEBUG_KEY = 'v9_agent_show_debug';
+const AGENT_SHOW_METRICS_KEY = 'v9_agent_show_metrics';
 
-agentIdEl.onchange = async () => {
-  localStorage.setItem(AGENT_KEY, agentIdEl.value || 'agent-01');
-  if ([...agentPresetEl.options].some(o => o.value === agentIdEl.value)) {
-    agentPresetEl.value = agentIdEl.value;
-  } else {
-    agentPresetEl.value = '';
-  }
-  await loadAgentPrefs();
-};
-agentPresetEl.onchange = async () => {
-  const v = (agentPresetEl.value || '').trim();
-  if (!v) return;
-  agentIdEl.value = v;
-  localStorage.setItem(AGENT_KEY, v);
-  await loadAgentPrefs();
-};
-agentLangEl.onchange = async () => {
-  localStorage.setItem(AGENT_LANG_KEY, agentLangEl.value || 'de');
-  await saveAgentPrefs();
-  if (activeSessionId) connectWs();
-};
-agentVoiceIncomingEl.onchange = () => {
-  localStorage.setItem(AGENT_VOICE_INCOMING_KEY, agentVoiceIncomingEl.checked ? '1' : '0');
-};
-agentVoiceCustomerOutEl.onchange = () => {
-  localStorage.setItem(AGENT_VOICE_CUSTOMER_OUT_KEY, agentVoiceCustomerOutEl.checked ? '1' : '0');
-};
-autoRefreshEl.onchange = () => {
-  localStorage.setItem(AGENT_AUTO_REFRESH_KEY, autoRefreshEl.checked ? '1' : '0');
-  updateAutoRefreshState();
-  startAutoRefresh();
-};
-cleanDisplayEl.onchange = async () => {
-  localStorage.setItem(AGENT_CLEAN_DISPLAY_KEY, cleanDisplayEl.checked ? '1' : '0');
-  if (activeSessionId) await loadRecentMessages(true);
-};
+const sessionsEl = document.getElementById('sessions');
+const inboxCountEl = document.getElementById('inboxCount');
+const searchResultsEl = document.getElementById('searchResults');
+const searchMetaEl = document.getElementById('searchMeta');
+const chatEl = document.getElementById('chat');
+const chatTitleEl = document.getElementById('chatTitle');
+const chatMetaEl = document.getElementById('chatMeta');
+const customerLangMetaEl = document.getElementById('customerLangMeta');
+const customerLangPreviewEl = document.getElementById('customerLangPreview');
+const wsStateEl = document.getElementById('wsState');
+const agentHeaderTitleEl = document.getElementById('agentHeaderTitle');
+const versionBadge = document.getElementById('versionBadge');
+const helpVersion = document.getElementById('helpVersion');
+
+const agentPresetEl = document.getElementById('agentPreset');
+const agentIdEl = document.getElementById('agentId');
+const agentLangEl = document.getElementById('agentLang');
+const agentVoiceIncomingEl = document.getElementById('agentVoiceIncoming');
+const agentVoiceCustomerOutEl = document.getElementById('agentVoiceCustomerOut');
+const autoRefreshEl = document.getElementById('autoRefresh');
+const showDebugPanelEl = document.getElementById('showDebugPanel');
+const showMetricsPanelEl = document.getElementById('showMetricsPanel');
+const perfMetricsEnabledEl = document.getElementById('perfMetricsEnabled');
+const adminTokenInput = document.getElementById('adminTokenInput');
+const backendSelect = document.getElementById('backendSelect');
+const modelSelect = document.getElementById('modelSelect');
+const searchLimitEl = document.getElementById('searchLimit');
+const allowRegexFallbackEl = document.getElementById('allowRegexFallback');
+
+const searchInputEl = document.getElementById('searchInput');
+const searchModeEl = document.getElementById('searchMode');
+const searchBtn = document.getElementById('searchBtn');
+const searchResetBtn = document.getElementById('searchResetBtn');
+
+const msgInputEl = document.getElementById('msgInput');
+const speakEl = document.getElementById('speak');
+const ttsLangEl = document.getElementById('ttsLang');
+const sendBtn = document.getElementById('sendBtn');
+const btnAcceptHandoff = document.getElementById('btnAcceptHandoff');
+
+const adminBtn = document.getElementById('adminBtn');
+const drawer = document.getElementById('adminDrawer');
+const drawerBackdrop = document.getElementById('drawerBackdrop');
+const drawerCloseBtn = document.getElementById('drawerCloseBtn');
+const adminSaveBtn = document.getElementById('adminSaveBtn');
+const adminCancelBtn = document.getElementById('adminCancelBtn');
+const btnResetSessionView = document.getElementById('btnResetSessionView');
+const btnClearLocal = document.getElementById('btnClearLocal');
+const btnOpenAdminDocs = document.getElementById('btnOpenAdminDocs');
+
+const perfStrip = document.getElementById('perfStrip');
+const perfSttEl = document.getElementById('perfStt');
+const perfLlmEl = document.getElementById('perfLlm');
+const perfTotalEl = document.getElementById('perfTotal');
+
+const debugPanel = document.getElementById('debugPanel');
+const debugBox = document.getElementById('debugBox');
+
+const helpBtn = document.getElementById('helpBtn');
+const helpModal = document.getElementById('helpModal');
+const helpCloseBtn = document.getElementById('helpCloseBtn');
+const helpBody = document.getElementById('helpBody');
 
 let activeSessionId = '';
 let activeSessionUserId = '';
 let activeCustomerLang = '';
 let activeCustomerVoiceLang = '';
+let activeHandoffRequested = false;
+let activeHandoffState = 'none';
 let ws = null;
 let wsSeq = 0;
 let wsReconnectTimer = null;
 let autoRefreshTimer = null;
-let loadSessionsBusy = false;
-let loadSessionsQueued = false;
-let currentSearch = '';
-let currentSearchType = 'all';
-let activeHandoffRequested = false;
-let activeHandoffState = 'none';
-btnAcceptHandoff.disabled = true;
+let perfTimer = null;
+let searchCache = [];
+let modelsCatalog = {};
+let adminSnapshot = null;
+let recentDebugEvents = [];
+
+function wsUrl(path){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${location.host}${path}`;
+}
+
+function authHeaders(extra = {}) {
+  const h = {...extra};
+  const tok = (adminTokenInput.value || '').trim();
+  if (tok) h['X-Admin-Token'] = tok;
+  return h;
+}
+
+function setWsState(isOnline) {
+  wsStateEl.textContent = isOnline ? 'WS: connected' : 'WS: disconnected';
+  wsStateEl.className = `pill ${isOnline ? 'ok' : 'off'}`;
+}
+
+function setVersion(v) {
+  const val = v || 'v9.1.9';
+  agentHeaderTitleEl.textContent = `Voice Agent Agent Client ${val}`;
+  versionBadge.textContent = `Version: ${val}`;
+  helpVersion.textContent = `Version: ${val}`;
+  document.title = `Voice Agent Agent UI ${val}`;
+}
+
+function updateCustomerPreview() {
+  const value = `${activeCustomerLang || '-'} | voice=${activeCustomerVoiceLang || activeCustomerLang || '-'}`;
+  customerLangMetaEl.textContent = `Customer language: ${value}`;
+  customerLangPreviewEl.textContent = value;
+}
+
+function rememberLocal() {
+  localStorage.setItem(AGENT_KEY, agentIdEl.value || 'agent-01');
+  localStorage.setItem(AGENT_LANG_KEY, agentLangEl.value || 'de');
+  localStorage.setItem(AGENT_VOICE_INCOMING_KEY, agentVoiceIncomingEl.checked ? '1' : '0');
+  localStorage.setItem(AGENT_VOICE_CUSTOMER_OUT_KEY, agentVoiceCustomerOutEl.checked ? '1' : '0');
+  localStorage.setItem(AGENT_AUTO_REFRESH_KEY, autoRefreshEl.checked ? '1' : '0');
+  localStorage.setItem(AGENT_ADMIN_TOKEN_KEY, adminTokenInput.value || '');
+  localStorage.setItem(AGENT_SHOW_DEBUG_KEY, showDebugPanelEl.checked ? '1' : '0');
+  localStorage.setItem(AGENT_SHOW_METRICS_KEY, showMetricsPanelEl.checked ? '1' : '0');
+}
+
+function restoreLocal() {
+  agentIdEl.value = localStorage.getItem(AGENT_KEY) || 'agenten-02';
+  if ([...agentPresetEl.options].some(o => o.value === agentIdEl.value)) agentPresetEl.value = agentIdEl.value;
+  agentLangEl.value = localStorage.getItem(AGENT_LANG_KEY) || 'en';
+  agentVoiceIncomingEl.checked = localStorage.getItem(AGENT_VOICE_INCOMING_KEY) !== '0';
+  agentVoiceCustomerOutEl.checked = localStorage.getItem(AGENT_VOICE_CUSTOMER_OUT_KEY) === '1';
+  autoRefreshEl.checked = localStorage.getItem(AGENT_AUTO_REFRESH_KEY) !== '0';
+  adminTokenInput.value = localStorage.getItem(AGENT_ADMIN_TOKEN_KEY) || '';
+  showDebugPanelEl.checked = localStorage.getItem(AGENT_SHOW_DEBUG_KEY) === '1';
+  showMetricsPanelEl.checked = localStorage.getItem(AGENT_SHOW_METRICS_KEY) !== '0';
+  syncPanelToggles();
+}
+
+function syncPanelToggles() {
+  debugPanel.classList.toggle('show', !!showDebugPanelEl.checked);
+  perfStrip.style.display = showMetricsPanelEl.checked ? 'grid' : 'none';
+}
+
+function addDebugEvent(evt) {
+  recentDebugEvents.push(evt);
+  if (recentDebugEvents.length > 12) recentDebugEvents.shift();
+  debugBox.textContent = recentDebugEvents.map(e => JSON.stringify(e)).join('\n');
+}
+
+async function loadModelsCatalog() {
+  try {
+    const r = await fetch('/api/models', {cache: 'no-store'});
+    if (!r.ok) return;
+    const data = await r.json();
+    modelsCatalog = {};
+    for (const p of (data.providers || [])) {
+      modelsCatalog[p.backend] = { models: p.models || [], default_model: p.default_model || '' };
+    }
+    rebuildModelSelect();
+  } catch (_) {}
+}
+
+function rebuildModelSelect() {
+  const backend = backendSelect.value || 'ollama';
+  const cfg = modelsCatalog[backend] || {models: [], default_model: ''};
+  const current = modelSelect.value;
+  modelSelect.innerHTML = '';
+  const source = cfg.models.length ? cfg.models : [cfg.default_model || 'qwen2.5:3b'];
+  for (const m of source) {
+    if (!m) continue;
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m;
+    modelSelect.appendChild(opt);
+  }
+  if ([...modelSelect.options].some(o => o.value === current)) modelSelect.value = current;
+  else if (cfg.default_model && [...modelSelect.options].some(o => o.value === cfg.default_model)) modelSelect.value = cfg.default_model;
+}
+
+async function loadAdminSettings() {
+  const uid = (agentIdEl.value || '').trim();
+  if (!uid) return;
+  try {
+    const r = await fetch(`/api/admin/settings?user_id=${encodeURIComponent(uid)}`, {
+      headers: authHeaders(),
+      cache: 'no-store'
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    const s = data.settings || {};
+    perfMetricsEnabledEl.checked = !!(s.perf_metrics_enabled ?? s.perf_logging_enabled);
+    searchLimitEl.value = String(Number(s.search_max_results || 50));
+    allowRegexFallbackEl.checked = !!s.allow_text_regex_fallback;
+    backendSelect.value = s.default_backend || 'ollama';
+    rebuildModelSelect();
+    if (s.default_model && [...modelSelect.options].some(o => o.value === s.default_model)) {
+      modelSelect.value = s.default_model;
+    }
+    adminSnapshot = {
+      perf: perfMetricsEnabledEl.checked,
+      limit: searchLimitEl.value,
+      regex: allowRegexFallbackEl.checked,
+      backend: backendSelect.value,
+      model: modelSelect.value,
+      agentLang: agentLangEl.value,
+      incoming: agentVoiceIncomingEl.checked,
+      customerOut: agentVoiceCustomerOutEl.checked,
+      debug: showDebugPanelEl.checked,
+      metrics: showMetricsPanelEl.checked,
+      refresh: autoRefreshEl.checked,
+      token: adminTokenInput.value,
+    };
+  } catch (_) {}
+}
+
+function resetDrawerChanges() {
+  if (!adminSnapshot) return;
+  perfMetricsEnabledEl.checked = adminSnapshot.perf;
+  searchLimitEl.value = adminSnapshot.limit;
+  allowRegexFallbackEl.checked = adminSnapshot.regex;
+  backendSelect.value = adminSnapshot.backend;
+  rebuildModelSelect();
+  modelSelect.value = adminSnapshot.model;
+  agentLangEl.value = adminSnapshot.agentLang;
+  agentVoiceIncomingEl.checked = adminSnapshot.incoming;
+  agentVoiceCustomerOutEl.checked = adminSnapshot.customerOut;
+  showDebugPanelEl.checked = adminSnapshot.debug;
+  showMetricsPanelEl.checked = adminSnapshot.metrics;
+  autoRefreshEl.checked = adminSnapshot.refresh;
+  adminTokenInput.value = adminSnapshot.token;
+  syncPanelToggles();
+}
+
+async function saveAdminSettings() {
+  const uid = (agentIdEl.value || '').trim();
+  if (!uid) return;
+  rememberLocal();
+  const payload = {
+    user_id: uid,
+    perf_metrics_enabled: !!perfMetricsEnabledEl.checked,
+    perf_logging_enabled: !!perfMetricsEnabledEl.checked,
+    search_max_results: Math.max(1, Math.min(200, Number(searchLimitEl.value || 50))),
+    allow_text_regex_fallback: !!allowRegexFallbackEl.checked,
+    default_backend: backendSelect.value || 'ollama',
+    default_model: modelSelect.value || '',
+  };
+  try {
+    const r = await fetch('/api/admin/settings', {
+      method: 'POST',
+      headers: authHeaders({'Content-Type': 'application/json'}),
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      alert(`Save failed: ${txt}`);
+      return;
+    }
+    await saveAgentPrefs();
+    await loadAdminSettings();
+    schedulePerfPolling();
+    closeDrawer();
+  } catch (err) {
+    alert(`Save failed: ${String(err)}`);
+  }
+}
 
 async function saveAgentPrefs() {
   const uid = (agentIdEl.value || '').trim();
-  if (!uid || uid.length < 8) return;
+  if (!uid || uid.length < 4) return;
   try {
     await fetch('/api/user/prefs', {
       method: 'POST',
@@ -249,18 +532,46 @@ async function saveAgentPrefs() {
 
 async function loadAgentPrefs() {
   const uid = (agentIdEl.value || '').trim();
-  if (!uid || uid.length < 8) return;
+  if (!uid || uid.length < 4) return;
   try {
     const r = await fetch(`/api/user/prefs?user_id=${encodeURIComponent(uid)}`);
     if (!r.ok) return;
     const p = await r.json();
-    const lang = (p.agent_lang || localStorage.getItem(AGENT_LANG_KEY) || 'de').toLowerCase();
-    if ([...agentLangEl.options].some(o => o.value === lang)) {
-      agentLangEl.value = lang;
-      localStorage.setItem(AGENT_LANG_KEY, lang);
-    }
+    const lang = (p.agent_lang || agentLangEl.value || 'de').toLowerCase();
+    if ([...agentLangEl.options].some(o => o.value === lang)) agentLangEl.value = lang;
   } catch (_) {}
 }
+
+function addMsg(role, text, ts) {
+  const d = document.createElement('div');
+  d.className = `msg ${role || 'system'}`;
+  const stamp = ts ? `[${new Date(ts).toLocaleTimeString()}] ` : '';
+  d.textContent = `${stamp}${(role || 'system').toUpperCase()}: ${String(text || '')}`;
+  chatEl.appendChild(d);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function addMsgSplit(role, originalText, translatedText, ts, originalLang, translatedLang) {
+  const d = document.createElement('div');
+  d.className = `msg ${role || 'system'}`;
+  const stamp = ts ? `[${new Date(ts).toLocaleTimeString()}] ` : '';
+  d.innerHTML = `<b>${stamp}${(role || 'system').toUpperCase()}</b>`;
+
+  const orig = document.createElement('div');
+  orig.className = 'split';
+  orig.innerHTML = `<div class="muted">Original (${originalLang || '-'})</div><div>${String(originalText || '')}</div>`;
+
+  const trans = document.createElement('div');
+  trans.className = 'split trans';
+  trans.innerHTML = `<div class="muted">Uebersetzung (${translatedLang || '-'})</div><div>${String(translatedText || '')}</div>`;
+
+  d.appendChild(orig);
+  d.appendChild(trans);
+  chatEl.appendChild(d);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function clearChat() { chatEl.innerHTML = ''; }
 
 async function playAgentVoice(text, lang) {
   const content = (text || '').trim();
@@ -280,163 +591,8 @@ async function playAgentVoice(text, lang) {
   } catch (_) {}
 }
 
-function addMsg(role, text, ts) {
-  const d = document.createElement('div');
-  d.className = `msg ${role || 'system'}`;
-  const stamp = ts ? `[${new Date(ts).toLocaleTimeString()}] ` : '';
-  d.textContent = `${stamp}${(role || 'system').toUpperCase()}: ${formatDisplayText(text || '')}`;
-  chatEl.appendChild(d);
-  chatEl.scrollTop = chatEl.scrollHeight;
-}
-
-function addMsgSplit(role, originalText, translatedText, ts, originalLang, translatedLang) {
-  const d = document.createElement('div');
-  d.className = `msg ${role || 'system'}`;
-
-  const stamp = ts ? `[${new Date(ts).toLocaleTimeString()}] ` : '';
-  const head = document.createElement('div');
-  head.style.fontWeight = '700';
-  head.style.marginBottom = '6px';
-  head.textContent = `${stamp}${(role || 'system').toUpperCase()}`;
-  d.appendChild(head);
-
-  const originalWrap = document.createElement('div');
-  originalWrap.style.border = '1px dashed #cbd5e1';
-  originalWrap.style.borderRadius = '8px';
-  originalWrap.style.padding = '8px';
-  originalWrap.style.marginBottom = '8px';
-  const originalTitle = document.createElement('div');
-  originalTitle.style.fontSize = '12px';
-  originalTitle.style.color = '#334155';
-  originalTitle.style.fontWeight = '600';
-  originalTitle.textContent = `Original (${originalLang || '-'})`;
-  const originalBody = document.createElement('div');
-  originalBody.style.marginTop = '4px';
-  originalBody.textContent = formatDisplayText(originalText || '');
-  originalWrap.appendChild(originalTitle);
-  originalWrap.appendChild(originalBody);
-
-  const translatedWrap = document.createElement('div');
-  translatedWrap.style.border = '1px solid #86efac';
-  translatedWrap.style.borderRadius = '8px';
-  translatedWrap.style.padding = '8px';
-  const translatedTitle = document.createElement('div');
-  translatedTitle.style.fontSize = '12px';
-  translatedTitle.style.color = '#065f46';
-  translatedTitle.style.fontWeight = '600';
-  translatedTitle.textContent = `Uebersetzung (${translatedLang || '-'})`;
-  const translatedBody = document.createElement('div');
-  translatedBody.style.marginTop = '4px';
-  translatedBody.textContent = formatDisplayText(translatedText || '');
-  translatedWrap.appendChild(translatedTitle);
-  translatedWrap.appendChild(translatedBody);
-
-  d.appendChild(originalWrap);
-  d.appendChild(translatedWrap);
-  chatEl.appendChild(d);
-  chatEl.scrollTop = chatEl.scrollHeight;
-}
-
-function clearChat() { chatEl.innerHTML = ''; }
-function formatDisplayText(text) {
-  const input = String(text || '');
-  if (!cleanDisplayEl.checked) return input;
-  return input
-    .replace(/\r\n?/g, '\n')
-    .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
-    .replace(/```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*\n]+)\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/_([^_\n]+)_/g, '$1')
-    .replace(/^[\t ]*(?:[-*•][\t ]+|\d+[.)][\t ]+)/gm, '')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-function updateCustomerLangMeta() {
-  customerLangMetaEl.textContent = `Customer language: ${activeCustomerLang || '-'} | Voice profile: ${activeCustomerVoiceLang || activeCustomerLang || '-'}`;
-}
-function updateAutoRefreshState() {
-  refreshStateEl.textContent = autoRefreshEl.checked ? 'Auto-Refresh: an (5s)' : 'Auto-Refresh: aus';
-}
-function startAutoRefresh() {
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer);
-    autoRefreshTimer = null;
-  }
-  if (!autoRefreshEl.checked) return;
-  autoRefreshTimer = setInterval(() => {
-    loadSessions().catch(() => {});
-  }, 5000);
-}
-
-function applyDetectedCustomerProfile(s) {
-  activeCustomerLang = String(s?.customer_lang || s?.lang || '').toLowerCase();
-  activeCustomerVoiceLang = String(s?.customer_voice_lang || activeCustomerLang || '').toLowerCase();
-  updateCustomerLangMeta();
-}
-function setActiveHandoff(state, requested){
-  activeHandoffState = state || 'none';
-  activeHandoffRequested = !!requested;
-  btnAcceptHandoff.disabled = !activeSessionId || !activeHandoffRequested;
-}
-
-function renderMarkdown(md) {
-  let html = (md || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  html = html.replace(/^### (.*)$/gm, "<h3>$1</h3>");
-  html = html.replace(/^## (.*)$/gm, "<h2>$1</h2>");
-  html = html.replace(/^# (.*)$/gm, "<h1>$1</h1>");
-  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-  html = html.replace(/^\- (.*)$/gm, "<li>$1</li>");
-  html = html.replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>");
-  html = html.replace(/<\/ul>\s*<ul>/g, "");
-  html = html.replace(/\n{2,}/g, "</p><p>");
-  html = `<p>${html}</p>`;
-  html = html.replace(/<p>\s*(<h[1-3]>)/g, "$1");
-  html = html.replace(/(<\/h[1-3]>)\s*<\/p>/g, "$1");
-  html = html.replace(/<p>\s*(<ul>)/g, "$1");
-  html = html.replace(/(<\/ul>)\s*<\/p>/g, "$1");
-  return html;
-}
-
-async function openHelp() {
-  helpBody.textContent = "Lade Benutzer Handbuch...";
-  helpModalBackdrop.classList.add("show");
-  try {
-    const docsLang = (agentLangEl.value || "de").toLowerCase() === "de" ? "de" : "en";
-    const r = await fetch(`/api/docs?type=user&lang=${encodeURIComponent(docsLang)}`, { cache: "no-store" });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const md = await r.text();
-    helpBody.innerHTML = renderMarkdown(md);
-  } catch (err) {
-    helpBody.textContent = `Benutzer Handbuch konnte nicht geladen werden: ${String(err)}`;
-  }
-}
-
-function closeHelp() {
-  helpModalBackdrop.classList.remove("show");
-}
-
-function wsUrl(path){
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.host}${path}`;
-}
-
-async function loadSessions(){
-  if (loadSessionsBusy) {
-    loadSessionsQueued = true;
-    return;
-  }
-  loadSessionsBusy = true;
+async function loadSessions() {
   const params = new URLSearchParams({ status: 'active', limit: '120' });
-  if (currentSearch) {
-    if (currentSearchType === 'session') params.set('session_id', currentSearch);
-    else if (currentSearchType === 'user') params.set('user_id', currentSearch);
-    else params.set('q', currentSearch);
-  }
   try {
     const r = await fetch(`/api/agent/sessions?${params.toString()}`);
     const data = await r.json();
@@ -446,149 +602,247 @@ async function loadSessions(){
     for (const s of sessions) {
       const card = document.createElement('div');
       card.className = `session ${s.session_id === activeSessionId ? 'active' : ''}`;
-      const badge = s.handoff_requested ? '<span class="badge handoff">handoff requested</span>' : '';
-      card.innerHTML = `<div class="row" style="justify-content:space-between;"><b>${s.session_id}</b>${badge}</div><div class="small">User: ${s.user_id || '-'} | Lang: ${s.customer_lang || s.lang || '-'}</div><div class="small">${s.preview || ''}</div>`;
+      card.innerHTML = `<b>${s.session_id}</b><div class="small">User: ${s.user_id || '-'} | Lang: ${s.customer_lang || s.lang || '-'}</div><div class="small">${s.preview || ''}</div>`;
       card.onclick = () => joinSession(s);
       sessionsEl.appendChild(card);
     }
-  } finally {
-    loadSessionsBusy = false;
-    if (loadSessionsQueued) {
-      loadSessionsQueued = false;
-      loadSessions().catch(() => {});
-    }
+  } catch (_) {}
+}
+
+function renderSearchResults(matches) {
+  searchResultsEl.innerHTML = '';
+  const grouped = new Map();
+  for (const m of matches || []) {
+    const sid = String(m.session_id || '');
+    if (!sid) continue;
+    if (!grouped.has(sid)) grouped.set(sid, m);
+  }
+  const rows = [...grouped.values()];
+  searchMetaEl.textContent = `${rows.length} sessions`;
+  searchCache = rows;
+  for (const m of rows) {
+    const item = document.createElement('div');
+    item.className = 'resultItem';
+    item.innerHTML = `<b>${m.session_id}</b><div class="small">User: ${m.user_id || '-'}</div><div class="small">${m.last_ts || '-'}</div><div>${m.snippet || ''}</div>`;
+    item.onclick = () => joinSession({ session_id: m.session_id, user_id: m.user_id, customer_lang: '', customer_voice_lang: '' });
+    searchResultsEl.appendChild(item);
   }
 }
 
-async function joinSession(s){
+async function runSearch() {
+  const q = (searchInputEl.value || '').trim();
+  if (!q) {
+    renderSearchResults([]);
+    return;
+  }
+  const mode = searchModeEl.value || 'auto';
+  const uid = (agentIdEl.value || '').trim() || 'agenten-02';
+  const qs = new URLSearchParams({ user_id: uid, q, mode, since_days: '7', limit: String(Math.max(1, Math.min(200, Number(searchLimitEl.value || 50)))) });
+  try {
+    const r = await fetch(`/api/admin/search?${qs.toString()}`, { headers: authHeaders(), cache: 'no-store' });
+    if (!r.ok) {
+      searchMetaEl.textContent = `error ${r.status}`;
+      return;
+    }
+    const data = await r.json();
+    renderSearchResults(data.matches || []);
+  } catch (_) {
+    searchMetaEl.textContent = 'error';
+  }
+}
+
+async function joinSession(s) {
   activeSessionId = s.session_id;
   activeSessionUserId = s.user_id || '';
-  setActiveHandoff(String(s.handoff_state || 'none'), !!s.handoff_requested);
-  chatTitleEl.textContent = `Session ${s.session_id}`;
-  const handoffTxt = activeHandoffRequested ? 'handoff=requested' : `handoff=${activeHandoffState}`;
-  chatMetaEl.textContent = `User ${s.user_id || '-'} | Last: ${s.last_activity_at || '-'} | ${handoffTxt}`;
-  applyDetectedCustomerProfile(s);
-  if (!ttsLangEl.value) {
-    // auto mode: keep backend-driven customer profile
-  } else if (activeCustomerVoiceLang) {
-    // preserve explicit manual selection, but prefill if current value invalid/empty
-    const exists = [...ttsLangEl.options].some(o => o.value === ttsLangEl.value);
-    if (!exists) ttsLangEl.value = activeCustomerVoiceLang;
-  }
+  activeCustomerLang = String(s.customer_lang || '').toLowerCase();
+  activeCustomerVoiceLang = String(s.customer_voice_lang || activeCustomerLang || '').toLowerCase();
+  updateCustomerPreview();
+  chatTitleEl.textContent = `Session ${activeSessionId}`;
+  chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=${activeHandoffState}`;
   clearChat();
 
-  await fetch('/api/agent/join', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ session_id: s.session_id, agent_id: agentIdEl.value || 'agent-01' })
-  });
+  try {
+    await fetch('/api/agent/join', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session_id: activeSessionId, agent_id: agentIdEl.value || 'agenten-02' })
+    });
+  } catch (_) {}
 
   connectWs();
   await loadRecentMessages();
   await loadSessions();
 }
 
-async function loadRecentMessages(reset = false){
+async function loadRecentMessages() {
   if (!activeSessionId || !activeSessionUserId) return;
-  if (reset) clearChat();
-  const q = new URLSearchParams({ user_id: activeSessionUserId, limit: '40' });
-  const r = await fetch(`/api/session/${encodeURIComponent(activeSessionId)}?${q.toString()}`);
-  if (!r.ok) return;
-  const data = await r.json();
-  for (const m of (data.messages || [])) {
-    addMsg(m.role || 'system', m.content || '', m.t || m.created_at);
-  }
+  try {
+    const q = new URLSearchParams({ user_id: activeSessionUserId, limit: '50' });
+    const r = await fetch(`/api/session/${encodeURIComponent(activeSessionId)}?${q.toString()}`);
+    if (!r.ok) return;
+    const data = await r.json();
+    for (const m of (data.messages || [])) {
+      const role = m.role || 'system';
+      const original = m.text_original || m.content || '';
+      const translatedForAgent = m.text_for_agent || m.content || '';
+      const hasSplit = !!(original && translatedForAgent && original !== translatedForAgent);
+      if (hasSplit) {
+        addMsgSplit(
+          role,
+          original,
+          translatedForAgent,
+          m.t || m.created_at,
+          m.lang_original || m.lang || '-',
+          m.lang_for_agent || agentLangEl.value || '-'
+        );
+      } else {
+        addMsg(role, translatedForAgent || original, m.t || m.created_at);
+      }
+    }
+  } catch (_) {}
 }
 
-function connectWs(){
+function connectWs() {
   if (!activeSessionId) return;
   wsSeq += 1;
   const seq = wsSeq;
-  if (wsReconnectTimer) {
-    clearTimeout(wsReconnectTimer);
-    wsReconnectTimer = null;
-  }
-  if (ws) { try { ws.close(); } catch(_) {} }
-  ws = new WebSocket(
-    wsUrl(
-      `/api/ws/session/${encodeURIComponent(activeSessionId)}?client=agent&user_id=${encodeURIComponent(agentIdEl.value || 'agent-01')}&agent_lang=${encodeURIComponent(agentLangEl.value || 'de')}`
-    )
-  );
-  ws.onopen = () => {
-    if (seq !== wsSeq) return;
-    wsStateEl.textContent = 'WS: online';
-  };
+  if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+  if (ws) { try { ws.close(); } catch (_) {} }
+
+  const url = wsUrl(`/api/ws/session/${encodeURIComponent(activeSessionId)}?client=agent&user_id=${encodeURIComponent(agentIdEl.value || 'agenten-02')}&agent_lang=${encodeURIComponent(agentLangEl.value || 'de')}`);
+  ws = new WebSocket(url);
+
+  ws.onopen = () => { if (seq === wsSeq) setWsState(true); };
   ws.onclose = () => {
     if (seq !== wsSeq) return;
-    wsStateEl.textContent = 'WS: offline';
+    setWsState(false);
     if (!activeSessionId) return;
-    wsReconnectTimer = setTimeout(() => {
-      if (seq !== wsSeq) return;
-      connectWs();
-    }, 1800);
+    wsReconnectTimer = setTimeout(() => { if (seq === wsSeq) connectWs(); }, 1500);
   };
-  ws.onerror = () => { wsStateEl.textContent = 'WS: error'; };
+  ws.onerror = () => { if (seq === wsSeq) setWsState(false); };
+
   ws.onmessage = (ev) => {
     try {
       if (seq !== wsSeq) return;
       const e = JSON.parse(ev.data);
+      addDebugEvent(e);
       if (e.type === 'session.keepalive') return;
       if (e.type === 'session.connected') {
         const h = (e.payload && e.payload.handoff) || {};
-        setActiveHandoff(String(h.state || 'none'), !!h.requested);
+        activeHandoffState = String(h.state || 'none');
+        activeHandoffRequested = !!h.requested;
+        btnAcceptHandoff.disabled = !activeHandoffRequested;
         return;
       }
       if (e.type === 'handoff.request') {
-        setActiveHandoff('requested', true);
-        chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=requested`;
-        loadSessions().catch(() => {});
+        activeHandoffState = 'requested';
+        activeHandoffRequested = true;
+        btnAcceptHandoff.disabled = false;
       }
       if (e.type === 'handoff.accept') {
-        setActiveHandoff('accepted', false);
-        chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=accepted`;
-        loadSessions().catch(() => {});
+        activeHandoffState = 'accepted';
+        activeHandoffRequested = false;
+        btnAcceptHandoff.disabled = true;
       }
+
       const role = e.from || 'system';
       const payload = e.payload || {};
       const laneAgent = payload.agent || {};
       const laneTts = payload.tts || {};
+
       if (payload.customer_lang || payload.customer_voice_lang) {
         activeCustomerLang = String(payload.customer_lang || activeCustomerLang || '').toLowerCase();
         activeCustomerVoiceLang = String(payload.customer_voice_lang || payload.customer_lang || activeCustomerVoiceLang || '').toLowerCase();
-        updateCustomerLangMeta();
+        updateCustomerPreview();
       }
-      let text = payload.text || laneAgent.text || JSON.stringify(payload);
-      if (role === 'agent' && payload.text_original) {
-        text = payload.text_original;
-      }
+
+      const originalText = payload.text_original || payload.text || '';
       const translatedForAgent = payload.text_for_agent || laneAgent.text || payload.text_translated || payload.text || '';
-      const hasSplit = !!(payload.text_original && translatedForAgent && payload.text_original !== translatedForAgent);
+      const hasSplit = !!(originalText && translatedForAgent && originalText !== translatedForAgent);
       if (hasSplit) {
         addMsgSplit(
           role,
-          payload.text_original,
+          originalText,
           translatedForAgent,
           e.ts,
-          payload.source_lang || payload.customer_lang || '-',
-          laneAgent.lang || payload.agent_lang || agentLangEl.value || '-'
+          payload.lang_original || payload.source_lang || payload.customer_lang || '-',
+          payload.lang_for_agent || laneAgent.lang || payload.agent_lang || agentLangEl.value || '-'
         );
       } else {
+        const text = translatedForAgent || payload.text || JSON.stringify(payload);
         addMsg(role, text, e.ts);
       }
+
       if (role === 'customer' && agentVoiceIncomingEl.checked) {
-        const ttsLang =
-          payload.lang_for_agent ||
-          laneTts.agent_lang ||
-          payload.tts_lang_agent ||
-          laneAgent.lang ||
-          agentLangEl.value ||
-          'de';
-        const shouldHaveTranslation = !!(payload.lang_original && (laneAgent.lang || payload.agent_lang) && payload.lang_original !== (laneAgent.lang || payload.agent_lang));
-        const speakText = laneTts.agent_text || translatedForAgent || (!shouldHaveTranslation ? (payload.text || text) : "");
+        const ttsLang = payload.lang_for_agent || laneTts.agent_lang || payload.tts_lang_agent || laneAgent.lang || agentLangEl.value || 'de';
+        const speakText = laneTts.agent_text || translatedForAgent || '';
         if (speakText) playAgentVoice(speakText, ttsLang);
       }
+
       loadSessions().catch(() => {});
-    } catch(_) {}
+    } catch (_) {}
   };
+}
+
+async function loadPerfSummary() {
+  if (!showMetricsPanelEl.checked) return;
+  const uid = (agentIdEl.value || '').trim();
+  if (!uid) return;
+  try {
+    const r = await fetch(`/api/admin/metrics/summary?user_id=${encodeURIComponent(uid)}&window=10m`, { headers: authHeaders(), cache: 'no-store' });
+    if (!r.ok) return;
+    const data = await r.json();
+    const avg = data.avg_ms || {};
+    const p95 = data.p95_ms || {};
+    perfSttEl.textContent = `${avg.stt_ms || 0}ms / ${p95.stt_ms || 0}ms`;
+    perfLlmEl.textContent = `${avg.llm_ms || 0}ms / ${p95.llm_ms || 0}ms`;
+    perfTotalEl.textContent = `${avg.total_ms || 0}ms / ${p95.total_ms || 0}ms`;
+  } catch (_) {}
+}
+
+function schedulePerfPolling() {
+  if (perfTimer) clearInterval(perfTimer);
+  const ms = drawer.classList.contains('show') ? 10000 : 30000;
+  perfTimer = setInterval(() => { loadPerfSummary().catch(() => {}); }, ms);
+}
+
+function openDrawer() {
+  drawer.classList.add('show');
+  drawerBackdrop.classList.add('show');
+  loadAdminSettings().catch(() => {});
+  loadModelsCatalog().catch(() => {});
+  schedulePerfPolling();
+}
+
+function closeDrawer() {
+  drawer.classList.remove('show');
+  drawerBackdrop.classList.remove('show');
+  schedulePerfPolling();
+}
+
+async function openHelp() {
+  helpModal.classList.add('show');
+  helpBody.textContent = 'Lade Benutzer Handbuch...';
+  const lang = (agentLangEl.value || 'de').toLowerCase() === 'de' ? 'de' : 'en';
+  try {
+    const r = await fetch(`/api/docs?type=user&lang=${encodeURIComponent(lang)}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const txt = await r.text();
+    helpBody.textContent = txt;
+  } catch (err) {
+    helpBody.textContent = `Benutzer Handbuch konnte nicht geladen werden: ${String(err)}`;
+  }
+}
+
+function closeHelp() { helpModal.classList.remove('show'); }
+
+function resetSessionView() {
+  activeSessionId = '';
+  activeSessionUserId = '';
+  chatTitleEl.textContent = 'Kein Chat ausgewaehlt';
+  chatMetaEl.textContent = 'Waehle links eine Session.';
+  clearChat();
+  if (ws) { try { ws.close(); } catch (_) {} }
+  setWsState(false);
 }
 
 sendBtn.onclick = async () => {
@@ -597,69 +851,137 @@ sendBtn.onclick = async () => {
   if (!text) return;
   const payload = {
     session_id: activeSessionId,
-    agent_id: agentIdEl.value || 'agent-01',
+    agent_id: agentIdEl.value || 'agenten-02',
     text,
     speak: !!speakEl.checked,
     tts_lang: ttsLangEl.value || '',
     agent_lang: agentLangEl.value || 'de',
   };
-  const r = await fetch('/api/agent/message', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
-  });
-  const data = await r.json();
-  if (!r.ok) {
-    addMsg('system', `Error: ${JSON.stringify(data)}`, new Date().toISOString());
-    return;
+  try {
+    const r = await fetch('/api/agent/message', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    if (!r.ok) {
+      addMsg('system', `Error ${r.status}`, new Date().toISOString());
+      return;
+    }
+    msgInputEl.value = '';
+  } catch (err) {
+    addMsg('system', `Error: ${String(err)}`, new Date().toISOString());
   }
-  msgInputEl.value = '';
 };
 
 btnAcceptHandoff.onclick = async () => {
   if (!activeSessionId || !activeHandoffRequested) return;
-  const payload = {
-    session_id: activeSessionId,
-    agent_id: agentIdEl.value || 'agent-01',
-  };
-  const r = await fetch('/api/handoff/accept', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(payload),
-  });
-  const data = await r.json();
-  if (!r.ok) {
-    addMsg('system', `Error: ${JSON.stringify(data)}`, new Date().toISOString());
-    return;
-  }
-  setActiveHandoff(String(data.handoff_state || 'accepted'), !!data.handoff_requested);
-  chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=accepted`;
-  await loadSessions();
+  try {
+    const r = await fetch('/api/handoff/accept', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session_id: activeSessionId, agent_id: agentIdEl.value || 'agenten-02' }),
+    });
+    if (!r.ok) return;
+    activeHandoffRequested = false;
+    activeHandoffState = 'accepted';
+    btnAcceptHandoff.disabled = true;
+  } catch (_) {}
 };
 
-refreshBtn.onclick = () => loadSessions();
-searchBtn.onclick = () => {
-  currentSearch = (searchInputEl.value || '').trim();
-  currentSearchType = searchTypeEl.value || 'all';
-  loadSessions();
+searchBtn.onclick = () => runSearch();
+searchResetBtn.onclick = () => { searchInputEl.value = ''; renderSearchResults([]); loadSessions(); };
+searchInputEl.onkeydown = (ev) => { if (ev.key === 'Enter') runSearch(); };
+
+adminBtn.onclick = () => openDrawer();
+drawerCloseBtn.onclick = () => closeDrawer();
+drawerBackdrop.onclick = () => closeDrawer();
+adminCancelBtn.onclick = () => { resetDrawerChanges(); closeDrawer(); };
+adminSaveBtn.onclick = () => saveAdminSettings();
+btnResetSessionView.onclick = () => resetSessionView();
+btnClearLocal.onclick = () => {
+  localStorage.removeItem(AGENT_KEY);
+  localStorage.removeItem(AGENT_LANG_KEY);
+  localStorage.removeItem(AGENT_VOICE_INCOMING_KEY);
+  localStorage.removeItem(AGENT_VOICE_CUSTOMER_OUT_KEY);
+  localStorage.removeItem(AGENT_AUTO_REFRESH_KEY);
+  localStorage.removeItem(AGENT_ADMIN_TOKEN_KEY);
+  localStorage.removeItem(AGENT_SHOW_DEBUG_KEY);
+  localStorage.removeItem(AGENT_SHOW_METRICS_KEY);
+  alert('Local storage cleared.');
 };
-clearSearchBtn.onclick = () => {
-  searchInputEl.value = '';
-  searchTypeEl.value = 'all';
-  currentSearch = '';
-  currentSearchType = 'all';
-  loadSessions();
+btnOpenAdminDocs.onclick = async () => {
+  const lang = (agentLangEl.value || 'de').toLowerCase() === 'de' ? 'de' : 'en';
+  try {
+    const r = await fetch(`/api/docs?type=admin&lang=${encodeURIComponent(lang)}&user_id=${encodeURIComponent(agentIdEl.value || '')}`, { headers: authHeaders() });
+    if (!r.ok) {
+      alert(`Admin docs failed: HTTP ${r.status}`);
+      return;
+    }
+    const txt = await r.text();
+    helpBody.textContent = txt;
+    helpModal.classList.add('show');
+  } catch (err) {
+    alert(`Admin docs failed: ${String(err)}`);
+  }
 };
-searchInputEl.onkeydown = (ev) => {
-  if (ev.key === 'Enter') searchBtn.click();
+
+agentPresetEl.onchange = async () => {
+  const v = (agentPresetEl.value || '').trim();
+  if (!v) return;
+  agentIdEl.value = v;
+  rememberLocal();
+  await loadAgentPrefs();
 };
-helpBtn.onclick = () => { openHelp(); };
-helpCloseBtn.onclick = () => { closeHelp(); };
-helpModalBackdrop.onclick = (ev) => { if (ev.target === helpModalBackdrop) closeHelp(); };
-document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeHelp(); });
-loadAgentPrefs();
-updateAutoRefreshState();
-startAutoRefresh();
-updateCustomerLangMeta();
-loadSessions();
+
+agentIdEl.onchange = async () => {
+  rememberLocal();
+  await loadAgentPrefs();
+  await loadAdminSettings();
+  await loadPerfSummary();
+};
+
+agentLangEl.onchange = async () => {
+  rememberLocal();
+  await saveAgentPrefs();
+  if (activeSessionId) connectWs();
+};
+
+backendSelect.onchange = () => rebuildModelSelect();
+showDebugPanelEl.onchange = () => { syncPanelToggles(); rememberLocal(); };
+showMetricsPanelEl.onchange = () => { syncPanelToggles(); rememberLocal(); schedulePerfPolling(); };
+autoRefreshEl.onchange = () => { rememberLocal(); startAutoRefresh(); };
+agentVoiceIncomingEl.onchange = () => rememberLocal();
+agentVoiceCustomerOutEl.onchange = () => rememberLocal();
+adminTokenInput.onchange = () => rememberLocal();
+
+helpBtn.onclick = () => openHelp();
+helpCloseBtn.onclick = () => closeHelp();
+helpModal.onclick = (ev) => { if (ev.target === helpModal) closeHelp(); };
+
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { closeDrawer(); closeHelp(); } });
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  if (!autoRefreshEl.checked) return;
+  autoRefreshTimer = setInterval(() => { loadSessions().catch(() => {}); }, 5000);
+}
+
+async function bootstrap() {
+  restoreLocal();
+  setWsState(false);
+  updateCustomerPreview();
+  await loadModelsCatalog();
+  await loadAgentPrefs();
+  await loadAdminSettings();
+  try {
+    const cfg = await fetch('/api/config', {cache:'no-store'}).then(r => r.json());
+    setVersion((cfg?.ui?.version) || 'v9.1.9');
+  } catch (_) { setVersion('v9.1.9'); }
+  await loadPerfSummary();
+  schedulePerfPolling();
+  startAutoRefresh();
+  await loadSessions();
+}
+
+bootstrap();
 </script>
 </body>
 </html>

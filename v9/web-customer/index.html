@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Customer V9.1.7</title>
+  <title>Voice Agent Customer</title>
   <style>
     body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
     .wrap { max-width: 920px; margin: 20px auto; padding: 0 14px; }
@@ -28,7 +28,8 @@
     <div class="card">
       <div class="hd">
         <div>
-          <b>Voice Agent Customer V9.1.7</b>
+          <b id="headerTitle">Voice Agent Customer</b>
+          <div class="status" id="headerVersion">Version: v9.1.9</div>
           <div class="status" id="status">idle</div>
         </div>
         <div class="status" id="ids">-</div>
@@ -98,6 +99,8 @@ const btnRequestHandoff = document.getElementById("btnRequestHandoff");
 const listenModeEl = document.getElementById("listenMode");
 const handoffStatusEl = document.getElementById("handoffStatus");
 const autoSendAfterRecordEl = document.getElementById("autoSendAfterRecord");
+const headerTitleEl = document.getElementById("headerTitle");
+const headerVersionEl = document.getElementById("headerVersion");
 
 let mediaRecorder = null;
 let chunks = [];
@@ -115,6 +118,12 @@ let handoffRequested = false;
 let handoffState = "none";
 
 function setStatus(s){ statusEl.textContent = s; }
+function setVersion(v){
+  const ver = v || "v9.1.9";
+  document.title = `Voice Agent Customer ${ver}`;
+  headerTitleEl.textContent = `Voice Agent Customer ${ver}`;
+  headerVersionEl.textContent = `Version: ${ver}`;
+}
 function makeId(){ return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()); }
 function refreshIds(){ idsEl.textContent = `User: ${userIdEl.value} | Session: ${sessionIdEl.value || "-"}`; }
 function persistIds(){ localStorage.setItem(USER_KEY, userIdEl.value); localStorage.setItem(SESSION_KEY, sessionIdEl.value); refreshIds(); }
@@ -178,6 +187,11 @@ function connectSessionWs(){
         const ttsText = String(laneTts.customer_text || '');
         const ttsLang = String(laneTts.customer_lang || p.tts_lang || laneCustomer.lang || ttsLangEl.value || 'de');
         if (ttsText) await playAgentTts(ttsText, ttsLang);
+      }
+      if (e.from === 'customer' && e.payload) {
+        const p = e.payload || {};
+        const ownText = String((p.customer && p.customer.text) || p.text_original || p.text || '');
+        if (ownText) addMsg('me','Kunde', ownText);
       }
       if (e.from === 'system' && e.type === 'session.joined') {
         addMsg('bot','System', `Agent ${e.payload?.agent_id || ''} joined`);
@@ -338,6 +352,15 @@ autoSendAfterRecordEl.checked = localStorage.getItem(AUTO_SEND_AFTER_RECORD_KEY)
 loopActive = listenModeEl.checked;
 refreshIds();
 connectSessionWs();
+
+(async () => {
+  try {
+    const cfg = await fetch('/api/config', { cache: 'no-store' }).then(r => r.json());
+    setVersion((cfg?.ui?.version) || "v9.1.9");
+  } catch (_) {
+    setVersion("v9.1.9");
+  }
+})();
 stateIdle();
 
 userIdEl.addEventListener('change', () => { persistIds(); connectSessionWs(); });

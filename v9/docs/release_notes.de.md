@@ -1,4 +1,4 @@
-# Release Notes (DE) - V7.0.0 bis V9.1.8
+# Release Notes (DE) - V7.0.0 bis V9.1.9
 
 ## Historie
 - V7.0.0: V7-Scaffold isoliert, eigene Ports, Admin-Demo-Defaults.
@@ -25,6 +25,7 @@
 - V9.1.6: Post-fix-Hardening fuer wiederholbare WS/Voice-Tests, formale Artefakt-Policy (`v9/docs/ARTIFACT_POLICY.md`) sowie Retention/Cleanup-Automation fuer lokale Nachweise.
 - V9.1.7: Customer Auto-Upload nach Recording-Ende, Default-Modell auf `qwen2.5:3b` vereinheitlicht und TTS-Sanitizer-Regressionstest unter `v9/scripts/tests/test_tts_sanitize.py`.
 - V9.1.8: Admin-Performance-Toggle + neue Suche (`/api/admin/search`) mit Mode `auto|session_id|user_id|text`, Wildcard `*` fuer IDs und klickbarem Session-Open im Admin-UI.
+- V9.1.9: Agent-UI aufgeraeumt (sticky Header), einheitliche Suche (`q` + `mode`) immer sichtbar, Admin-Einstellungen in Drawer mit sicheren Controls, und Performance-Header mit `avg/p95` aus `window=10m`.
 
 ## Nutzen von V9.1.0
 - Keine falsche Sprache mehr im Agenten- und Kunden-TTS-Pfad.
@@ -83,3 +84,9 @@
 - Admin kann Performance-Logging nur in benoetigten Zeitfenstern aktivieren (weniger Dauer-Overhead).
 - Suche nach Konversationen ist deutlich schneller: Teil-`session_id`, Teil-`user_id` oder Textfragment.
 - Trefferliste erlaubt direktes Oeffnen der Session im Agent-Client fuer schnelle Analyse.
+
+## Nutzen von V9.1.9
+- Agenten sehen eine klarere Arbeitsflaeche: Verbindungsstatus + Version links, Suche zentral, Admin-Controls nur bei Bedarf.
+- Suchworkflow ist konsistent: ein Feld `q`, Mode-Dropdown (`auto|session_id|user_id|text`), Wildcard `*` und direkter Session-Sprung aus Treffern.
+- Admin-Drawer reduziert Bedienfehler (Dropdowns/Toggles statt Freitext) und speichert relevante Defaults in DB (`/api/admin/settings`).
+- Performance-Werte sind live sichtbar (`STT/LLM/Total avg+p95`), mit schonender Polling-Strategie (10s offen, 30s geschlossen).

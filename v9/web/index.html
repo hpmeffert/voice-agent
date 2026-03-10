@@ -323,7 +323,7 @@
           <button id="menuDemoGuide" class="menuItem" data-help-doc="/api/docs?type=demo" data-help-title="Demo Guide" data-i18n="menu.demo_guide">Demo Guide</button>
           <button id="adminGuideItem" class="menuItem" data-help-doc="/api/docs?type=admin" data-help-title="Admin Docs" data-i18n="menu.admin_docs">Admin Docs</button>
           <button id="adminSettingsMenuItem" class="menuItem" data-i18n="menu.admin_settings">Admin Settings</button>
-          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/api/docs?type=release" data-help-title="Release Notes V9.0.0" data-i18n="menu.release_notes">Release Notes</button>
+          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/api/docs?type=release" data-help-title="Release Notes V9.1.9" data-i18n="menu.release_notes">Release Notes</button>
         </div>
       </div>
     </div>
@@ -728,7 +728,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v9.0.0";
+let uiVersionText = "v9.1.9";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 let appState = "idle";
@@ -1372,7 +1372,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v9.0.0";
+    const ver = cfg?.ui?.version || "v9.1.9";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
     applyAdminSettingsForm(cfg?.admin_settings || {});
@@ -1381,7 +1381,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v9.0.0";
+    uiVersionText = "v9.1.9";
     applyAdminSettingsForm({});
   }
   await loadWhoAmI();

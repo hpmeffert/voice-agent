@@ -23,6 +23,20 @@ docker compose --project-directory "$PROJECT_DIR" -f "$COMPOSE_FILE" logs --no-c
 # Full stack snapshot.
 docker compose --project-directory "$PROJECT_DIR" -f "$COMPOSE_FILE" logs --no-color > "$RUN_DIR/docker-logs.txt" || true
 
+# Optional WS event captures from caller-provided paths.
+if [[ -n "${WS_AGENT_EVENTS_FILE:-}" && -f "${WS_AGENT_EVENTS_FILE}" ]]; then
+  cp -f "${WS_AGENT_EVENTS_FILE}" "$RUN_DIR/ws_agent_events.jsonl" || true
+fi
+if [[ -n "${WS_CUSTOMER_EVENTS_FILE:-}" && -f "${WS_CUSTOMER_EVENTS_FILE}" ]]; then
+  cp -f "${WS_CUSTOMER_EVENTS_FILE}" "$RUN_DIR/ws_customer_events.jsonl" || true
+fi
+
+# Optional screenshots folder (headless/browser captures).
+if [[ -n "${SCREENSHOT_DIR:-}" && -d "${SCREENSHOT_DIR}" ]]; then
+  mkdir -p "$RUN_DIR/screenshots"
+  find "${SCREENSHOT_DIR}" -maxdepth 1 -type f \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" \) -exec cp -f {} "$RUN_DIR/screenshots/" \; || true
+fi
+
 # Environment snapshot without obvious secrets.
 (
   env | grep -E 'VOICE|LANG|TTS|OLLAMA|OPENAI|MONGO|VALKEY|REDIS|RETENTION|MODEL|BACKEND' \

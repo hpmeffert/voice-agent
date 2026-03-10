@@ -275,3 +275,26 @@ bash scripts/run_v9_1_8_admin_tests.sh
 ```bash
 bash v9/scripts/zip_artifacts.sh v9/artifacts/<timestamp>
 ```
+
+## New in V9.1.9 (Admin): Agent Drawer + 10m Perf Header
+- Agent UI is cleaned up as an operational workspace:
+  - always-visible header (WS status + version + search + admin button)
+  - search via `/api/admin/search` using `q` + `mode`
+  - admin settings moved into a Drawer with safe controls
+- New/extended admin settings:
+  - `perf_metrics_enabled` (compatible alias with `perf_logging_enabled`)
+  - `default_backend`
+  - `default_model`
+- `GET /api/admin/metrics/summary` now supports `window=10m` and returns both `avg_ms` and `p95_ms`.
+
+### Admin quick test V9.1.9
+1. Open Agent UI (`8087`), open `Admin ⚙︎`.
+2. Adjust backend/model/toggles and click `Save`.
+3. Run search with `fe774f*` (mode `auto`) and open session from results.
+4. Verify performance strip shows values (`STT/LLM/Total avg+p95`).
+
+### Automated smoke test V9.1.9
+```bash
+bash scripts/run_v9_1_9_ui_smoke.sh
+```
+- Output and artifacts: `artifacts/v9.1.9/<run-id>/`

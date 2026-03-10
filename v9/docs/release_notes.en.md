@@ -1,4 +1,4 @@
-# Release Notes (EN) - V7.0.0 through V9.1.8
+# Release Notes (EN) - V7.0.0 through V9.1.9
 
 ## History
 - V7.0.0: isolated V7 scaffold, dedicated ports, admin demo defaults.
@@ -25,6 +25,7 @@
 - V9.1.6: Post-fix hardening for repeatable WS/voice tests, formal artifact policy (`v9/docs/ARTIFACT_POLICY.md`), and retention/cleanup automation for local evidence folders.
 - V9.1.7: Customer auto-upload after recording stop, aligned default model `qwen2.5:3b`, and sanitizer regression test standardized at `v9/scripts/tests/test_tts_sanitize.py`.
 - V9.1.8: Admin performance toggle + new search endpoint (`/api/admin/search`) with `auto|session_id|user_id|text` modes, ID wildcard `*`, and clickable session open in Admin UI.
+- V9.1.9: Cleaned Agent UI (sticky header), unified always-visible search (`q` + `mode`), admin settings moved into a safe Drawer panel, and header performance summary (`avg/p95`) via `window=10m`.
 
 ## Why V9.1.0 matters
 - Prevents wrong-language speech on both Agent and Customer clients.
@@ -83,3 +84,9 @@
 - Admins can enable performance logging only during analysis windows (reduced constant overhead).
 - Conversation lookup is faster via partial `session_id`, partial `user_id`, or text fragments.
 - Search results can open the target session directly in Agent UI for faster triage.
+
+## Why V9.1.9 matters
+- Agent workspace is cleaner: connection status + version on the left, unified search in the center, admin controls on demand.
+- Search UX is consistent: one `q` field, mode dropdown (`auto|session_id|user_id|text`), wildcard `*`, and direct open-session from result rows.
+- Admin Drawer reduces operator mistakes by using dropdowns/toggles instead of free-text where possible; settings persist via `/api/admin/settings`.
+- Performance summary is visible and lightweight (`STT/LLM/Total avg+p95`) with adaptive polling (10s when drawer is open, 30s otherwise).

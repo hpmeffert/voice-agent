@@ -158,3 +158,21 @@ Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-
 - Vorteil fuer Nutzer:
   - schnellere Fehleranalyse bei Stoerungen
   - weniger Unterbrechungen im Live-Betrieb.
+
+## Neu in V9.1.9: Agent UI aufgeraeumt
+- Der Agent hat jetzt oben immer denselben klaren Kopfbereich:
+  - Verbindungsstatus + Version
+  - Suche (`q` + Modus)
+  - Admin-Button
+- Die Suche ist immer sichtbar und nutzt `/api/admin/search`.
+- Admin-Einstellungen sind in einem Drawer gebuendelt (sichere Dropdowns/Toggles), damit weniger Fehlkonfigurationen passieren.
+- Performance wird kompakt gezeigt:
+  - `STT avg/p95`
+  - `LLM avg/p95`
+  - `Total avg/p95`
+
+### Beispiel
+1. Agent gibt in die Suche `fe774f*` ein und waehlt `auto`.
+2. Trefferliste zeigt Session-ID, Kontext-Snippet und Zeit.
+3. Klick auf Treffer oeffnet direkt die Session.
+4. Bei Bedarf `Admin ⚙︎` oeffnen und Einstellungen speichern.

@@ -30,7 +30,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v9.1.8"
+APP_VERSION = "v9.1.9"
 
 app = FastAPI(
     title=f"Voice Agent API {APP_VERSION}",
@@ -228,6 +228,15 @@ def safe_ms(value: Any) -> int:
         return max(0, int(value))
     except Exception:
         return 0
+
+
+def percentile_ms(values: list[int], pct: float) -> int:
+    if not values:
+        return 0
+    sorted_vals = sorted(max(0, int(v)) for v in values)
+    idx = int(round((len(sorted_vals) - 1) * pct))
+    idx = max(0, min(len(sorted_vals) - 1, idx))
+    return sorted_vals[idx]
 
 
 def detect_lang_from_text(text: str) -> str:
@@ -596,10 +605,13 @@ def default_admin_settings() -> dict[str, Any]:
     return {
         "retention_days": int(METRICS_RETENTION_DAYS),
         "perf_logging_enabled": False,
+        "perf_metrics_enabled": False,
         "perf_logging_sample_rate": 1.0,
         "perf_logging_retention_days": int(METRICS_RETENTION_DAYS),
         "search_max_results": 50,
         "allow_text_regex_fallback": True,
+        "default_backend": "ollama",
+        "default_model": str(OLLAMA_MODEL or "qwen2.5:3b"),
         "listen_defaults": {
             "silence_ms": int(LISTEN_SILENCE_MS_DEFAULT),
             "threshold": float(LISTEN_THRESHOLD_DEFAULT),
@@ -659,10 +671,18 @@ def normalized_admin_settings(raw: Any) -> dict[str, Any]:
     return {
         "retention_days": retention_days,
         "perf_logging_enabled": bool(src.get("perf_logging_enabled", defaults["perf_logging_enabled"])),
+        "perf_metrics_enabled": bool(
+            src.get(
+                "perf_metrics_enabled",
+                src.get("perf_logging_enabled", defaults["perf_metrics_enabled"]),
+            )
+        ),
         "perf_logging_sample_rate": perf_sample_rate,
         "perf_logging_retention_days": perf_retention_days,
         "search_max_results": search_max_results,
         "allow_text_regex_fallback": bool(src.get("allow_text_regex_fallback", defaults["allow_text_regex_fallback"])),
+        "default_backend": str(src.get("default_backend", defaults["default_backend"]) or defaults["default_backend"]).strip().lower(),
+        "default_model": str(src.get("default_model", defaults["default_model"]) or defaults["default_model"]).strip(),
         "listen_defaults": {
             "silence_ms": silence_ms,
             "threshold": threshold,
@@ -726,6 +746,9 @@ def set_admin_settings(patch: dict[str, Any]) -> dict[str, Any]:
         next_settings["retention_days"] = patch["retention_days"]
     if "perf_logging_enabled" in patch:
         next_settings["perf_logging_enabled"] = patch["perf_logging_enabled"]
+    if "perf_metrics_enabled" in patch:
+        next_settings["perf_metrics_enabled"] = patch["perf_metrics_enabled"]
+        next_settings["perf_logging_enabled"] = patch["perf_metrics_enabled"]
     if "perf_logging_sample_rate" in patch:
         next_settings["perf_logging_sample_rate"] = patch["perf_logging_sample_rate"]
     if "perf_logging_retention_days" in patch:
@@ -734,6 +757,10 @@ def set_admin_settings(patch: dict[str, Any]) -> dict[str, Any]:
         next_settings["search_max_results"] = patch["search_max_results"]
     if "allow_text_regex_fallback" in patch:
         next_settings["allow_text_regex_fallback"] = patch["allow_text_regex_fallback"]
+    if "default_backend" in patch:
+        next_settings["default_backend"] = patch["default_backend"]
+    if "default_model" in patch:
+        next_settings["default_model"] = patch["default_model"]
     if "listen_defaults" in patch and isinstance(patch["listen_defaults"], dict):
         next_settings["listen_defaults"].update(patch["listen_defaults"])
     if "templates" in patch and isinstance(patch["templates"], dict):
@@ -1652,7 +1679,7 @@ def log_telemetry(
 ) -> None:
     ensure_ready()
     settings = get_admin_settings()
-    if not bool(settings.get("perf_logging_enabled", False)):
+    if not bool(settings.get("perf_logging_enabled", settings.get("perf_metrics_enabled", False))):
         return
     sample_rate = float(settings.get("perf_logging_sample_rate", 1.0) or 0.0)
     sample_rate = max(0.0, min(1.0, sample_rate))
@@ -2023,10 +2050,13 @@ class AdminSettingsUpdateRequest(BaseModel):
     user_id: str = Field(min_length=8)
     retention_days: int | None = Field(default=None, ge=1, le=365)
     perf_logging_enabled: bool | None = None
+    perf_metrics_enabled: bool | None = None
     perf_logging_sample_rate: float | None = Field(default=None, ge=0.0, le=1.0)
     perf_logging_retention_days: int | None = Field(default=None, ge=1, le=365)
     search_max_results: int | None = Field(default=None, ge=1, le=200)
     allow_text_regex_fallback: bool | None = None
+    default_backend: str | None = Field(default=None, min_length=3, max_length=32)
+    default_model: str | None = Field(default=None, min_length=2, max_length=120)
     listen_silence_ms_default: int | None = Field(default=None, ge=300, le=5000)
     listen_threshold_default: float | None = Field(default=None, ge=0.001, le=0.2)
     crm_export_template_md: str | None = None
@@ -2067,6 +2097,14 @@ class AgentMessageRequest(BaseModel):
     speak: bool = False
     tts_lang: str | None = None
     agent_lang: str | None = None
+
+
+class AgentTranslatePreviewRequest(BaseModel):
+    session_id: str = Field(min_length=8)
+    user_id: str = Field(min_length=8)
+    text: str = Field(min_length=1, max_length=8000)
+    source_lang: str | None = Field(default=None, min_length=2, max_length=8)
+    agent_lang: str = Field(min_length=2, max_length=8)
 
 
 class HandoffRequest(BaseModel):
@@ -2884,6 +2922,8 @@ def admin_settings_update(
         patch["retention_days"] = int(req.retention_days)
     if req.perf_logging_enabled is not None:
         patch["perf_logging_enabled"] = bool(req.perf_logging_enabled)
+    if req.perf_metrics_enabled is not None:
+        patch["perf_metrics_enabled"] = bool(req.perf_metrics_enabled)
     if req.perf_logging_sample_rate is not None:
         patch["perf_logging_sample_rate"] = float(req.perf_logging_sample_rate)
     if req.perf_logging_retention_days is not None:
@@ -2892,6 +2932,10 @@ def admin_settings_update(
         patch["search_max_results"] = int(req.search_max_results)
     if req.allow_text_regex_fallback is not None:
         patch["allow_text_regex_fallback"] = bool(req.allow_text_regex_fallback)
+    if req.default_backend is not None:
+        patch["default_backend"] = str(req.default_backend).strip().lower()
+    if req.default_model is not None:
+        patch["default_model"] = str(req.default_model).strip()
     if req.listen_silence_ms_default is not None or req.listen_threshold_default is not None:
         listen_patch: dict[str, Any] = {}
         if req.listen_silence_ms_default is not None:
@@ -3029,11 +3073,38 @@ def get_session(
 
     messages = []
     for msg in docs:
+        meta = msg.get("meta") if isinstance(msg.get("meta"), dict) else {}
+        lanes = meta.get("lanes") if isinstance(meta.get("lanes"), dict) else {}
+        lane_agent = lanes.get("agent") if isinstance(lanes.get("agent"), dict) else {}
+        lane_customer = lanes.get("customer") if isinstance(lanes.get("customer"), dict) else {}
+        text_original = str(msg.get("answer_original") or msg.get("content") or "")
+        text_for_agent = str(
+            lane_agent.get("text")
+            or meta.get("text_for_agent")
+            or msg.get("content")
+            or ""
+        )
+        text_for_customer = str(
+            lane_customer.get("text")
+            or meta.get("text_for_customer")
+            or msg.get("answer_translated")
+            or msg.get("content")
+            or ""
+        )
+        lang_original = str(meta.get("source_lang") or msg.get("lang") or "").strip().lower()
+        lang_for_agent = str(lane_agent.get("lang") or meta.get("agent_lang") or lang_original).strip().lower()
+        lang_for_customer = str(lane_customer.get("lang") or meta.get("customer_lang") or lang_original).strip().lower()
         messages.append(
             {
                 "role": msg.get("role"),
                 "content": msg.get("content"),
                 "lang": msg.get("lang"),
+                "text_original": text_original,
+                "lang_original": lang_original,
+                "text_for_agent": text_for_agent,
+                "lang_for_agent": lang_for_agent,
+                "text_for_customer": text_for_customer,
+                "lang_for_customer": lang_for_customer,
                 "backend": msg.get("backend"),
                 "model": msg.get("model"),
                 "t": dt_iso(msg.get("t") or msg.get("created_at")),
@@ -3124,13 +3195,18 @@ def admin_metrics_recent(
 @app.get("/admin/metrics/summary")
 def admin_metrics_summary(
     user_id: str = Query(..., min_length=8),
-    window: str = Query("24h", pattern="^(24h|7d)$"),
+    window: str = Query("24h", pattern="^(10m|24h|7d)$"),
     admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
     ensure_ready()
     assert_admin_access(user_id, admin_token)
     now = now_utc()
-    since = now - timedelta(hours=24 if window == "24h" else 24 * 7)
+    if window == "10m":
+        since = now - timedelta(minutes=10)
+    elif window == "24h":
+        since = now - timedelta(hours=24)
+    else:
+        since = now - timedelta(days=7)
     source_col = telemetry_col if telemetry_col is not None else metrics_logs_col
     docs = list(
         source_col.find(
@@ -3148,20 +3224,26 @@ def admin_metrics_summary(
             "ok_count": 0,
             "error_count": 0,
             "avg_ms": {"audio_read_ms": 0, "stt_ms": 0, "llm_ms": 0, "tts_ms": 0, "total_ms": 0},
+            "p95_ms": {"audio_read_ms": 0, "stt_ms": 0, "llm_ms": 0, "tts_ms": 0, "total_ms": 0},
         }
 
     sums = {"audio_read_ms": 0, "stt_ms": 0, "llm_ms": 0, "tts_ms": 0, "total_ms": 0}
+    buckets: dict[str, list[int]] = {k: [] for k in sums}
     for d in docs:
         m = d.get("metrics") or {}
         for key in sums:
-            sums[key] += safe_ms(m.get(key))
+            ms = safe_ms(m.get(key))
+            sums[key] += ms
+            buckets[key].append(ms)
     avg = {k: int(round(v / count)) for k, v in sums.items()}
+    p95 = {k: percentile_ms(v, 0.95) for k, v in buckets.items()}
     return {
         "window": window,
         "count": count,
         "ok_count": ok_count,
         "error_count": err_count,
         "avg_ms": avg,
+        "p95_ms": p95,
     }
 
 

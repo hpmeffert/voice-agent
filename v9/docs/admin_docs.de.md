@@ -275,3 +275,26 @@ bash scripts/run_v9_1_8_admin_tests.sh
 ```bash
 bash v9/scripts/zip_artifacts.sh v9/artifacts/<timestamp>
 ```
+
+## Neu in V9.1.9 (Admin): Agent Drawer + Perf-Header 10m
+- Agent-UI wurde als Arbeitsoberflaeche aufgeraeumt:
+  - Header immer sichtbar (WS-Status + Version + Suche + Admin-Button)
+  - Suche ueber `/api/admin/search` mit `q` + `mode`
+  - Admin-Einstellungen im Drawer statt verstreuter Freitextfelder
+- Neue/erweiterte Admin-Settings:
+  - `perf_metrics_enabled` (kompatibel zu `perf_logging_enabled`)
+  - `default_backend`
+  - `default_model`
+- `GET /api/admin/metrics/summary` unterstuetzt jetzt `window=10m` und liefert `avg_ms` + `p95_ms`.
+
+### Admin-Kurztest V9.1.9
+1. Agent-UI (`8087`) oeffnen, `Admin ⚙︎` oeffnen.
+2. Backend/Model und Toggles setzen, `Save` klicken.
+3. Suche mit `fe774f*` (Mode `auto`) ausfuehren und Session aus Trefferliste oeffnen.
+4. Pruefen, dass der Perf-Header Werte zeigt (`STT/LLM/Total avg+p95`).
+
+### Automatisierter Smoke-Test V9.1.9
+```bash
+bash scripts/run_v9_1_9_ui_smoke.sh
+```
+- Ergebnis und Artefakte unter: `artifacts/v9.1.9/<run-id>/`
