@@ -1,0 +1,141 @@
+# Benutzer Handbuch (DE) - V9.0.0
+
+## Was macht der Voice Agent?
+Der Voice Agent verbindet Sprache und Text in einem durchgehenden Ablauf:
+1. Kunde spricht oder schreibt.
+2. System erkennt die Kundensprache.
+3. Agent arbeitet in seiner eigenen Sprache.
+4. System uebersetzt zurueck in die Kundensprache.
+5. Kunde hoert die Antwort mit passendem Voice-Profil.
+
+Das Ziel: Beide Seiten sprechen in ihrer bevorzugten Sprache, trotzdem versteht sich jeder.
+
+## Oberflaechen (wo was ist)
+- Admin UI: `http://localhost:8085`
+- Kunden UI: `http://localhost:8086`
+- Agent UI: `http://localhost:8087`
+
+## Wichtig: Agenten-Sprache oben im Agent Client
+Oben im Agent Client gibt es:
+- `Demo User` (Dropdown fuer schnelle Agent-Auswahl)
+- `Agent ID`
+- `Agent Sprache` (`de`, `en`, `no`, `sv`, `fi`)
+- `Empfang auf Agent sprechen` (an/aus)
+- `Kunden-Ausgabe auf Agent sprechen` (an/aus, Standard AUS)
+- `Customer output lang`
+
+### Was bedeutet `Agent Sprache`?
+`Agent Sprache` ist die Muttersprache des Agenten.
+- Eingehende Kundennachrichten werden fuer den Agenten in diese Sprache gebracht.
+- Agent Voice spricht in dieser Sprache.
+- Die Einstellung wird pro Agent-ID gespeichert.
+
+Beispiel:
+- Agent `agenten-02` setzt `Agent Sprache = en`.
+- Kunde schreibt Deutsch.
+- Agent sieht/hoert die Nachricht auf Englisch.
+
+## Original + Uebersetzung im Agent-Fenster
+Der Agent sieht jetzt beides:
+- `Original`: Eingangstext in der Ursprungssprache.
+- `Uebersetzung`: Text in der Agent-Sprache.
+
+So kann der Agent immer kontrollieren, was genau gesagt wurde.
+
+## Customer output lang (im Agent Client)
+`Customer output lang` steuert die Ausgabesprache fuer den Kunden.
+
+Optionen:
+- `auto (detected customer profile)`
+  - Empfohlen.
+  - System nimmt die erkannte Kundensprache + Kunden-Voice-Profil aus der Session.
+- Manuell (`de`, `en`, `no`, `sv`, `fi`)
+  - Erzwingt eine feste Kundenausgabe.
+
+### Regel im Auto-Modus
+Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-Profil genutzt.
+
+## Ablauf der Uebersetzung (einfach erklaert)
+1. Kunde spricht/schreibt in Sprache A.
+2. System erkennt Sprache A und speichert sie als Kundenprofil.
+3. Agent arbeitet in Sprache B (seine eingestellte Agent Sprache).
+4. Agentnachricht wird vor Auslieferung nach Sprache A uebersetzt.
+5. Kunde bekommt Text + Sprache in Sprache A.
+
+## Listen Mode (Kunde)
+- Automatisch aufnehmen, bei Stille stoppen, senden.
+- Standard Stillewert: `1300 ms`.
+
+## Drei klare Beispiele
+
+### Beispiel 1: Kunde DE, Agent EN
+- Kunde: Deutsch
+- Agent Sprache: `en`
+- Customer output lang: `auto`
+- Ergebnis:
+  - Agent arbeitet auf Englisch.
+  - Kunde bekommt Deutsch (Text + deutsche Stimme).
+  - Agent sieht im Chatfenster sowohl Original (DE) als auch Uebersetzung (EN).
+
+### Beispiel 2: Kunde EN, Agent DE
+- Kunde: Englisch
+- Agent Sprache: `de`
+- Customer output lang: `auto`
+- Ergebnis:
+  - Agent sieht/hoert Englisch auf Deutsch uebersetzt.
+  - Kunde bekommt Englisch (Text + englische Stimme).
+
+### Beispiel 3: Manuelle Ueberschreibung
+- Kunde spricht Deutsch.
+- Agent setzt `Customer output lang = en`.
+- Ergebnis:
+  - Kunde bekommt Antwort auf Englisch (Text + englische Stimme), auch wenn er Deutsch gestartet hat.
+
+## Fehlerbilder (kurz)
+- Falsche Ausgabe-Sprache beim Kunden:
+  - Pruefe im Agent Client `Customer output lang`.
+  - Fuer automatische Zuordnung: auf `auto` stellen.
+- Agent hoert nicht in eigener Sprache:
+  - `Agent Sprache` pruefen.
+  - `Empfang auf Agent sprechen` aktivieren.
+- Zwei Stimmen gleichzeitig:
+  - `Kunden-Ausgabe auf Agent sprechen` auf AUS lassen (Standard).
+- Kein Audio:
+  - Browser-Autoplay erlauben.
+  - Piper-Health pruefen (Admin).
+
+## Neu in V9.1.0: Dual-Lane (Original + Zieltext)
+- Jede eingehende Kundennachricht hat jetzt 2 Ansichten im Agent-Client:
+  - `Original (lang_original)`
+  - `Uebersetzung (Agent Sprache)`
+- Die Sprachausgabe beim Agenten nutzt nur noch `tts.agent_text`.
+- Die Sprachausgabe beim Kunden nutzt nur noch `tts.customer_text`.
+- Dadurch wird verhindert, dass z. B. deutscher Originaltext mit englischer Stimme gesprochen wird.
+
+## Neu in V9.1.1: TTS Cleanup
+- TTS entfernt jetzt Markdown-Formatierungszeichen (z. B. `*`, `**`, Backticks) vor der Sprachausgabe.
+- Das betrifft nur Audio-Ausgabe, nicht gespeicherten oder angezeigten Text.
+
+## Neu in V9.1.2: Agent-Inbox Auto-Refresh + Anzeige-Bereinigung
+- Der Agent-Client hat jetzt `Auto-Refresh` fuer die Inbox (Standard: an, 5 Sekunden).
+- Wenn eine Session neue Aktivitaet hat, wird sie schneller in der Inbox sichtbar.
+- Neuer Schalter: `Anzeige bereinigen (Sonderzeichen ausblenden)`.
+  - Nur die Chat-Anzeige wird bereinigt.
+  - Routing, Uebersetzung, gespeicherte Daten und TTS-Felder bleiben unveraendert.
+
+## Neu in V9.1.5-fix-voice-duallane: Voice = Chat (Paritaetsfix)
+- Voice-Eingaben nutzen jetzt denselben `message.created`-Live-Vertrag wie Chat.
+- Bei unterschiedlicher Sprache bekommt der Agent garantiert die Agent-Lane-Uebersetzung.
+- TTS bleibt strikt lane-gebunden:
+  - Agent spricht nur `tts.agent_*`
+  - Kunde spricht nur `tts.customer_*`
+- Fuer Debugging gibt es zusaetzlich klare Felder wie `source_lang_effective` im Event-Debug.
+
+### Schnelltest (2 Minuten)
+1. Agent: Sprache `en`, Incoming Speak `AN`.
+2. Kunde: Sprache `de`, spricht den Satz zur Wallbox.
+3. Erwartung:
+   - Agent sieht `Original (DE)` + `Uebersetzung (EN)` live.
+   - Agent hoert EN.
+4. Agent antwortet EN.
+5. Kunde sieht/hoert DE.

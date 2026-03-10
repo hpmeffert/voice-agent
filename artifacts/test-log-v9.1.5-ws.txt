@@ -1,0 +1,7 @@
+COMMIT: 0a5c9aa
+RESULT: PASS
+SCENARIO1: PASS (fast_delivery_ok=True, eventual_delivery_ok=True)
+SCENARIO2: PASS (fast_delivery_ok=True, eventual_delivery_ok=True)
+SCENARIO3: PASS (fast_delivery_ok=False, eventual_delivery_ok=True)
+P95_MS: 13023.7
+Artifacts: artifacts/v9_ws_20260310_142522

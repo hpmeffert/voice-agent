@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Voice Agent Agent UI V9.1.2</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
+    .wrap { max-width: 1200px; margin: 18px auto; padding: 0 14px; }
+    .grid { display:grid; grid-template-columns: 360px 1fr; gap:12px; }
+    .card { background:#fff; border:1px solid #d9e1ee; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.06); }
+    .hd { padding:12px 14px; border-bottom:1px solid #d9e1ee; display:flex; justify-content:space-between; align-items:center; }
+    .bd { padding:14px; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    input, button, textarea, select { border:1px solid #cfd8e6; border-radius:8px; padding:8px 10px; }
+    button.primary { background:#0f766e; color:#fff; border-color:#0f766e; }
+    .muted { color:#6b7280; font-size:12px; }
+    .sessions { max-height: 70vh; overflow:auto; display:grid; gap:8px; }
+    .session { border:1px solid #dbe3f0; border-radius:10px; padding:10px; cursor:pointer; background:#fff; }
+    .session.active { border-color:#0f766e; background:#eefbf8; }
+    .session .small { font-size:12px; color:#64748b; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
+    .badge.handoff { background:#fff7ed; color:#9a3412; border:1px solid #fdba74; }
+    .chat { max-height: 55vh; overflow:auto; display:grid; gap:8px; margin-top:10px; }
+    .msg { padding:10px; border-radius:10px; border:1px solid #dbe3f0; background:#fff; white-space:pre-wrap; }
+    .msg.customer { background:#eef2ff; }
+    .msg.agent { background:#eefbf8; }
+    .msg.system { background:#fff7ed; }
+    textarea { width:100%; min-height:84px; }
+    .modalBackdrop { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none; align-items:center; justify-content:center; padding:18px; z-index:40; }
+    .modalBackdrop.show { display:flex; }
+    .modal { width:min(860px, 96vw); max-height:84vh; overflow:auto; background:#fff; border:1px solid #d9e1ee; border-radius:12px; box-shadow:0 18px 44px rgba(0,0,0,.22); }
+    .modalHd { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid #d9e1ee; }
+    .modalBd { padding:14px; white-space:normal; line-height:1.45; }
+    .modalBd pre { background:#f4f7fb; border:1px solid #d9e1ee; border-radius:8px; padding:10px; overflow:auto; }
+    .modalBd code { background:#f4f7fb; padding:1px 4px; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+      <div>
+        <h2 style="margin:0;">Voice Agent Agent UI V9.1.2</h2>
+        <div class="muted">Inbox + Live Chat (Call-Center Handoff MVP)</div>
+      </div>
+      <div class="row">
+        <label>Demo User
+          <select id="agentPreset">
+            <option value="">-- waehlen --</option>
+            <option value="agenten-02">agenten-02 (EN)</option>
+            <option value="agent-de-01">agent-de-01 (DE)</option>
+            <option value="agent-01">agent-01</option>
+          </select>
+        </label>
+        <label>Agent ID <input id="agentId" size="24" /></label>
+        <label>Agent Sprache
+          <select id="agentLang">
+            <option value="de">de</option>
+            <option value="en">en</option>
+            <option value="no">no</option>
+            <option value="sv">sv</option>
+            <option value="fi">fi</option>
+          </select>
+        </label>
+        <label><input id="agentVoiceIncoming" type="checkbox" checked /> Empfang auf Agent sprechen</label>
+        <label><input id="agentVoiceCustomerOut" type="checkbox" /> Kunden-Ausgabe auf Agent sprechen</label>
+        <label>Suche <input id="searchInput" size="26" placeholder="session_id oder user_id" /></label>
+        <label>Typ
+          <select id="searchType">
+            <option value="all">Alle</option>
+            <option value="session">Session ID</option>
+            <option value="user">User ID</option>
+          </select>
+        </label>
+        <button id="searchBtn">Suchen</button>
+        <button id="clearSearchBtn">Reset</button>
+        <button id="refreshBtn">Refresh Inbox</button>
+        <label><input id="autoRefresh" type="checkbox" checked /> Auto-Refresh</label>
+        <span id="refreshState" class="muted">Auto-Refresh: an (5s)</span>
+        <label><input id="cleanDisplay" type="checkbox" checked /> Anzeige bereinigen (Sonderzeichen ausblenden)</label>
+        <button id="helpBtn">Benutzer Handbuch</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="hd"><b>Inbox (aktive Sessions)</b><span id="inboxCount" class="muted">0</span></div>
+        <div class="bd">
+          <div id="sessions" class="sessions"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd">
+          <div>
+            <b id="chatTitle">Kein Chat ausgewaehlt</b>
+            <div id="chatMeta" class="muted">Waehle links eine Session.</div>
+            <div id="customerLangMeta" class="muted">Customer language: - | Voice profile: -</div>
+          </div>
+          <div id="wsState" class="muted">WS: offline</div>
+        </div>
+        <div class="bd">
+          <div class="chat" id="chat"></div>
+
+          <div style="margin-top:10px;">
+            <textarea id="msgInput" placeholder="Agent-Antwort schreiben..."></textarea>
+            <div class="row" style="margin-top:8px;">
+              <label><input id="speak" type="checkbox" /> Speak to customer</label>
+              <label>Customer output lang
+                <select id="ttsLang">
+                  <option value="">auto (detected customer profile)</option>
+                  <option value="de">de</option>
+                  <option value="en">en</option>
+                  <option value="no">no</option>
+                  <option value="sv">sv</option>
+                  <option value="fi">fi</option>
+                </select>
+              </label>
+              <button id="btnAcceptHandoff">Handoff annehmen</button>
+              <button id="sendBtn" class="primary">Send Agent Message</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="helpModalBackdrop" class="modalBackdrop" role="dialog" aria-modal="true" aria-label="Benutzer Handbuch">
+    <div class="modal">
+      <div class="modalHd">
+        <b>Benutzer Handbuch</b>
+        <button id="helpCloseBtn">Schliessen</button>
+      </div>
+      <div id="helpBody" class="modalBd">Lade Benutzer Handbuch...</div>
+    </div>
+  </div>
+
+<script>
+const sessionsEl = document.getElementById('sessions');
+const inboxCountEl = document.getElementById('inboxCount');
+const chatEl = document.getElementById('chat');
+const chatTitleEl = document.getElementById('chatTitle');
+const chatMetaEl = document.getElementById('chatMeta');
+const customerLangMetaEl = document.getElementById('customerLangMeta');
+const wsStateEl = document.getElementById('wsState');
+const agentPresetEl = document.getElementById('agentPreset');
+const agentIdEl = document.getElementById('agentId');
+const msgInputEl = document.getElementById('msgInput');
+const sendBtn = document.getElementById('sendBtn');
+const refreshBtn = document.getElementById('refreshBtn');
+const autoRefreshEl = document.getElementById('autoRefresh');
+const refreshStateEl = document.getElementById('refreshState');
+const cleanDisplayEl = document.getElementById('cleanDisplay');
+const searchInputEl = document.getElementById('searchInput');
+const searchTypeEl = document.getElementById('searchType');
+const searchBtn = document.getElementById('searchBtn');
+const clearSearchBtn = document.getElementById('clearSearchBtn');
+const speakEl = document.getElementById('speak');
+const ttsLangEl = document.getElementById('ttsLang');
+const agentLangEl = document.getElementById('agentLang');
+const agentVoiceIncomingEl = document.getElementById('agentVoiceIncoming');
+const agentVoiceCustomerOutEl = document.getElementById('agentVoiceCustomerOut');
+const btnAcceptHandoff = document.getElementById('btnAcceptHandoff');
+const helpBtn = document.getElementById('helpBtn');
+const helpModalBackdrop = document.getElementById('helpModalBackdrop');
+const helpCloseBtn = document.getElementById('helpCloseBtn');
+const helpBody = document.getElementById('helpBody');
+
+const AGENT_KEY = 'v8_agent_id';
+const AGENT_LANG_KEY = 'v9_agent_lang';
+const AGENT_VOICE_INCOMING_KEY = 'v9_agent_voice_incoming';
+const AGENT_VOICE_CUSTOMER_OUT_KEY = 'v9_agent_voice_customer_out';
+const AGENT_AUTO_REFRESH_KEY = 'v9_agent_auto_refresh';
+const AGENT_CLEAN_DISPLAY_KEY = 'v9_agent_clean_display';
+agentIdEl.value = localStorage.getItem(AGENT_KEY) || 'agent-01';
+agentLangEl.value = localStorage.getItem(AGENT_LANG_KEY) || 'de';
+agentVoiceIncomingEl.checked = localStorage.getItem(AGENT_VOICE_INCOMING_KEY) !== '0';
+agentVoiceCustomerOutEl.checked = localStorage.getItem(AGENT_VOICE_CUSTOMER_OUT_KEY) === '1';
+autoRefreshEl.checked = localStorage.getItem(AGENT_AUTO_REFRESH_KEY) !== '0';
+cleanDisplayEl.checked = localStorage.getItem(AGENT_CLEAN_DISPLAY_KEY) !== '0';
+if ([...agentPresetEl.options].some(o => o.value === agentIdEl.value)) {
+  agentPresetEl.value = agentIdEl.value;
+}
+
+agentIdEl.onchange = async () => {
+  localStorage.setItem(AGENT_KEY, agentIdEl.value || 'agent-01');
+  if ([...agentPresetEl.options].some(o => o.value === agentIdEl.value)) {
+    agentPresetEl.value = agentIdEl.value;
+  } else {
+    agentPresetEl.value = '';
+  }
+  await loadAgentPrefs();
+};
+agentPresetEl.onchange = async () => {
+  const v = (agentPresetEl.value || '').trim();
+  if (!v) return;
+  agentIdEl.value = v;
+  localStorage.setItem(AGENT_KEY, v);
+  await loadAgentPrefs();
+};
+agentLangEl.onchange = async () => {
+  localStorage.setItem(AGENT_LANG_KEY, agentLangEl.value || 'de');
+  await saveAgentPrefs();
+  if (activeSessionId) connectWs();
+};
+agentVoiceIncomingEl.onchange = () => {
+  localStorage.setItem(AGENT_VOICE_INCOMING_KEY, agentVoiceIncomingEl.checked ? '1' : '0');
+};
+agentVoiceCustomerOutEl.onchange = () => {
+  localStorage.setItem(AGENT_VOICE_CUSTOMER_OUT_KEY, agentVoiceCustomerOutEl.checked ? '1' : '0');
+};
+autoRefreshEl.onchange = () => {
+  localStorage.setItem(AGENT_AUTO_REFRESH_KEY, autoRefreshEl.checked ? '1' : '0');
+  updateAutoRefreshState();
+  startAutoRefresh();
+};
+cleanDisplayEl.onchange = async () => {
+  localStorage.setItem(AGENT_CLEAN_DISPLAY_KEY, cleanDisplayEl.checked ? '1' : '0');
+  if (activeSessionId) await loadRecentMessages(true);
+};
+
+let activeSessionId = '';
+let activeSessionUserId = '';
+let activeCustomerLang = '';
+let activeCustomerVoiceLang = '';
+let ws = null;
+let wsSeq = 0;
+let wsReconnectTimer = null;
+let autoRefreshTimer = null;
+let loadSessionsBusy = false;
+let loadSessionsQueued = false;
+let currentSearch = '';
+let currentSearchType = 'all';
+let activeHandoffRequested = false;
+let activeHandoffState = 'none';
+btnAcceptHandoff.disabled = true;
+
+async function saveAgentPrefs() {
+  const uid = (agentIdEl.value || '').trim();
+  if (!uid || uid.length < 8) return;
+  try {
+    await fetch('/api/user/prefs', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ user_id: uid, agent_lang: (agentLangEl.value || 'de') })
+    });
+  } catch (_) {}
+}
+
+async function loadAgentPrefs() {
+  const uid = (agentIdEl.value || '').trim();
+  if (!uid || uid.length < 8) return;
+  try {
+    const r = await fetch(`/api/user/prefs?user_id=${encodeURIComponent(uid)}`);
+    if (!r.ok) return;
+    const p = await r.json();
+    const lang = (p.agent_lang || localStorage.getItem(AGENT_LANG_KEY) || 'de').toLowerCase();
+    if ([...agentLangEl.options].some(o => o.value === lang)) {
+      agentLangEl.value = lang;
+      localStorage.setItem(AGENT_LANG_KEY, lang);
+    }
+  } catch (_) {}
+}
+
+async function playAgentVoice(text, lang) {
+  const content = (text || '').trim();
+  if (!content) return;
+  try {
+    const r = await fetch('/tts/tts', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ text: content, lang: (lang || agentLangEl.value || 'de') })
+    });
+    if (!r.ok) return;
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = new Audio(url);
+    a.onended = () => URL.revokeObjectURL(url);
+    a.play().catch(() => URL.revokeObjectURL(url));
+  } catch (_) {}
+}
+
+function addMsg(role, text, ts) {
+  const d = document.createElement('div');
+  d.className = `msg ${role || 'system'}`;
+  const stamp = ts ? `[${new Date(ts).toLocaleTimeString()}] ` : '';
+  d.textContent = `${stamp}${(role || 'system').toUpperCase()}: ${formatDisplayText(text || '')}`;
+  chatEl.appendChild(d);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function addMsgSplit(role, originalText, translatedText, ts, originalLang, translatedLang) {
+  const d = document.createElement('div');
+  d.className = `msg ${role || 'system'}`;
+
+  const stamp = ts ? `[${new Date(ts).toLocaleTimeString()}] ` : '';
+  const head = document.createElement('div');
+  head.style.fontWeight = '700';
+  head.style.marginBottom = '6px';
+  head.textContent = `${stamp}${(role || 'system').toUpperCase()}`;
+  d.appendChild(head);
+
+  const originalWrap = document.createElement('div');
+  originalWrap.style.border = '1px dashed #cbd5e1';
+  originalWrap.style.borderRadius = '8px';
+  originalWrap.style.padding = '8px';
+  originalWrap.style.marginBottom = '8px';
+  const originalTitle = document.createElement('div');
+  originalTitle.style.fontSize = '12px';
+  originalTitle.style.color = '#334155';
+  originalTitle.style.fontWeight = '600';
+  originalTitle.textContent = `Original (${originalLang || '-'})`;
+  const originalBody = document.createElement('div');
+  originalBody.style.marginTop = '4px';
+  originalBody.textContent = formatDisplayText(originalText || '');
+  originalWrap.appendChild(originalTitle);
+  originalWrap.appendChild(originalBody);
+
+  const translatedWrap = document.createElement('div');
+  translatedWrap.style.border = '1px solid #86efac';
+  translatedWrap.style.borderRadius = '8px';
+  translatedWrap.style.padding = '8px';
+  const translatedTitle = document.createElement('div');
+  translatedTitle.style.fontSize = '12px';
+  translatedTitle.style.color = '#065f46';
+  translatedTitle.style.fontWeight = '600';
+  translatedTitle.textContent = `Uebersetzung (${translatedLang || '-'})`;
+  const translatedBody = document.createElement('div');
+  translatedBody.style.marginTop = '4px';
+  translatedBody.textContent = formatDisplayText(translatedText || '');
+  translatedWrap.appendChild(translatedTitle);
+  translatedWrap.appendChild(translatedBody);
+
+  d.appendChild(originalWrap);
+  d.appendChild(translatedWrap);
+  chatEl.appendChild(d);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function clearChat() { chatEl.innerHTML = ''; }
+function formatDisplayText(text) {
+  const input = String(text || '');
+  if (!cleanDisplayEl.checked) return input;
+  return input
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
+    .replace(/```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_\n]+)_/g, '$1')
+    .replace(/^[\t ]*(?:[-*•][\t ]+|\d+[.)][\t ]+)/gm, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+function updateCustomerLangMeta() {
+  customerLangMetaEl.textContent = `Customer language: ${activeCustomerLang || '-'} | Voice profile: ${activeCustomerVoiceLang || activeCustomerLang || '-'}`;
+}
+function updateAutoRefreshState() {
+  refreshStateEl.textContent = autoRefreshEl.checked ? 'Auto-Refresh: an (5s)' : 'Auto-Refresh: aus';
+}
+function startAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+  if (!autoRefreshEl.checked) return;
+  autoRefreshTimer = setInterval(() => {
+    loadSessions().catch(() => {});
+  }, 5000);
+}
+
+function applyDetectedCustomerProfile(s) {
+  activeCustomerLang = String(s?.customer_lang || s?.lang || '').toLowerCase();
+  activeCustomerVoiceLang = String(s?.customer_voice_lang || activeCustomerLang || '').toLowerCase();
+  updateCustomerLangMeta();
+}
+function setActiveHandoff(state, requested){
+  activeHandoffState = state || 'none';
+  activeHandoffRequested = !!requested;
+  btnAcceptHandoff.disabled = !activeSessionId || !activeHandoffRequested;
+}
+
+function renderMarkdown(md) {
+  let html = (md || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  html = html.replace(/^### (.*)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^## (.*)$/gm, "<h2>$1</h2>");
+  html = html.replace(/^# (.*)$/gm, "<h1>$1</h1>");
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/^\- (.*)$/gm, "<li>$1</li>");
+  html = html.replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>");
+  html = html.replace(/<\/ul>\s*<ul>/g, "");
+  html = html.replace(/\n{2,}/g, "</p><p>");
+  html = `<p>${html}</p>`;
+  html = html.replace(/<p>\s*(<h[1-3]>)/g, "$1");
+  html = html.replace(/(<\/h[1-3]>)\s*<\/p>/g, "$1");
+  html = html.replace(/<p>\s*(<ul>)/g, "$1");
+  html = html.replace(/(<\/ul>)\s*<\/p>/g, "$1");
+  return html;
+}
+
+async function openHelp() {
+  helpBody.textContent = "Lade Benutzer Handbuch...";
+  helpModalBackdrop.classList.add("show");
+  try {
+    const docsLang = (agentLangEl.value || "de").toLowerCase() === "de" ? "de" : "en";
+    const r = await fetch(`/api/docs?type=user&lang=${encodeURIComponent(docsLang)}`, { cache: "no-store" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const md = await r.text();
+    helpBody.innerHTML = renderMarkdown(md);
+  } catch (err) {
+    helpBody.textContent = `Benutzer Handbuch konnte nicht geladen werden: ${String(err)}`;
+  }
+}
+
+function closeHelp() {
+  helpModalBackdrop.classList.remove("show");
+}
+
+function wsUrl(path){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${location.host}${path}`;
+}
+
+async function loadSessions(){
+  if (loadSessionsBusy) {
+    loadSessionsQueued = true;
+    return;
+  }
+  loadSessionsBusy = true;
+  const params = new URLSearchParams({ status: 'active', limit: '120' });
+  if (currentSearch) {
+    if (currentSearchType === 'session') params.set('session_id', currentSearch);
+    else if (currentSearchType === 'user') params.set('user_id', currentSearch);
+    else params.set('q', currentSearch);
+  }
+  try {
+    const r = await fetch(`/api/agent/sessions?${params.toString()}`);
+    const data = await r.json();
+    const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+    inboxCountEl.textContent = String(sessions.length);
+    sessionsEl.innerHTML = '';
+    for (const s of sessions) {
+      const card = document.createElement('div');
+      card.className = `session ${s.session_id === activeSessionId ? 'active' : ''}`;
+      const badge = s.handoff_requested ? '<span class="badge handoff">handoff requested</span>' : '';
+      card.innerHTML = `<div class="row" style="justify-content:space-between;"><b>${s.session_id}</b>${badge}</div><div class="small">User: ${s.user_id || '-'} | Lang: ${s.customer_lang || s.lang || '-'}</div><div class="small">${s.preview || ''}</div>`;
+      card.onclick = () => joinSession(s);
+      sessionsEl.appendChild(card);
+    }
+  } finally {
+    loadSessionsBusy = false;
+    if (loadSessionsQueued) {
+      loadSessionsQueued = false;
+      loadSessions().catch(() => {});
+    }
+  }
+}
+
+async function joinSession(s){
+  activeSessionId = s.session_id;
+  activeSessionUserId = s.user_id || '';
+  setActiveHandoff(String(s.handoff_state || 'none'), !!s.handoff_requested);
+  chatTitleEl.textContent = `Session ${s.session_id}`;
+  const handoffTxt = activeHandoffRequested ? 'handoff=requested' : `handoff=${activeHandoffState}`;
+  chatMetaEl.textContent = `User ${s.user_id || '-'} | Last: ${s.last_activity_at || '-'} | ${handoffTxt}`;
+  applyDetectedCustomerProfile(s);
+  if (!ttsLangEl.value) {
+    // auto mode: keep backend-driven customer profile
+  } else if (activeCustomerVoiceLang) {
+    // preserve explicit manual selection, but prefill if current value invalid/empty
+    const exists = [...ttsLangEl.options].some(o => o.value === ttsLangEl.value);
+    if (!exists) ttsLangEl.value = activeCustomerVoiceLang;
+  }
+  clearChat();
+
+  await fetch('/api/agent/join', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ session_id: s.session_id, agent_id: agentIdEl.value || 'agent-01' })
+  });
+
+  connectWs();
+  await loadRecentMessages();
+  await loadSessions();
+}
+
+async function loadRecentMessages(reset = false){
+  if (!activeSessionId || !activeSessionUserId) return;
+  if (reset) clearChat();
+  const q = new URLSearchParams({ user_id: activeSessionUserId, limit: '40' });
+  const r = await fetch(`/api/session/${encodeURIComponent(activeSessionId)}?${q.toString()}`);
+  if (!r.ok) return;
+  const data = await r.json();
+  for (const m of (data.messages || [])) {
+    addMsg(m.role || 'system', m.content || '', m.t || m.created_at);
+  }
+}
+
+function connectWs(){
+  if (!activeSessionId) return;
+  wsSeq += 1;
+  const seq = wsSeq;
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
+  }
+  if (ws) { try { ws.close(); } catch(_) {} }
+  ws = new WebSocket(
+    wsUrl(
+      `/api/ws/session/${encodeURIComponent(activeSessionId)}?client=agent&user_id=${encodeURIComponent(agentIdEl.value || 'agent-01')}&agent_lang=${encodeURIComponent(agentLangEl.value || 'de')}`
+    )
+  );
+  ws.onopen = () => {
+    if (seq !== wsSeq) return;
+    wsStateEl.textContent = 'WS: online';
+  };
+  ws.onclose = () => {
+    if (seq !== wsSeq) return;
+    wsStateEl.textContent = 'WS: offline';
+    if (!activeSessionId) return;
+    wsReconnectTimer = setTimeout(() => {
+      if (seq !== wsSeq) return;
+      connectWs();
+    }, 1800);
+  };
+  ws.onerror = () => { wsStateEl.textContent = 'WS: error'; };
+  ws.onmessage = (ev) => {
+    try {
+      if (seq !== wsSeq) return;
+      const e = JSON.parse(ev.data);
+      if (e.type === 'session.keepalive') return;
+      if (e.type === 'session.connected') {
+        const h = (e.payload && e.payload.handoff) || {};
+        setActiveHandoff(String(h.state || 'none'), !!h.requested);
+        return;
+      }
+      if (e.type === 'handoff.request') {
+        setActiveHandoff('requested', true);
+        chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=requested`;
+        loadSessions().catch(() => {});
+      }
+      if (e.type === 'handoff.accept') {
+        setActiveHandoff('accepted', false);
+        chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=accepted`;
+        loadSessions().catch(() => {});
+      }
+      const role = e.from || 'system';
+      const payload = e.payload || {};
+      const laneAgent = payload.agent || {};
+      const laneTts = payload.tts || {};
+      if (payload.customer_lang || payload.customer_voice_lang) {
+        activeCustomerLang = String(payload.customer_lang || activeCustomerLang || '').toLowerCase();
+        activeCustomerVoiceLang = String(payload.customer_voice_lang || payload.customer_lang || activeCustomerVoiceLang || '').toLowerCase();
+        updateCustomerLangMeta();
+      }
+      let text = payload.text || laneAgent.text || JSON.stringify(payload);
+      if (role === 'agent' && payload.text_original) {
+        text = payload.text_original;
+      }
+      const translatedForAgent = payload.text_for_agent || laneAgent.text || payload.text_translated || payload.text || '';
+      const hasSplit = !!(payload.text_original && translatedForAgent && payload.text_original !== translatedForAgent);
+      if (hasSplit) {
+        addMsgSplit(
+          role,
+          payload.text_original,
+          translatedForAgent,
+          e.ts,
+          payload.source_lang || payload.customer_lang || '-',
+          laneAgent.lang || payload.agent_lang || agentLangEl.value || '-'
+        );
+      } else {
+        addMsg(role, text, e.ts);
+      }
+      if (role === 'customer' && agentVoiceIncomingEl.checked) {
+        const ttsLang =
+          payload.lang_for_agent ||
+          laneTts.agent_lang ||
+          payload.tts_lang_agent ||
+          laneAgent.lang ||
+          agentLangEl.value ||
+          'de';
+        const shouldHaveTranslation = !!(payload.lang_original && (laneAgent.lang || payload.agent_lang) && payload.lang_original !== (laneAgent.lang || payload.agent_lang));
+        const speakText = laneTts.agent_text || translatedForAgent || (!shouldHaveTranslation ? (payload.text || text) : "");
+        if (speakText) playAgentVoice(speakText, ttsLang);
+      }
+      loadSessions().catch(() => {});
+    } catch(_) {}
+  };
+}
+
+sendBtn.onclick = async () => {
+  if (!activeSessionId) return;
+  const text = (msgInputEl.value || '').trim();
+  if (!text) return;
+  const payload = {
+    session_id: activeSessionId,
+    agent_id: agentIdEl.value || 'agent-01',
+    text,
+    speak: !!speakEl.checked,
+    tts_lang: ttsLangEl.value || '',
+    agent_lang: agentLangEl.value || 'de',
+  };
+  const r = await fetch('/api/agent/message', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+  });
+  const data = await r.json();
+  if (!r.ok) {
+    addMsg('system', `Error: ${JSON.stringify(data)}`, new Date().toISOString());
+    return;
+  }
+  msgInputEl.value = '';
+};
+
+btnAcceptHandoff.onclick = async () => {
+  if (!activeSessionId || !activeHandoffRequested) return;
+  const payload = {
+    session_id: activeSessionId,
+    agent_id: agentIdEl.value || 'agent-01',
+  };
+  const r = await fetch('/api/handoff/accept', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await r.json();
+  if (!r.ok) {
+    addMsg('system', `Error: ${JSON.stringify(data)}`, new Date().toISOString());
+    return;
+  }
+  setActiveHandoff(String(data.handoff_state || 'accepted'), !!data.handoff_requested);
+  chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=accepted`;
+  await loadSessions();
+};
+
+refreshBtn.onclick = () => loadSessions();
+searchBtn.onclick = () => {
+  currentSearch = (searchInputEl.value || '').trim();
+  currentSearchType = searchTypeEl.value || 'all';
+  loadSessions();
+};
+clearSearchBtn.onclick = () => {
+  searchInputEl.value = '';
+  searchTypeEl.value = 'all';
+  currentSearch = '';
+  currentSearchType = 'all';
+  loadSessions();
+};
+searchInputEl.onkeydown = (ev) => {
+  if (ev.key === 'Enter') searchBtn.click();
+};
+helpBtn.onclick = () => { openHelp(); };
+helpCloseBtn.onclick = () => { closeHelp(); };
+helpModalBackdrop.onclick = (ev) => { if (ev.target === helpModalBackdrop) closeHelp(); };
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeHelp(); });
+loadAgentPrefs();
+updateAutoRefreshState();
+startAutoRefresh();
+updateCustomerLangMeta();
+loadSessions();
+</script>
+</body>
+</html>

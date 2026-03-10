@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Voice Agent Customer V9.1.2</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
+    .wrap { max-width: 920px; margin: 20px auto; padding: 0 14px; }
+    .card { background:#fff; border:1px solid #d9e1ee; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.06); }
+    .hd { padding:12px 14px; border-bottom:1px solid #d9e1ee; display:flex; justify-content:space-between; align-items:center; }
+    .bd { padding:14px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    input, textarea, select, button { border:1px solid #cfd8e6; border-radius:8px; padding:8px 10px; }
+    textarea { width:100%; min-height:84px; }
+    button.primary { background:#0f766e; color:#fff; border-color:#0f766e; }
+    button.warn { background:#991b1b; color:#fff; border-color:#991b1b; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .status { color:#6b7280; font-size:12px; }
+    .chat { margin-top:12px; display:grid; gap:10px; }
+    .msg { padding:10px; border-radius:10px; border:1px solid #dbe3f0; background:#fff; white-space:pre-wrap; }
+    .me { background:#eefbf8; }
+    .bot { background:#f8f4ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="hd">
+        <div>
+          <b>Voice Agent Customer V9.1.2</b>
+          <div class="status" id="status">idle</div>
+        </div>
+        <div class="status" id="ids">-</div>
+      </div>
+      <div class="bd">
+        <div class="row">
+          <label>User <input id="userId" size="30" /></label>
+          <label>Session <input id="sessionId" size="30" /></label>
+          <button id="btnNewSession">Neue Session</button>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <button id="btnRecord" class="primary">Record</button>
+          <button id="btnStop" disabled>Stop</button>
+          <button id="btnSendAudio" disabled>Send Audio</button>
+          <button id="btnRequestHandoff">Menschlichen Agenten anfordern</button>
+          <button id="btnEndConversation" class="warn">End Conversation</button>
+          <label><input id="listenMode" type="checkbox" /> Listen Mode</label>
+          <span class="status">Silence: <b>1300ms</b></span>
+          <span class="status" id="handoffStatus">Handoff: none</span>
+          <label>Kundensprache <select id="customerLang"><option value="auto">auto</option><option>de</option><option>en</option><option>no</option><option>sv</option><option>fi</option></select></label>
+          <label>TTS <select id="ttsLang"><option value="auto">auto</option><option>de</option><option>en</option><option>no</option><option>sv</option><option>fi</option></select></label>
+        </div>
+
+        <div style="margin-top:10px;">
+          <textarea id="textInput" placeholder="Text eingeben und senden..."></textarea>
+          <div class="row" style="margin-top:8px;">
+            <button id="btnSendText" class="primary">Send Text</button>
+          </div>
+        </div>
+
+        <audio id="audio" controls style="width:100%; margin-top:12px;"></audio>
+
+        <div id="chat" class="chat"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const USER_KEY = "v8_customer_user_id";
+const SESSION_KEY = "v8_customer_session_id";
+const LISTEN_KEY = "v8_customer_listen_mode";
+const CUSTOMER_LANG_KEY = "v9_customer_lang";
+const SILENCE_MS = 1300;
+const MIN_VOICE_RMS = 0.012;
+const MAX_RECORD_MS = 45000;
+const NO_SPEECH_MS = 8000;
+
+const userIdEl = document.getElementById("userId");
+const sessionIdEl = document.getElementById("sessionId");
+const idsEl = document.getElementById("ids");
+const statusEl = document.getElementById("status");
+const chatEl = document.getElementById("chat");
+const audioEl = document.getElementById("audio");
+const customerLangEl = document.getElementById("customerLang");
+const ttsLangEl = document.getElementById("ttsLang");
+const textInputEl = document.getElementById("textInput");
+const btnRecord = document.getElementById("btnRecord");
+const btnStop = document.getElementById("btnStop");
+const btnSendAudio = document.getElementById("btnSendAudio");
+const btnSendText = document.getElementById("btnSendText");
+const btnNewSession = document.getElementById("btnNewSession");
+const btnEndConversation = document.getElementById("btnEndConversation");
+const btnRequestHandoff = document.getElementById("btnRequestHandoff");
+const listenModeEl = document.getElementById("listenMode");
+const handoffStatusEl = document.getElementById("handoffStatus");
+
+let mediaRecorder = null;
+let chunks = [];
+let lastBlob = null;
+let ws = null;
+let loopActive = false;
+let audioCtx = null;
+let analyser = null;
+let dataArray = null;
+let rmsInterval = null;
+let recordStartedAt = 0;
+let speechStartedAt = 0;
+let lastVoiceAt = 0;
+let handoffRequested = false;
+let handoffState = "none";
+
+function setStatus(s){ statusEl.textContent = s; }
+function makeId(){ return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()); }
+function refreshIds(){ idsEl.textContent = `User: ${userIdEl.value} | Session: ${sessionIdEl.value || "-"}`; }
+function persistIds(){ localStorage.setItem(USER_KEY, userIdEl.value); localStorage.setItem(SESSION_KEY, sessionIdEl.value); refreshIds(); }
+function addMsg(cls, title, text){ const d = document.createElement('div'); d.className = `msg ${cls}`; d.textContent = `${title}:\n${text}`; chatEl.appendChild(d); chatEl.scrollTop = chatEl.scrollHeight; }
+function selectedCustomerLang(){
+  const v = (customerLangEl.value || '').toLowerCase();
+  if (v && v !== 'auto') return v;
+  return '';
+}
+function wsUrl(path){ const proto = location.protocol === 'https:' ? 'wss' : 'ws'; return `${proto}://${location.host}${path}`; }
+function setHandoff(state, requested){
+  handoffState = state || "none";
+  handoffRequested = !!requested;
+  const txt = handoffRequested ? `requested (${handoffState})` : handoffState;
+  handoffStatusEl.textContent = `Handoff: ${txt}`;
+  btnRequestHandoff.disabled = handoffRequested;
+}
+
+function stateIdle(){ setStatus(loopActive ? 'listening' : 'idle'); }
+
+function closeWs(){ if (ws) { try { ws.close(); } catch(_) {} ws = null; } }
+async function playAgentTts(text, lang){
+  try {
+    const r = await fetch('/tts/tts', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, lang: lang || 'de' }),
+    });
+    if (!r.ok) return;
+    const b = await r.blob();
+    audioEl.src = URL.createObjectURL(b);
+    await audioEl.play();
+  } catch(_) {}
+}
+function connectSessionWs(){
+  closeWs();
+  const sid = (sessionIdEl.value || '').trim();
+  if (!sid) return;
+  const uid = (userIdEl.value || '').trim();
+  const selectedLang = selectedCustomerLang();
+  const laneQuery = selectedLang ? `&customer_lang=${encodeURIComponent(selectedLang)}` : '';
+  ws = new WebSocket(wsUrl(`/api/ws/session/${encodeURIComponent(sid)}?client=customer&user_id=${encodeURIComponent(uid)}${laneQuery}`));
+  ws.onopen = () => stateIdle();
+  ws.onclose = () => stateIdle();
+  ws.onerror = () => setStatus('ws-error');
+  ws.onmessage = async (ev) => {
+    try {
+      const e = JSON.parse(ev.data);
+      if (e.type === 'session.keepalive') return;
+      if (e.type === 'session.connected') {
+        const h = (e.payload && e.payload.handoff) || {};
+        setHandoff(h.state || "none", !!h.requested);
+        return;
+      }
+      if (e.from === 'agent' && e.payload && (e.payload.text || (e.payload.customer && e.payload.customer.text))) {
+        const p = e.payload || {};
+        const laneCustomer = p.customer || {};
+        const laneTts = p.tts || {};
+        const customerText = String(laneCustomer.text || p.text || '');
+        if (customerText) addMsg('bot','Agent', customerText);
+        const ttsText = String(laneTts.customer_text || '');
+        const ttsLang = String(laneTts.customer_lang || p.tts_lang || laneCustomer.lang || ttsLangEl.value || 'de');
+        if (ttsText) await playAgentTts(ttsText, ttsLang);
+      }
+      if (e.from === 'system' && e.type === 'session.joined') {
+        addMsg('bot','System', `Agent ${e.payload?.agent_id || ''} joined`);
+      }
+      if (e.type === 'handoff.request') {
+        setHandoff('requested', true);
+        addMsg('bot','System','Handoff requested. Bitte kurz warten, ein Agent uebernimmt.');
+      }
+      if (e.type === 'handoff.accept') {
+        setHandoff('accepted', false);
+        addMsg('bot','System', `Agent ${e.payload?.agent_id || ''} hat den Handoff angenommen.`);
+      }
+    } catch(_) {}
+  };
+}
+
+function cleanupVad(){
+  if (rmsInterval) { clearInterval(rmsInterval); rmsInterval = null; }
+  analyser = null;
+  dataArray = null;
+  if (audioCtx) { try { audioCtx.close(); } catch(_) {} audioCtx = null; }
+}
+
+function stopRecordingInternal(){
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+}
+
+async function startRecording({ autoSend = false } = {}){
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = [];
+    lastBlob = null;
+    speechStartedAt = 0;
+    lastVoiceAt = 0;
+    recordStartedAt = Date.now();
+
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      try {
+        lastBlob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      } catch (_) {
+        lastBlob = null;
+      }
+      btnSendAudio.disabled = !lastBlob;
+      stream.getTracks().forEach(t => t.stop());
+      cleanupVad();
+      btnRecord.disabled = false;
+      btnStop.disabled = true;
+
+      if (autoSend && lastBlob) {
+        await sendAudio({ fromLoop: true });
+      } else {
+        stateIdle();
+      }
+    };
+    mediaRecorder.start();
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    dataArray = new Float32Array(analyser.fftSize);
+    source.connect(analyser);
+
+    rmsInterval = setInterval(() => {
+      if (!analyser || !mediaRecorder || mediaRecorder.state === 'inactive') return;
+      analyser.getFloatTimeDomainData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i];
+      const rms = Math.sqrt(sum / dataArray.length);
+      const now = Date.now();
+
+      if (rms > MIN_VOICE_RMS) {
+        if (!speechStartedAt) speechStartedAt = now;
+        lastVoiceAt = now;
+      }
+
+      if ((now - recordStartedAt) > MAX_RECORD_MS) {
+        stopRecordingInternal();
+        return;
+      }
+      if (!speechStartedAt && (now - recordStartedAt) > NO_SPEECH_MS) {
+        stopRecordingInternal();
+        return;
+      }
+      if (speechStartedAt && lastVoiceAt && (now - lastVoiceAt) >= SILENCE_MS) {
+        stopRecordingInternal();
+      }
+    }, 120);
+
+    setStatus('recording');
+    btnRecord.disabled = true;
+    btnStop.disabled = false;
+  } catch (e) {
+    setStatus(`error: ${e}`);
+    loopActive = false;
+  }
+}
+
+async function sendAudio({ fromLoop = false } = {}){
+  if (!lastBlob) return;
+  setStatus('uploading');
+  const fd = new FormData();
+  fd.append('file', lastBlob, 'speech.webm');
+  fd.append('user_id', userIdEl.value);
+  fd.append('session_id', sessionIdEl.value || '');
+  fd.append('return_audio', '1');
+  if (ttsLangEl.value !== 'auto') fd.append('tts_lang', ttsLangEl.value);
+  if (selectedCustomerLang()) fd.append('customer_lang', selectedCustomerLang());
+
+  try {
+    const r = await fetch('/api/voice', { method:'POST', body: fd });
+    if (!r.ok) {
+      setStatus(`error ${r.status}`);
+      loopActive = false;
+      return;
+    }
+
+    const blob = await r.blob();
+    const transcript = r.headers.get('X-Transcript') || '';
+    const answer = r.headers.get('X-Answer') || '';
+    const sid = r.headers.get('X-Session-Id') || sessionIdEl.value;
+    const handoffRequestedHeader = r.headers.get('X-Handoff-Requested');
+    const handoffStateHeader = r.headers.get('X-Handoff-State');
+    sessionIdEl.value = sid; persistIds(); connectSessionWs();
+    if (handoffRequestedHeader !== null || handoffStateHeader) {
+      setHandoff(handoffStateHeader || "none", handoffRequestedHeader === "1");
+    }
+
+    if (transcript) addMsg('me','Kunde',decodeURIComponent(transcript));
+
+    audioEl.src = URL.createObjectURL(blob);
+    setStatus('speaking');
+    try { await audioEl.play(); } catch(_) { stateIdle(); }
+  } catch (e) {
+    setStatus(`error: ${e}`);
+    loopActive = false;
+  } finally {
+    if (!fromLoop) btnSendAudio.disabled = false;
+  }
+}
+
+audioEl.addEventListener('ended', async () => {
+  if (loopActive) {
+    await startRecording({ autoSend: true });
+    return;
+  }
+  stateIdle();
+});
+
+userIdEl.value = localStorage.getItem(USER_KEY) || makeId();
+sessionIdEl.value = localStorage.getItem(SESSION_KEY) || '';
+listenModeEl.checked = localStorage.getItem(LISTEN_KEY) === '1';
+customerLangEl.value = localStorage.getItem(CUSTOMER_LANG_KEY) || 'auto';
+loopActive = listenModeEl.checked;
+refreshIds();
+connectSessionWs();
+stateIdle();
+
+userIdEl.addEventListener('change', () => { persistIds(); connectSessionWs(); });
+sessionIdEl.addEventListener('change', () => { persistIds(); connectSessionWs(); });
+listenModeEl.addEventListener('change', () => {
+  loopActive = !!listenModeEl.checked;
+  localStorage.setItem(LISTEN_KEY, loopActive ? '1' : '0');
+  stateIdle();
+});
+customerLangEl.addEventListener('change', () => {
+  localStorage.setItem(CUSTOMER_LANG_KEY, customerLangEl.value || 'auto');
+  connectSessionWs();
+});
+ttsLangEl.addEventListener('change', () => {
+  connectSessionWs();
+});
+
+btnNewSession.onclick = () => {
+  sessionIdEl.value = '';
+  persistIds();
+  connectSessionWs();
+  setHandoff('none', false);
+  addMsg('me','System','Neue Session gestartet');
+};
+
+btnRecord.onclick = async () => {
+  await startRecording({ autoSend: false });
+};
+
+btnStop.onclick = () => {
+  loopActive = false;
+  listenModeEl.checked = false;
+  localStorage.setItem(LISTEN_KEY, '0');
+  stopRecordingInternal();
+  stateIdle();
+};
+
+btnSendAudio.onclick = async () => {
+  await sendAudio({ fromLoop: false });
+};
+
+btnEndConversation.onclick = () => {
+  loopActive = false;
+  listenModeEl.checked = false;
+  localStorage.setItem(LISTEN_KEY, '0');
+  stopRecordingInternal();
+  stateIdle();
+};
+
+btnRequestHandoff.onclick = async () => {
+  const sid = (sessionIdEl.value || '').trim();
+  const uid = (userIdEl.value || '').trim();
+  if (!sid || !uid) {
+    addMsg('bot','System','Bitte zuerst eine aktive Session starten.');
+    return;
+  }
+  try {
+    const r = await fetch('/api/handoff/request', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session_id: sid, user_id: uid, reason: 'customer_request' }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      addMsg('bot','Fehler', JSON.stringify(data));
+      return;
+    }
+    setHandoff(String(data.handoff_state || 'requested'), !!data.handoff_requested);
+    addMsg('me','System','Menschlicher Agent wurde angefordert.');
+  } catch (e) {
+    addMsg('bot','Fehler', String(e));
+  }
+};
+
+btnSendText.onclick = async () => {
+  const text = (textInputEl.value || '').trim();
+  if (!text) return;
+  addMsg('me','Kunde',text);
+  setStatus('thinking');
+  const r = await fetch('/api/chat/text', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      text,
+      user_id: userIdEl.value,
+      session_id: sessionIdEl.value || '',
+      tts_lang: ttsLangEl.value === 'auto' ? '' : ttsLangEl.value,
+      lang: selectedCustomerLang(),
+    })
+  });
+  const data = await r.json();
+  if (!r.ok) { addMsg('bot','Fehler', JSON.stringify(data)); setStatus('error'); return; }
+  sessionIdEl.value = data.session_id || sessionIdEl.value;
+  persistIds();
+  connectSessionWs();
+  setHandoff(String(data.handoff_state || "none"), !!data.handoff_requested);
+  if (data.handoff_recommended) {
+    addMsg('bot','System','LLM-Triage empfiehlt Handoff an menschlichen Agenten.');
+  }
+  textInputEl.value = '';
+  stateIdle();
+};
+
+if (loopActive) {
+  startRecording({ autoSend: true });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,290 @@
+web-customer-1  | [web-customer] waiting for api: http://api:8000/health
+piper-1         | INFO:     Started server process [1]
+piper-1         | INFO:     Waiting for application startup.
+piper-1         | INFO:     Application startup complete.
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.934+00:00"},"s":"I",  "c":"CONTROL",  "id":23285,   "ctx":"main","msg":"Automatically disabling TLS 1.0, to force-enable TLS 1.0 specify --sslDisabledProtocols 'none'"}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.936+00:00"},"s":"I",  "c":"NETWORK",  "id":4915701, "ctx":"main","msg":"Initialized wire specification","attr":{"spec":{"incomingExternalClient":{"minWireVersion":0,"maxWireVersion":21},"incomingInternalClient":{"minWireVersion":0,"maxWireVersion":21},"outgoing":{"minWireVersion":6,"maxWireVersion":21},"isInternalClient":true}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.942+00:00"},"s":"I",  "c":"NETWORK",  "id":4648601, "ctx":"main","msg":"Implicit TCP FastOpen unavailable. If TCP FastOpen is required, set tcpFastOpenServer, tcpFastOpenClient, and tcpFastOpenQueueSize."}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.955+00:00"},"s":"I",  "c":"REPL",     "id":5123008, "ctx":"main","msg":"Successfully registered PrimaryOnlyService","attr":{"service":"TenantMigrationDonorService","namespace":"config.tenantMigrationDonors"}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.955+00:00"},"s":"I",  "c":"REPL",     "id":5123008, "ctx":"main","msg":"Successfully registered PrimaryOnlyService","attr":{"service":"TenantMigrationRecipientService","namespace":"config.tenantMigrationRecipients"}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.955+00:00"},"s":"W",  "c":"NETWORK",  "id":11621101,"ctx":"main","msg":"Overriding max connections to honor `capMemoryConsumptionForPreAuthBuffers` settings","attr":{"limit":152934}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.955+00:00"},"s":"I",  "c":"CONTROL",  "id":5945603, "ctx":"main","msg":"Multi threading initialized"}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.955+00:00"},"s":"I",  "c":"TENANT_M", "id":7091600, "ctx":"main","msg":"Starting TenantMigrationAccessBlockerRegistry"}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.957+00:00"},"s":"I",  "c":"CONTROL",  "id":4615611, "ctx":"initandlisten","msg":"MongoDB starting","attr":{"pid":1,"port":27017,"dbPath":"/data/db","architecture":"64-bit","host":"d2d099a9fbe3"}}
+valkey-1        | 1:C 10 Mar 2026 14:24:17.752 * oO0OoO0OoO0Oo Valkey is starting oO0OoO0OoO0Oo
+valkey-1        | 1:C 10 Mar 2026 14:24:17.752 * Valkey version=7.2.12, bits=64, commit=00000000, modified=0, pid=1, just started
+valkey-1        | 1:C 10 Mar 2026 14:24:17.752 * Configuration loaded
+web-customer-1  | [web-customer] api is ready
+web-customer-1  | [web-customer] waiting for piper: http://piper:5002/health
+web-customer-1  | [web-customer] piper is ready
+web-admin-1     | [web] waiting for api: http://api:8000/health
+web-admin-1     | [web] api is ready
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.958+00:00"},"s":"I",  "c":"CONTROL",  "id":23403,   "ctx":"initandlisten","msg":"Build Info","attr":{"buildInfo":{"version":"7.0.30","gitVersion":"67480f41dfa5802ce14af5c95bd0e9826d3b2131","openSSLVersion":"OpenSSL 3.0.2 15 Mar 2022","modules":[],"allocator":"tcmalloc","environment":{"distmod":"ubuntu2204","distarch":"aarch64","target_arch":"aarch64"}}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.958+00:00"},"s":"I",  "c":"CONTROL",  "id":51765,   "ctx":"initandlisten","msg":"Operating System","attr":{"os":{"name":"Ubuntu","version":"22.04"}}}
+web-agent-1     | [web-agent] waiting for api: http://api:8000/health
+web-agent-1     | [web-agent] api is ready
+web-agent-1     | [web-agent] waiting for piper: http://piper:5002/health
+web-agent-1     | [web-agent] piper is ready
+web-agent-1     | [web-agent] starting nginx
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: using the "epoll" event method
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: nginx/1.29.5
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: built by gcc 15.2.0 (Alpine 15.2.0) 
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: OS: Linux 6.12.67-linuxkit
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1048576:1048576
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker processes
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 137
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 138
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 139
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 140
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 141
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 142
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 143
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 144
+api-1           | INFO:     Started server process [1]
+api-1           | INFO:     Waiting for application startup.
+api-1           | Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+api-1           | INFO:     Application startup complete.
+api-1           | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+api-1           | INFO:     172.22.0.6:33704 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:60672 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.8:60348 - "GET /health HTTP/1.1" 200 OK
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.958+00:00"},"s":"I",  "c":"CONTROL",  "id":21951,   "ctx":"initandlisten","msg":"Options set by command line","attr":{"options":{"net":{"bindIp":"*"}}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.958+00:00"},"s":"W",  "c":"NETWORK",  "id":11621101,"ctx":"initandlisten","msg":"Overriding max connections to honor `capMemoryConsumptionForPreAuthBuffers` settings","attr":{"limit":152934}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.968+00:00"},"s":"I",  "c":"STORAGE",  "id":22270,   "ctx":"initandlisten","msg":"Storage engine to use detected by data files","attr":{"dbpath":"/data/db","storageEngine":"wiredTiger"}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.969+00:00"},"s":"I",  "c":"STORAGE",  "id":22297,   "ctx":"initandlisten","msg":"Using the XFS filesystem is strongly recommended with the WiredTiger storage engine. See http://dochub.mongodb.org/core/prodnotes-filesystem","tags":["startupWarnings"]}
+api-1           | INFO:     172.22.0.8:60354 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.6:33706 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.6:33720 - "GET /models HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.6:33724 - "GET /config HTTP/1.1" 200 OK
+web-admin-1     | [web] waiting for piper: http://piper:5002/health
+web-admin-1     | [web] piper is ready
+web-admin-1     | [web] starting nginx
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: using the "epoll" event method
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:17.969+00:00"},"s":"I",  "c":"STORAGE",  "id":22315,   "ctx":"initandlisten","msg":"Opening WiredTiger","attr":{"config":"create,cache_size=5462M,session_max=33000,eviction=(threads_min=4,threads_max=4),config_base=false,statistics=(fast),log=(enabled=true,remove=true,path=journal,compressor=snappy),builtin_extension_config=(zstd=(compression_level=6)),file_manager=(close_idle_time=600,close_scan_interval=10,close_handle_minimum=2000),statistics_log=(wait=0),json_output=(error,message),verbose=[recovery_progress:1,checkpoint_progress:1,compact_progress:1,backup:0,checkpoint:0,compact:0,evict:0,history_store:0,recovery:0,rts:0,salvage:0,tiered:0,timestamp:0,transaction:0,verify:0,log:0],"}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:18.829+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152658,"ts_usec":828936,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"Recovering log 6 through 7"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.006+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":6803,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"Recovering log 7 through 7"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.354+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":354774,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"Main recovery loop: starting at 6/114176 to 7/256"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.426+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":426057,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"Recovering log 6 through 7"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.472+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":472914,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"Recovering log 7 through 7"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.505+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":505623,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"recovery log replay has successfully finished and ran for 677 milliseconds"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.505+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":505746,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"Set global recovery timestamp: (0, 0)"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.505+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":505759,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"Set global oldest timestamp: (0, 0)"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.506+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":506632,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"recovery rollback to stable has successfully finished and ran for 0 milliseconds"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.509+00:00"},"s":"I",  "c":"WTCHKPT",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":509065,"thread":"1:0xffff803c9040","session_name":"WT_SESSION.checkpoint","category":"WT_VERB_CHECKPOINT_PROGRESS","category_id":6,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"saving checkpoint snapshot min: 1, snapshot max: 1 snapshot count: 0, oldest timestamp: (0, 0) , meta checkpoint timestamp: (0, 0) base write gen: 8022"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.518+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":518454,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"recovery checkpoint has successfully finished and ran for 11 milliseconds"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.518+00:00"},"s":"I",  "c":"WTRECOV",  "id":22430,   "ctx":"initandlisten","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152659,"ts_usec":518577,"thread":"1:0xffff803c9040","session_name":"txn-recover","category":"WT_VERB_RECOVERY_PROGRESS","category_id":30,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"recovery was completed successfully and took 689ms, including 677ms for the log replay, 0ms for the rollback to stable, and 11ms for the checkpoint."}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.519+00:00"},"s":"I",  "c":"STORAGE",  "id":4795906, "ctx":"initandlisten","msg":"WiredTiger opened","attr":{"durationMillis":1550}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.519+00:00"},"s":"I",  "c":"RECOVERY", "id":23987,   "ctx":"initandlisten","msg":"WiredTiger recoveryTimestamp","attr":{"recoveryTimestamp":{"$timestamp":{"t":0,"i":0}}}}
+piper-1         | INFO:     Uvicorn running on http://0.0.0.0:5002 (Press CTRL+C to quit)
+piper-1         | INFO:     172.22.0.6:34538 - "GET /health HTTP/1.1" 200 OK
+piper-1         | INFO:     172.22.0.8:39328 - "GET /health HTTP/1.1" 200 OK
+piper-1         | INFO:     172.22.0.7:59166 - "GET /health HTTP/1.1" 200 OK
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.530+00:00"},"s":"W",  "c":"CONTROL",  "id":22120,   "ctx":"initandlisten","msg":"Access control is not enabled for the database. Read and write access to data and configuration is unrestricted","tags":["startupWarnings"]}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.530+00:00"},"s":"W",  "c":"CONTROL",  "id":9068900, "ctx":"initandlisten","msg":"For customers running MongoDB 7.0, we suggest changing the contents of the following sysfsFile","attr":{"sysfsFile":"/sys/kernel/mm/transparent_hugepage","currentValue":"always","desiredValue":"never"},"tags":["startupWarnings"]}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.530+00:00"},"s":"W",  "c":"CONTROL",  "id":5123300, "ctx":"initandlisten","msg":"vm.max_map_count is too low","attr":{"currentValue":262144,"recommendedMinimum":305868,"maxConns":152934},"tags":["startupWarnings"]}
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 145
+web-agent-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 146
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:25:24 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2670 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:25:29 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2670 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:25:34 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2670 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:25:39 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2670 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:25:47 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:25:49 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2651 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:25:54 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2651 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:26:01 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2706 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:26:28 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:26:28 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-customer-1  | [web-customer] starting nginx
+api-1           | INFO:     192.168.65.1:59522 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:46225 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:57113 - "GET /health HTTP/1.1" 200 OK
+piper-1         | onnxruntime cpuid_info warning: Unknown CPU vendor. cpuinfo_vendor value: 0
+piper-1         | INFO:     192.168.65.1:63772 - "POST /tts HTTP/1.1" 200 OK
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: using the "epoll" event method
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: nginx/1.29.5
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: built by gcc 15.2.0 (Alpine 15.2.0) 
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: OS: Linux 6.12.67-linuxkit
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1048576:1048576
+api-1           | INFO:     192.168.65.1:64955 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:39969 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:61082 - "GET /models HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:41876 - "GET /config?user_id=test-user-1 HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:40252 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:40428 - "GET /models HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:54498 - "GET /config HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.6:33730 - "WebSocket /ws/session/test-session-1?client=customer&user_id=test-user-1&customer_lang=de" [accepted]
+api-1           | INFO:     connection open
+api-1           | INFO:     172.22.0.7:60674 - "WebSocket /ws/session/test-session-1?client=agent&user_id=agenten-02&agent_lang=en" [accepted]
+api-1           | INFO:     connection open
+api-1           | INFO:     127.0.0.1:52934 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:60688 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:60690 - "WebSocket /ws/session/95a51ad5-cfb2-4c27-8a11-bd1c1fb6206b?client=agent&user_id=agenten-02&agent_lang=en" [accepted]
+api-1           | INFO:     connection open
+api-1           | INFO:     127.0.0.1:52946 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:60694 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+valkey-1        | 1:M 10 Mar 2026 14:24:17.752 * monotonic clock: POSIX clock_gettime
+valkey-1        | 1:M 10 Mar 2026 14:24:17.753 * Running mode=standalone, port=6379.
+valkey-1        | 1:M 10 Mar 2026 14:24:17.754 * Server initialized
+valkey-1        | 1:M 10 Mar 2026 14:24:17.754 * Ready to accept connections tcp
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker processes
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker process 136
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker process 137
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker process 138
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker process 139
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker process 140
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker process 141
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker process 142
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.532+00:00"},"s":"I",  "c":"NETWORK",  "id":4915702, "ctx":"initandlisten","msg":"Updated wire specification","attr":{"oldSpec":{"incomingExternalClient":{"minWireVersion":0,"maxWireVersion":21},"incomingInternalClient":{"minWireVersion":0,"maxWireVersion":21},"outgoing":{"minWireVersion":6,"maxWireVersion":21},"isInternalClient":true},"newSpec":{"incomingExternalClient":{"minWireVersion":0,"maxWireVersion":21},"incomingInternalClient":{"minWireVersion":21,"maxWireVersion":21},"outgoing":{"minWireVersion":21,"maxWireVersion":21},"isInternalClient":true}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.532+00:00"},"s":"I",  "c":"REPL",     "id":5853300, "ctx":"initandlisten","msg":"current featureCompatibilityVersion value","attr":{"featureCompatibilityVersion":"7.0","context":"startup"}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.533+00:00"},"s":"I",  "c":"STORAGE",  "id":5071100, "ctx":"initandlisten","msg":"Clearing temp directory"}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.538+00:00"},"s":"I",  "c":"CONTROL",  "id":6608200, "ctx":"initandlisten","msg":"Initializing cluster server parameters from disk"}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.538+00:00"},"s":"I",  "c":"CONTROL",  "id":20536,   "ctx":"initandlisten","msg":"Flow Control is enabled on this deployment"}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.540+00:00"},"s":"I",  "c":"FTDC",     "id":20625,   "ctx":"initandlisten","msg":"Initializing full-time diagnostic data capture","attr":{"dataDirectory":"/data/db/diagnostic.data"}}
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker process 143
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.545+00:00"},"s":"I",  "c":"REPL",     "id":6015317, "ctx":"initandlisten","msg":"Setting new configuration state","attr":{"newState":"ConfigReplicationDisabled","oldState":"ConfigPreStart"}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.545+00:00"},"s":"I",  "c":"STORAGE",  "id":22262,   "ctx":"initandlisten","msg":"Timestamp monitor starting"}
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:26:29 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:26:34 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: nginx/1.29.5
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: built by gcc 15.2.0 (Alpine 15.2.0) 
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: OS: Linux 6.12.67-linuxkit
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1048576:1048576
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker processes
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker process 144
+web-customer-1  | 2026/03/10 14:25:21 [notice] 1#1: start worker process 145
+web-customer-1  | 192.168.65.1 - - [10/Mar/2026:14:25:22 +0000] "GET /api/health HTTP/1.1" 200 48 "-" "Python-urllib/3.9" "-"
+api-1           | INFO:     172.22.0.7:54774 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:53778 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:54788 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:53790 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:29979 - "POST /chat/text HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:34324 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:39197 - "POST /agent/message HTTP/1.1" 200 OK
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:26:39 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:26:44 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 137
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 138
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.545+00:00"},"s":"I",  "c":"NETWORK",  "id":23015,   "ctx":"listener","msg":"Listening on","attr":{"address":"/tmp/mongodb-27017.sock"}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.545+00:00"},"s":"I",  "c":"NETWORK",  "id":23015,   "ctx":"listener","msg":"Listening on","attr":{"address":"0.0.0.0"}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.545+00:00"},"s":"I",  "c":"NETWORK",  "id":23016,   "ctx":"listener","msg":"Waiting for connections","attr":{"port":27017,"ssl":"off"}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:24:19.545+00:00"},"s":"I",  "c":"CONTROL",  "id":8423403, "ctx":"initandlisten","msg":"mongod startup complete","attr":{"Summary of time elapsed":{"Startup from clean shutdown?":true,"Statistics":{"Transport layer setup":"0 ms","Run initial syncer crash recovery":"0 ms","Create storage engine lock file in the data directory":"0 ms","Get metadata describing storage engine":"0 ms","Validate options in metadata against current startup options":"0 ms","Create storage engine":"1552 ms","Write current PID to file":"0 ms","Initialize FCV before rebuilding indexes":"2 ms","Drop abandoned idents and get back indexes that need to be rebuilt or builds that need to be restarted":"0 ms","Rebuild indexes for collections":"0 ms","Load cluster parameters from disk for a standalone":"0 ms","Build user and roles graph":"0 ms","Set up the background thread pool responsible for waiting for opTimes to be majority committed":"0 ms","Initialize information needed to make a mongod instance shard aware":"0 ms","Start up the replication coordinator":"3 ms","Start transport layer":"0 ms","_initAndListen total elapsed time":"1588 ms"}}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:19.533+00:00"},"s":"I",  "c":"WTCHKPT",  "id":22430,   "ctx":"Checkpointer","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152719,"ts_usec":533459,"thread":"1:0xffff75f2ebc0","session_name":"WT_SESSION.checkpoint","category":"WT_VERB_CHECKPOINT_PROGRESS","category_id":6,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"saving checkpoint snapshot min: 4, snapshot max: 4 snapshot count: 0, oldest timestamp: (0, 0) , meta checkpoint timestamp: (0, 0) base write gen: 8022"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:20.985+00:00"},"s":"I",  "c":"NETWORK",  "id":22943,   "ctx":"listener","msg":"Connection accepted","attr":{"remote":"172.22.0.5:33474","isLoadBalanced":false,"uuid":{"uuid":{"$uuid":"a02c110f-2fbf-47ec-b4de-efe8caec0a01"}},"connectionId":1,"connectionCount":1}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:20.985+00:00"},"s":"I",  "c":"NETWORK",  "id":51800,   "ctx":"conn1","msg":"client metadata","attr":{"remote":"172.22.0.5:33474","client":"conn1","negotiatedCompressors":[],"doc":{"driver":{"name":"PyMongo|c","version":"4.16.0"},"os":{"type":"Linux","name":"Linux","architecture":"aarch64","version":"6.12.67-linuxkit"},"platform":"CPython 3.11.15.final.0","env":{"container":{"runtime":"docker"}}}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:20.986+00:00"},"s":"I",  "c":"ACCESS",   "id":10483900,"ctx":"conn1","msg":"Connection not authenticating","attr":{"client":"172.22.0.5:33474","doc":{"driver":{"name":"PyMongo|c","version":"4.16.0"},"os":{"type":"Linux","name":"Linux","architecture":"aarch64","version":"6.12.67-linuxkit"},"platform":"CPython 3.11.15.final.0","env":{"container":{"runtime":"docker"}}}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:20.987+00:00"},"s":"I",  "c":"NETWORK",  "id":22943,   "ctx":"listener","msg":"Connection accepted","attr":{"remote":"172.22.0.5:33484","isLoadBalanced":false,"uuid":{"uuid":{"$uuid":"99e4a7ba-a2ec-43db-8942-6d784a09ac64"}},"connectionId":2,"connectionCount":2}}
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 139
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 140
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 141
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 142
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 143
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 144
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 145
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:20.987+00:00"},"s":"I",  "c":"NETWORK",  "id":22943,   "ctx":"listener","msg":"Connection accepted","attr":{"remote":"172.22.0.5:33492","isLoadBalanced":false,"uuid":{"uuid":{"$uuid":"ebb85865-3e0f-4d4c-b683-b8df96d9cb07"}},"connectionId":3,"connectionCount":3}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:20.987+00:00"},"s":"I",  "c":"NETWORK",  "id":51800,   "ctx":"conn2","msg":"client metadata","attr":{"remote":"172.22.0.5:33484","client":"conn2","negotiatedCompressors":[],"doc":{"driver":{"name":"PyMongo|c","version":"4.16.0"},"os":{"type":"Linux","name":"Linux","architecture":"aarch64","version":"6.12.67-linuxkit"},"platform":"CPython 3.11.15.final.0","env":{"container":{"runtime":"docker"}}}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:20.987+00:00"},"s":"I",  "c":"ACCESS",   "id":10483900,"ctx":"conn2","msg":"Connection not authenticating","attr":{"client":"172.22.0.5:33484","doc":{"driver":{"name":"PyMongo|c","version":"4.16.0"},"os":{"type":"Linux","name":"Linux","architecture":"aarch64","version":"6.12.67-linuxkit"},"platform":"CPython 3.11.15.final.0","env":{"container":{"runtime":"docker"}}}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:20.987+00:00"},"s":"I",  "c":"NETWORK",  "id":51800,   "ctx":"conn3","msg":"client metadata","attr":{"remote":"172.22.0.5:33492","client":"conn3","negotiatedCompressors":[],"doc":{"driver":{"name":"PyMongo|c","version":"4.16.0"},"os":{"type":"Linux","name":"Linux","architecture":"aarch64","version":"6.12.67-linuxkit"},"platform":"CPython 3.11.15.final.0","env":{"container":{"runtime":"docker"}}}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:20.987+00:00"},"s":"I",  "c":"ACCESS",   "id":10483900,"ctx":"conn3","msg":"Connection not authenticating","attr":{"client":"172.22.0.5:33492","doc":{"driver":{"name":"PyMongo|c","version":"4.16.0"},"os":{"type":"Linux","name":"Linux","architecture":"aarch64","version":"6.12.67-linuxkit"},"platform":"CPython 3.11.15.final.0","env":{"container":{"runtime":"docker"}}}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:25:20.988+00:00"},"s":"I",  "c":"NETWORK",  "id":6788700, "ctx":"conn3","msg":"Received first command on ingress connection since session start or auth handshake","attr":{"elapsedMillis":0}}
+web-customer-1  | 192.168.65.1 - - [10/Mar/2026:14:25:22 +0000] "GET /api/models HTTP/1.1" 200 514 "-" "Python-urllib/3.9" "-"
+web-customer-1  | 192.168.65.1 - - [10/Mar/2026:14:25:22 +0000] "GET /api/config HTTP/1.1" 200 1064 "-" "Python-urllib/3.9" "-"
+web-customer-1  | 192.168.65.1 - - [10/Mar/2026:14:27:23 +0000] "GET /api/ws/session/test-session-1?client=customer&user_id=test-user-1&customer_lang=de HTTP/1.1" 101 36474 "-" "v9-ws-probe/1.0" "-"
+mongo-1         | {"t":{"$date":"2026-03-10T14:26:19.684+00:00"},"s":"I",  "c":"WTCHKPT",  "id":22430,   "ctx":"Checkpointer","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152779,"ts_usec":684536,"thread":"1:0xffff75f2ebc0","session_name":"WT_SESSION.checkpoint","category":"WT_VERB_CHECKPOINT_PROGRESS","category_id":6,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"saving checkpoint snapshot min: 36, snapshot max: 36 snapshot count: 0, oldest timestamp: (0, 0) , meta checkpoint timestamp: (0, 0) base write gen: 8022"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:27:19.722+00:00"},"s":"I",  "c":"WTCHKPT",  "id":22430,   "ctx":"Checkpointer","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152839,"ts_usec":722707,"thread":"1:0xffff75f2ebc0","session_name":"WT_SESSION.checkpoint","category":"WT_VERB_CHECKPOINT_PROGRESS","category_id":6,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"saving checkpoint snapshot min: 41, snapshot max: 41 snapshot count: 0, oldest timestamp: (0, 0) , meta checkpoint timestamp: (0, 0) base write gen: 8022"}}}
+mongo-1         | {"t":{"$date":"2026-03-10T14:28:19.750+00:00"},"s":"I",  "c":"WTCHKPT",  "id":22430,   "ctx":"Checkpointer","msg":"WiredTiger message","attr":{"message":{"ts_sec":1773152899,"ts_usec":750223,"thread":"1:0xffff75f2ebc0","session_name":"WT_SESSION.checkpoint","category":"WT_VERB_CHECKPOINT_PROGRESS","category_id":6,"verbose_level":"DEBUG_1","verbose_level_id":1,"msg":"saving checkpoint snapshot min: 42, snapshot max: 42 snapshot count: 0, oldest timestamp: (0, 0) , meta checkpoint timestamp: (0, 0) base write gen: 8022"}}}
+api-1           | INFO:     172.22.0.7:34332 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:36100 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:40282 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:26:49 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:26:54 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:26:59 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:04 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:09 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:14 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:19 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:23 +0000] "GET /api/ws/session/test-session-1?client=agent&user_id=agenten-02&agent_lang=en HTTP/1.1" 101 33442 "-" "v9-ws-probe/1.0" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:24 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:29 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:34 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:39 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:44 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:49 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:54 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:27:59 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:28:04 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:28:09 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-admin-1     | 2026/03/10 14:25:21 [notice] 1#1: start worker process 146
+web-admin-1     | 192.168.65.1 - - [10/Mar/2026:14:25:22 +0000] "GET /api/health HTTP/1.1" 200 48 "-" "curl/8.7.1" "-"
+api-1           | INFO:     127.0.0.1:36104 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     192.168.65.1:27490 - "POST /chat/text HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:40284 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:38202 - "GET /health HTTP/1.1" 200 OK
+api-1           | onnxruntime cpuid_info warning: Unknown CPU vendor. cpuinfo_vendor value: 0
+api-1           | INFO:     192.168.65.1:19959 - "POST /voice HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:46654 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:38010 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:53726 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:53730 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:47896 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:50796 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:28:14 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:28:19 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:28:24 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:28:29 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:28:34 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:28:39 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+web-agent-1     | 192.168.65.1 - - [10/Mar/2026:14:28:44 +0000] "GET /api/agent/sessions?status=active&limit=120 HTTP/1.1" 200 2720 "http://localhost:8087/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" "-"
+api-1           | INFO:     127.0.0.1:47912 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:50802 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:55894 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:55026 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:55908 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:55028 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:51660 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:48344 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:51684 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:48358 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:57816 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:39274 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:57828 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:39290 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:39868 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:48644 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:39870 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:48660 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     connection closed
+api-1           | INFO:     connection closed
+api-1           | INFO:     192.168.65.1:25697 - "GET /session/test-session-1?user_id=test-user-1&limit=30 HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:60602 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:33558 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:60610 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:33578 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:43622 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:49530 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:43638 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:49548 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:46806 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:33444 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:46808 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:46584 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:39856 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:46612 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:39864 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:34552 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:54800 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:34578 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:54804 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:34886 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:58108 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:34892 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:58118 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:46738 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:35540 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:46762 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:35544 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:53968 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:46982 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:53992 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:46996 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
+api-1           | INFO:     127.0.0.1:41794 - "GET /health HTTP/1.1" 200 OK
+api-1           | INFO:     172.22.0.7:42000 - "GET /agent/sessions?status=active&limit=120 HTTP/1.1" 200 OK
