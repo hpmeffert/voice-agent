@@ -1,4 +1,4 @@
-# Release Notes (DE) - V7.0.0 bis V9.1.5
+# Release Notes (DE) - V7.0.0 bis V9.1.8
 
 ## Historie
 - V7.0.0: V7-Scaffold isoliert, eigene Ports, Admin-Demo-Defaults.
@@ -22,6 +22,9 @@
 - V9.1.2: Agent-UI Auto-Refresh (Inbox), robuster WS-Reconnect und optionaler Anzeige-Filter fuer Sonderzeichen im Chat (nur UI-Darstellung).
 - V9.1.5: WS-Dual-Lane-Test-Hardening mit Artefakt-Nachweisen, robusten Eventual-Delivery-Checks (10s) und Lane-Observability-Metadaten (`event_id`, `event_ts`, `lane.*`, `text_for_*`, `lang_for_*`) fuer eindeutige Fehleranalyse.
 - V9.1.5-fix-voice-duallane: Voice-Paritaetsfix, damit Voice denselben live `message.created` Dual-Lane-Vertrag wie Chat nutzt; behebt fehlende Agent-Lane-Uebersetzung bei Voice-Faellen und behaelt die strikte TTS-Lane-Bindung.
+- V9.1.6: Post-fix-Hardening fuer wiederholbare WS/Voice-Tests, formale Artefakt-Policy (`v9/docs/ARTIFACT_POLICY.md`) sowie Retention/Cleanup-Automation fuer lokale Nachweise.
+- V9.1.7: Customer Auto-Upload nach Recording-Ende, Default-Modell auf `qwen2.5:3b` vereinheitlicht und TTS-Sanitizer-Regressionstest unter `v9/scripts/tests/test_tts_sanitize.py`.
+- V9.1.8: Admin-Performance-Toggle + neue Suche (`/api/admin/search`) mit Mode `auto|session_id|user_id|text`, Wildcard `*` fuer IDs und klickbarem Session-Open im Admin-UI.
 
 ## Nutzen von V9.1.0
 - Keine falsche Sprache mehr im Agenten- und Kunden-TTS-Pfad.
@@ -65,3 +68,18 @@
   - permissive OSS in Core bevorzugt
   - kein GPL/AGPL-Zuwachs im Core Runtime
   - copyleft-Komponenten bleiben als Sidecar isoliert.
+
+## Nutzen von V9.1.6
+- Standardisierte Testskripte unter `v9/scripts/tests/` machen V9-Laeufe auf jedem Rechner reproduzierbar.
+- Jeder Testlauf schreibt jetzt in einen klaren Ordner `v9/artifacts/<timestamp>/`.
+- Die Cleanup-Routine begrenzt lokalen Speicherverbrauch durch Aufbewahrung nur der neuesten Laeufe.
+
+## Nutzen von V9.1.7
+- Kunden muessen nach Sprachaufnahme keinen zusaetzlichen Send-Klick mehr machen (weniger Bedienfehler).
+- `qwen2.5:3b` als Default senkt typischerweise Latenz auf schwacherer Hardware.
+- TTS-Markdown-Bereinigung bleibt abgesichert durch einen dedizierten Test im offiziellen Testpfad.
+
+## Nutzen von V9.1.8
+- Admin kann Performance-Logging nur in benoetigten Zeitfenstern aktivieren (weniger Dauer-Overhead).
+- Suche nach Konversationen ist deutlich schneller: Teil-`session_id`, Teil-`user_id` oder Textfragment.
+- Trefferliste erlaubt direktes Oeffnen der Session im Agent-Client fuer schnelle Analyse.

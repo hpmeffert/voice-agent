@@ -99,3 +99,21 @@ Imagine: supervisor wants to force a specific output language for verification.
 - Show that new sessions appear in inbox without clicking `Refresh Inbox` (auto-refresh enabled).
 - Simulate a short connection drop and show the return to `WS: online`.
 - Toggle `Display cleanup` on/off to demonstrate the Agent-side text rendering difference.
+
+## V9.1.7 Demo Focus
+- Turn `Auto-send after recording` ON in Customer UI.
+- Speak one short sentence and stop recording.
+- Show the audience that upload starts immediately without an extra click.
+- Explain the value:
+  - fewer clicks
+  - fewer operator errors
+  - faster live conversation flow.
+
+## V9.1.8 Demo Focus
+- Admin enables `Perf logging enabled` only for a short demo window.
+- Run one short conversation.
+- Open Admin Search:
+  - first partial session id (`*`)
+  - then text fragment search.
+- Open a hit using `Open Session` and show direct navigation.
+- Turn logging OFF again after the demo.
