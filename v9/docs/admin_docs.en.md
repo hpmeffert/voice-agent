@@ -154,17 +154,17 @@ Every release must keep language-flow docs updated in User Guide, Demo Guide, an
 ## New in V9.1.1 (Admin)
 - TTS sanitization runs only at the audio output boundary.
 - Persistent data (messages/CRM exports) remains unchanged.
-- Regression tests: `v9/scripts/test_tts_sanitize.py` and `v9/scripts/run_tests_v9.1.1.sh`.
+- Regression test: `v9/scripts/tests/test_tts_sanitize.py`.
 
 ## New in V9.1.2 (Admin)
 - Agent UI includes `Auto-Refresh` for inbox updates (5-second interval, persisted in localStorage).
 - WebSocket reconnect in Agent UI improves continuity after short network drops.
 - `Display cleanup` affects only visible chat text in Agent UI; stored data and routing remain unchanged.
 
-## New in V9.1.5 (Admin): WS test automation + evidence
+## New in V9.1.6 (Admin): WS test automation + artifact hardening
 ### Run the automated proof test
 ```bash
-bash scripts/run_v9_ws_duallane_tests.sh --agent_url http://localhost:8087 --customer_url http://localhost:8086 --out artifacts
+bash v9/scripts/tests/run_v9_duallane_ws_tests.sh
 ```
 
 ### What "PASS" means
@@ -179,10 +179,9 @@ You always get six lines:
 If `RESULT: PASS`, dual-lane routing is correct for this run.
 
 ### Where artifacts are stored
-- Current run folder: `artifacts/runs/<run_id>/`
-- Latest pointer folder: `artifacts/latest/`
-- Run ZIP: `artifacts/runs/artifacts-<run_id>.zip`
-- Retention: only the newest `10` runs are kept by default (`RETAIN_RUNS=10`).
+- Current run folder: `v9/artifacts/<YYYYMMDD-HHMMSS>/`
+- Optional run ZIP: `v9/artifacts/<YYYYMMDD-HHMMSS>/artifacts.zip`
+- Retention: only the newest `10` runs are kept by default.
 - Required files:
   - `test-log-v9.1.5.txt`
   - `SUMMARY.md`
@@ -191,14 +190,14 @@ If `RESULT: PASS`, dual-lane routing is correct for this run.
   - `docker-logs-api.txt`, `docker-logs-web-agent.txt`, `docker-logs-web-customer.txt`
   - `ENV_SNAPSHOT.txt`
   - `session_dump.json`
-  - `artifacts.zip` (inside run folder) and `artifacts-<run_id>.zip` (in `artifacts/runs/`)
+  - `artifacts.zip` (inside run folder)
 
 ### Release evidence policy (important)
 - Keep `artifacts/` as local working storage only.
 - Do not commit evidence ZIPs, logs, or env snapshots into Git history.
 - For release-relevant runs, upload only 1-3 ZIPs as GitHub Release Assets (for example: FAIL, FIX, PASS).
 - Example upload command:
-  - `gh release upload v9.1.5 artifacts/runs/artifacts-v9.1.5-YYYYMMDD-HHMMSS.zip`
+  - `gh release upload v9.1.6 v9/artifacts/<run-id>/artifacts.zip`
 
 ### How to read FAIL quickly
 - `scenario*_eventual_delivery_failed`: event arrived too late (>10s) or not at all.
@@ -219,7 +218,23 @@ Each `message.created` event now includes:
   - STT language
   - text-detected language
   - effective routing language
-- Goal: DE->EN voice traffic produces the same EN agent lane as DE->EN chat traffic.
+
+## New in V9.1.7 (Admin)
+- Customer UI now has `Auto-send after recording` (default: ON, persisted in localStorage).
+- Compose/API defaults now use `qwen2.5:3b` as default model.
+- Fallback remains active:
+  - if `qwen2.5:3b` is unavailable, the runtime falls back to the available model (typically `qwen2.5:7b`).
+- TTS sanitizer remains low-risk:
+  - applied only at TTS output boundary,
+  - no change to stored transcripts or dual-lane routing.
+
+### Admin quick test for V9.1.7
+1. `docker compose -f v9/docker/compose.dev.yml up -d --build`
+2. Customer client: start recording, speak, stop.
+3. Verify: upload starts immediately (when Auto-send is ON).
+4. Run `python3 v9/scripts/tests/test_tts_sanitize.py`.
+5. Run `bash v9/scripts/tests/run_v9_duallane_ws_tests.sh`.
+Goal: DE->EN voice traffic produces the same EN agent lane as DE->EN chat traffic.
 
 ### Required \"Voice vs Chat parity\" check
 1. Agent `en`, Customer `de`.

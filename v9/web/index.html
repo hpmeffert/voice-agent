@@ -1282,7 +1282,7 @@ async function loadModels() {
   modelCatalog = data;
 
   const ollamaModels = data?.ollama?.models || [];
-  const defaultOllama = data?.ollama?.default_model || "qwen2.5:7b";
+  const defaultOllama = data?.ollama?.default_model || "qwen2.5:3b";
   setModelOptions(ollamaModels.length ? ollamaModels : [defaultOllama], defaultOllama);
 
   const openaiOpt = Array.from(backendSel.options).find((o) => o.value === "openai");
@@ -1461,7 +1461,7 @@ backendSel.onchange = () => {
   }
 
   const ollamaModels = modelCatalog?.ollama?.models || [];
-  const defaultOllama = modelCatalog?.ollama?.default_model || "qwen2.5:7b";
+  const defaultOllama = modelCatalog?.ollama?.default_model || "qwen2.5:3b";
   setModelOptions(ollamaModels.length ? ollamaModels : [defaultOllama], defaultOllama);
   setAppState("listening");
 };
