@@ -104,3 +104,12 @@ Stellen Sie sich vor: Sie wollen bewusst eine andere Kundensprache ausliefern (z
 - Zeigen Sie, dass neue Sessions ohne Klick auf `Refresh Inbox` sichtbar werden (Auto-Refresh aktiv).
 - Simulieren Sie kurz einen Verbindungsabbruch und zeigen Sie die Rueckkehr von `WS: online`.
 - Aktivieren/Deaktivieren Sie `Anzeige bereinigen`, um den Unterschied in der Agent-Textdarstellung zu zeigen.
+
+## V9.1.7 Demo Fokus
+- Schalten Sie im Customer-Client `Auto-send after recording` auf AN.
+- Sprechen Sie einen kurzen Satz und stoppen Sie die Aufnahme.
+- Zeigen Sie dem Publikum: Upload startet direkt ohne zusaetzlichen Klick.
+- Erklaeren Sie den Nutzen:
+  - weniger Klicks
+  - weniger Bedienfehler
+  - schnellerer Gespraechsfluss.

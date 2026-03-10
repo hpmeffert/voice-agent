@@ -29,7 +29,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v9.1.2"
+APP_VERSION = "v9.1.7"
 
 app = FastAPI(
     title=f"Voice Agent API {APP_VERSION}",
@@ -41,7 +41,7 @@ app = FastAPI(
 # Config / ENV
 # ----------------------------
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434").strip().rstrip("/")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b").strip()
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b").strip()
 
 PIPER_BASE_URL = os.getenv("PIPER_BASE_URL", "http://piper:5002").strip().rstrip("/")
 

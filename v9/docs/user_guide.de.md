@@ -139,3 +139,15 @@ Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-
    - Agent hoert EN.
 4. Agent antwortet EN.
 5. Kunde sieht/hoert DE.
+
+## Neu in V9.1.7: Auto-Upload + schnelleres Standardmodell
+- Customer-Client hat jetzt den Schalter `Auto-send after recording` (Standard: AN).
+- Wenn die Aufnahme endet, wird bei aktivem Schalter automatisch gesendet, ohne extra Klick auf `Send Audio`.
+- Standardmodell ist jetzt `qwen2.5:3b` (mit Fallback auf `qwen2.5:7b`, falls 3b nicht verfuegbar ist).
+- TTS bleibt lane-gebunden und bereinigt Markdown-/Control-Zeichen nur fuer Audio.
+
+### Beispiel
+1. Kunde spricht auf Deutsch und stoppt die Aufnahme.
+2. Auto-send ist AN.
+3. Upload startet automatisch.
+4. Agent bekommt die Nachricht live im Agent-Lane-Text (z. B. Englisch), Kunde bekommt Antwort in Kundensprache.

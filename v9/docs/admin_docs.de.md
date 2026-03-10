@@ -154,7 +154,7 @@ Bei jeder neuen Version muessen User Guide, Demo Guide und Admin Docs den aktuel
 ## Neu in V9.1.1 (Admin)
 - TTS-Sanitize laeuft nur am Audio-Ausgabepunkt.
 - Persistente Daten (Messages/CRM-Exports) bleiben unveraendert.
-- Regressionstest: `v9/scripts/test_tts_sanitize.py` und `v9/scripts/run_tests_v9.1.1.sh`.
+- Regressionstest: `v9/scripts/tests/test_tts_sanitize.py`.
 
 ## Neu in V9.1.2 (Admin)
 - Agent-UI hat `Auto-Refresh` fuer Inbox-Updates (Intervall 5 Sekunden, per LocalStorage steuerbar).
@@ -218,7 +218,23 @@ Jedes `message.created`-Event enthaelt jetzt:
   - STT-Sprache
   - textbasierte Erkennung
   - effektive Routing-Sprache
-- Ziel: Agent bekommt bei DE->EN im Voice-Fall dieselbe EN-Lane wie im Chat-Fall.
+
+## Neu in V9.1.7 (Admin)
+- Customer UI hat jetzt den Schalter `Auto-send after recording` (Standard: AN, in LocalStorage gespeichert).
+- Compose/API-Defaults nutzen `qwen2.5:3b` als Standardmodell.
+- Fallback bleibt aktiv:
+  - wenn `qwen2.5:3b` nicht verfuegbar ist, wird auf vorhandenes Modell (typisch `qwen2.5:7b`) gewechselt.
+- TTS-Sanitizer bleibt low-risk:
+  - nur direkt am TTS-Ausgabepunkt,
+  - keine Aenderung an gespeicherten Transkripten oder Dual-Lane-Routing.
+
+### Admin-Kurztest V9.1.7
+1. `docker compose -f v9/docker/compose.dev.yml up -d --build`
+2. Customer-Client: Aufnahme starten, sprechen, stoppen.
+3. Pruefen: Upload startet sofort (bei aktivem Auto-send).
+4. `python3 v9/scripts/tests/test_tts_sanitize.py` ausfuehren.
+5. `bash v9/scripts/tests/run_v9_duallane_ws_tests.sh` ausfuehren.
+Ziel: Agent bekommt bei DE->EN im Voice-Fall dieselbe EN-Lane wie im Chat-Fall.
 
 ### Pflicht-Test \"Voice vs Chat parity\"
 1. Agent `en`, Kunde `de`.

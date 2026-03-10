@@ -1,4 +1,4 @@
-# Release Notes (EN) - V7.0.0 through V9.1.5
+# Release Notes (EN) - V7.0.0 through V9.1.7
 
 ## History
 - V7.0.0: isolated V7 scaffold, dedicated ports, admin demo defaults.
@@ -23,6 +23,7 @@
 - V9.1.5: WS dual-lane test hardening patch with proof-oriented artifacts, robust eventual-delivery assertions (10s), and lane observability metadata (`event_id`, `event_ts`, `lane.*`, `text_for_*`, `lang_for_*`) for deterministic debugging.
 - V9.1.5-fix-voice-duallane: Voice-input parity patch so voice uses the same live `message.created` dual-lane contract as chat; fixes missing agent-lane translation in voice cases and keeps TTS lane binding strict.
 - V9.1.6: Post-fix hardening for repeatable WS/voice tests, formal artifact policy (`v9/docs/ARTIFACT_POLICY.md`), and retention/cleanup automation for local evidence folders.
+- V9.1.7: Customer auto-upload after recording stop, aligned default model `qwen2.5:3b`, and sanitizer regression test standardized at `v9/scripts/tests/test_tts_sanitize.py`.
 
 ## Why V9.1.0 matters
 - Prevents wrong-language speech on both Agent and Customer clients.
@@ -71,3 +72,8 @@
 - Standardized test scripts under `v9/scripts/tests/` make V9 runs reproducible on every machine.
 - Every test run now produces a predictable artifact folder under `v9/artifacts/<timestamp>/`.
 - Artifact cleanup keeps local storage under control by retaining only the latest runs.
+
+## Why V9.1.7 matters
+- Customers no longer need an extra send click after recording (fewer operator errors).
+- `qwen2.5:3b` as default typically reduces latency on constrained hardware.
+- TTS markdown cleanup remains protected by a dedicated regression test in the official test path.

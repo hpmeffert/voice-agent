@@ -154,7 +154,7 @@ Every release must keep language-flow docs updated in User Guide, Demo Guide, an
 ## New in V9.1.1 (Admin)
 - TTS sanitization runs only at the audio output boundary.
 - Persistent data (messages/CRM exports) remains unchanged.
-- Regression tests: `v9/scripts/test_tts_sanitize.py` and `v9/scripts/run_tests_v9.1.1.sh`.
+- Regression test: `v9/scripts/tests/test_tts_sanitize.py`.
 
 ## New in V9.1.2 (Admin)
 - Agent UI includes `Auto-Refresh` for inbox updates (5-second interval, persisted in localStorage).
@@ -218,7 +218,23 @@ Each `message.created` event now includes:
   - STT language
   - text-detected language
   - effective routing language
-- Goal: DE->EN voice traffic produces the same EN agent lane as DE->EN chat traffic.
+
+## New in V9.1.7 (Admin)
+- Customer UI now has `Auto-send after recording` (default: ON, persisted in localStorage).
+- Compose/API defaults now use `qwen2.5:3b` as default model.
+- Fallback remains active:
+  - if `qwen2.5:3b` is unavailable, the runtime falls back to the available model (typically `qwen2.5:7b`).
+- TTS sanitizer remains low-risk:
+  - applied only at TTS output boundary,
+  - no change to stored transcripts or dual-lane routing.
+
+### Admin quick test for V9.1.7
+1. `docker compose -f v9/docker/compose.dev.yml up -d --build`
+2. Customer client: start recording, speak, stop.
+3. Verify: upload starts immediately (when Auto-send is ON).
+4. Run `python3 v9/scripts/tests/test_tts_sanitize.py`.
+5. Run `bash v9/scripts/tests/run_v9_duallane_ws_tests.sh`.
+Goal: DE->EN voice traffic produces the same EN agent lane as DE->EN chat traffic.
 
 ### Required \"Voice vs Chat parity\" check
 1. Agent `en`, Customer `de`.

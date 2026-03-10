@@ -139,3 +139,15 @@ If customer language is detected, the response language and customer voice profi
    - Agent hears EN.
 4. Agent replies EN.
 5. Customer sees/hears DE.
+
+## New in V9.1.7: Auto-upload + faster default model
+- Customer UI now includes `Auto-send after recording` (default: ON).
+- When recording stops and this toggle is ON, upload/send starts automatically (no extra `Send Audio` click).
+- Default model is now `qwen2.5:3b` (fallback to `qwen2.5:7b` if 3b is unavailable).
+- TTS remains lane-bound and still removes markdown/control characters only for spoken output.
+
+### Example
+1. Customer speaks in German and stops recording.
+2. Auto-send is ON.
+3. Upload starts automatically.
+4. Agent receives live agent-lane text (for example English), customer receives response in customer language.

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Customer V9.1.2</title>
+  <title>Voice Agent Customer V9.1.7</title>
   <style>
     body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
     .wrap { max-width: 920px; margin: 20px auto; padding: 0 14px; }
@@ -28,7 +28,7 @@
     <div class="card">
       <div class="hd">
         <div>
-          <b>Voice Agent Customer V9.1.2</b>
+          <b>Voice Agent Customer V9.1.7</b>
           <div class="status" id="status">idle</div>
         </div>
         <div class="status" id="ids">-</div>
@@ -44,6 +44,7 @@
           <button id="btnRecord" class="primary">Record</button>
           <button id="btnStop" disabled>Stop</button>
           <button id="btnSendAudio" disabled>Send Audio</button>
+          <label><input id="autoSendAfterRecord" type="checkbox" checked /> Auto-send after recording</label>
           <button id="btnRequestHandoff">Menschlichen Agenten anfordern</button>
           <button id="btnEndConversation" class="warn">End Conversation</button>
           <label><input id="listenMode" type="checkbox" /> Listen Mode</label>
@@ -72,6 +73,7 @@ const USER_KEY = "v8_customer_user_id";
 const SESSION_KEY = "v8_customer_session_id";
 const LISTEN_KEY = "v8_customer_listen_mode";
 const CUSTOMER_LANG_KEY = "v9_customer_lang";
+const AUTO_SEND_AFTER_RECORD_KEY = "v9_customer_auto_send_after_record";
 const SILENCE_MS = 1300;
 const MIN_VOICE_RMS = 0.012;
 const MAX_RECORD_MS = 45000;
@@ -95,6 +97,7 @@ const btnEndConversation = document.getElementById("btnEndConversation");
 const btnRequestHandoff = document.getElementById("btnRequestHandoff");
 const listenModeEl = document.getElementById("listenMode");
 const handoffStatusEl = document.getElementById("handoffStatus");
+const autoSendAfterRecordEl = document.getElementById("autoSendAfterRecord");
 
 let mediaRecorder = null;
 let chunks = [];
@@ -331,6 +334,7 @@ userIdEl.value = localStorage.getItem(USER_KEY) || makeId();
 sessionIdEl.value = localStorage.getItem(SESSION_KEY) || '';
 listenModeEl.checked = localStorage.getItem(LISTEN_KEY) === '1';
 customerLangEl.value = localStorage.getItem(CUSTOMER_LANG_KEY) || 'auto';
+autoSendAfterRecordEl.checked = localStorage.getItem(AUTO_SEND_AFTER_RECORD_KEY) !== '0';
 loopActive = listenModeEl.checked;
 refreshIds();
 connectSessionWs();
@@ -347,6 +351,9 @@ customerLangEl.addEventListener('change', () => {
   localStorage.setItem(CUSTOMER_LANG_KEY, customerLangEl.value || 'auto');
   connectSessionWs();
 });
+autoSendAfterRecordEl.addEventListener('change', () => {
+  localStorage.setItem(AUTO_SEND_AFTER_RECORD_KEY, autoSendAfterRecordEl.checked ? '1' : '0');
+});
 ttsLangEl.addEventListener('change', () => {
   connectSessionWs();
 });
@@ -360,7 +367,7 @@ btnNewSession.onclick = () => {
 };
 
 btnRecord.onclick = async () => {
-  await startRecording({ autoSend: false });
+  await startRecording({ autoSend: !!autoSendAfterRecordEl.checked });
 };
 
 btnStop.onclick = () => {
