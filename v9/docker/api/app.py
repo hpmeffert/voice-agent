@@ -2,6 +2,7 @@ import asyncio
 import io
 import os
 import json
+import random
 import re
 import subprocess
 import tempfile
@@ -29,7 +30,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v9.1.7"
+APP_VERSION = "v9.1.8"
 
 app = FastAPI(
     title=f"Voice Agent API {APP_VERSION}",
@@ -149,11 +150,16 @@ sessions_col: Collection | None = None
 messages_col: Collection | None = None
 telemetry_col: Collection | None = None
 metrics_logs_col: Collection | None = None
+admin_perf_logs_col: Collection | None = None
 admin_settings_col: Collection | None = None
 ui_translations_col: Collection | None = None
 event_bus: EventBus | None = None
 rate_limit_lock = threading.Lock()
 rate_limit_buckets: dict[str, deque[float]] = defaultdict(deque)
+admin_settings_cache_lock = threading.Lock()
+admin_settings_cache_value: dict[str, Any] | None = None
+admin_settings_cache_until: float = 0.0
+ADMIN_SETTINGS_CACHE_TTL_SEC = 5.0
 
 
 # ----------------------------
@@ -194,7 +200,7 @@ def telemetry_expiry() -> datetime:
     retention_days = METRICS_RETENTION_DAYS
     try:
         settings = get_admin_settings()
-        retention_days = int(settings.get("retention_days", METRICS_RETENTION_DAYS))
+        retention_days = int(settings.get("perf_logging_retention_days", settings.get("retention_days", METRICS_RETENTION_DAYS)))
     except Exception:
         pass
     retention_days = max(1, min(365, retention_days))
@@ -334,6 +340,14 @@ def dt_iso(v: Any) -> str | None:
 def first_words(text: str, n: int = 8) -> str:
     words = (text or "").strip().split()
     return " ".join(words[:n]).strip()
+
+
+def wildcard_to_safe_regex(value: str) -> re.Pattern[str]:
+    cleaned = (value or "").strip()
+    escaped = re.escape(cleaned).replace(r"\*", ".*")
+    if not escaped:
+        escaped = ".*"
+    return re.compile(escaped, re.IGNORECASE)
 
 
 def extract_json_object(text: str) -> dict[str, Any] | None:
@@ -581,6 +595,11 @@ def default_listen_settings() -> dict[str, Any]:
 def default_admin_settings() -> dict[str, Any]:
     return {
         "retention_days": int(METRICS_RETENTION_DAYS),
+        "perf_logging_enabled": False,
+        "perf_logging_sample_rate": 1.0,
+        "perf_logging_retention_days": int(METRICS_RETENTION_DAYS),
+        "search_max_results": 50,
+        "allow_text_regex_fallback": True,
         "listen_defaults": {
             "silence_ms": int(LISTEN_SILENCE_MS_DEFAULT),
             "threshold": float(LISTEN_THRESHOLD_DEFAULT),
@@ -605,6 +624,21 @@ def normalized_admin_settings(raw: Any) -> dict[str, Any]:
     except Exception:
         retention_days = defaults["retention_days"]
     retention_days = max(1, min(365, retention_days))
+    try:
+        perf_retention_days = int(src.get("perf_logging_retention_days", defaults["perf_logging_retention_days"]))
+    except Exception:
+        perf_retention_days = defaults["perf_logging_retention_days"]
+    perf_retention_days = max(1, min(365, perf_retention_days))
+    try:
+        perf_sample_rate = float(src.get("perf_logging_sample_rate", defaults["perf_logging_sample_rate"]))
+    except Exception:
+        perf_sample_rate = defaults["perf_logging_sample_rate"]
+    perf_sample_rate = max(0.0, min(1.0, perf_sample_rate))
+    try:
+        search_max_results = int(src.get("search_max_results", defaults["search_max_results"]))
+    except Exception:
+        search_max_results = defaults["search_max_results"]
+    search_max_results = max(1, min(200, search_max_results))
 
     listen_src = src.get("listen_defaults") if isinstance(src.get("listen_defaults"), dict) else {}
     try:
@@ -624,6 +658,11 @@ def normalized_admin_settings(raw: Any) -> dict[str, Any]:
     toggles_src = src.get("feature_toggles") if isinstance(src.get("feature_toggles"), dict) else {}
     return {
         "retention_days": retention_days,
+        "perf_logging_enabled": bool(src.get("perf_logging_enabled", defaults["perf_logging_enabled"])),
+        "perf_logging_sample_rate": perf_sample_rate,
+        "perf_logging_retention_days": perf_retention_days,
+        "search_max_results": search_max_results,
+        "allow_text_regex_fallback": bool(src.get("allow_text_regex_fallback", defaults["allow_text_regex_fallback"])),
         "listen_defaults": {
             "silence_ms": silence_ms,
             "threshold": threshold,
@@ -639,9 +678,18 @@ def normalized_admin_settings(raw: Any) -> dict[str, Any]:
     }
 
 
-def get_admin_settings() -> dict[str, Any]:
+def get_admin_settings(*, force_refresh: bool = False) -> dict[str, Any]:
+    global admin_settings_cache_value, admin_settings_cache_until
+    if not force_refresh:
+        with admin_settings_cache_lock:
+            if admin_settings_cache_value is not None and time.time() < admin_settings_cache_until:
+                return admin_settings_cache_value
     if admin_settings_col is None:
-        return normalized_admin_settings(None)
+        settings = normalized_admin_settings(None)
+        with admin_settings_cache_lock:
+            admin_settings_cache_value = settings
+            admin_settings_cache_until = time.time() + ADMIN_SETTINGS_CACHE_TTL_SEC
+        return settings
     doc = admin_settings_col.find_one({"_id": "global"}, {"settings": 1})
     if not doc:
         settings = normalized_admin_settings(None)
@@ -654,6 +702,9 @@ def get_admin_settings() -> dict[str, Any]:
             },
             upsert=True,
         )
+        with admin_settings_cache_lock:
+            admin_settings_cache_value = settings
+            admin_settings_cache_until = time.time() + ADMIN_SETTINGS_CACHE_TTL_SEC
         return settings
     settings = normalized_admin_settings(doc.get("settings"))
     if doc.get("settings") != settings:
@@ -661,14 +712,28 @@ def get_admin_settings() -> dict[str, Any]:
             {"_id": "global"},
             {"$set": {"updated_at": now_utc(), "settings": settings}},
         )
+    with admin_settings_cache_lock:
+        admin_settings_cache_value = settings
+        admin_settings_cache_until = time.time() + ADMIN_SETTINGS_CACHE_TTL_SEC
     return settings
 
 
 def set_admin_settings(patch: dict[str, Any]) -> dict[str, Any]:
+    global admin_settings_cache_value, admin_settings_cache_until
     current = get_admin_settings()
     next_settings = json.loads(json.dumps(current))
     if "retention_days" in patch:
         next_settings["retention_days"] = patch["retention_days"]
+    if "perf_logging_enabled" in patch:
+        next_settings["perf_logging_enabled"] = patch["perf_logging_enabled"]
+    if "perf_logging_sample_rate" in patch:
+        next_settings["perf_logging_sample_rate"] = patch["perf_logging_sample_rate"]
+    if "perf_logging_retention_days" in patch:
+        next_settings["perf_logging_retention_days"] = patch["perf_logging_retention_days"]
+    if "search_max_results" in patch:
+        next_settings["search_max_results"] = patch["search_max_results"]
+    if "allow_text_regex_fallback" in patch:
+        next_settings["allow_text_regex_fallback"] = patch["allow_text_regex_fallback"]
     if "listen_defaults" in patch and isinstance(patch["listen_defaults"], dict):
         next_settings["listen_defaults"].update(patch["listen_defaults"])
     if "templates" in patch and isinstance(patch["templates"], dict):
@@ -685,6 +750,9 @@ def set_admin_settings(patch: dict[str, Any]) -> dict[str, Any]:
         },
         upsert=True,
     )
+    with admin_settings_cache_lock:
+        admin_settings_cache_value = next_settings
+        admin_settings_cache_until = time.time() + ADMIN_SETTINGS_CACHE_TTL_SEC
     return next_settings
 
 
@@ -732,7 +800,7 @@ def normalized_listen_settings(raw: Any) -> dict[str, Any]:
 # ----------------------------
 @app.on_event("startup")
 def on_startup() -> None:
-    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col, admin_settings_col, ui_translations_col, event_bus
+    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col, admin_perf_logs_col, admin_settings_col, ui_translations_col, event_bus
 
     whisper = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type=WHISPER_COMPUTE)
 
@@ -744,7 +812,8 @@ def on_startup() -> None:
     sessions_col = mongo_db["sessions"]
     messages_col = mongo_db["messages"]
     metrics_logs_col = mongo_db["metrics_logs"]
-    telemetry_col = metrics_logs_col
+    admin_perf_logs_col = mongo_db["admin_perf_logs"]
+    telemetry_col = admin_perf_logs_col
     admin_settings_col = mongo_db["admin_settings"]
     ui_translations_col = mongo_db["ui_translations"]
 
@@ -758,11 +827,21 @@ def on_startup() -> None:
     messages_col.create_index([("user_id", ASCENDING), ("t", DESCENDING)])
     messages_col.create_index([("session_id", ASCENDING), ("t", ASCENDING)])
     messages_col.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
+    try:
+        messages_col.create_index([("content", "text")], name="content_text_idx")
+    except Exception:
+        pass
 
     metrics_logs_col.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
     metrics_logs_col.create_index([("created_at", DESCENDING)])
     metrics_logs_col.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
     metrics_logs_col.create_index([("status", ASCENDING), ("created_at", DESCENDING)])
+
+    admin_perf_logs_col.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
+    admin_perf_logs_col.create_index([("ts", DESCENDING)])
+    admin_perf_logs_col.create_index([("session_id", ASCENDING), ("ts", DESCENDING)])
+    admin_perf_logs_col.create_index([("user_id", ASCENDING), ("ts", DESCENDING)])
+    admin_perf_logs_col.create_index([("direction", ASCENDING), ("ts", DESCENDING)])
     admin_settings_col.create_index([("updated_at", DESCENDING)])
     ui_translations_col.create_index([("updated_at", DESCENDING)])
     get_admin_settings()
@@ -1562,19 +1641,36 @@ def log_telemetry(
     transcript: str | None,
     answer: str | None,
     status: str,
+    direction: str = "system",
+    agent_lang_ui: str | None = None,
+    customer_lang_ui: str | None = None,
+    voice: bool = False,
+    chat: bool = False,
+    translation_used: bool = False,
     error_code: str | None = None,
     error_detail: str | None = None,
 ) -> None:
     ensure_ready()
+    settings = get_admin_settings()
+    if not bool(settings.get("perf_logging_enabled", False)):
+        return
+    sample_rate = float(settings.get("perf_logging_sample_rate", 1.0) or 0.0)
+    sample_rate = max(0.0, min(1.0, sample_rate))
+    if sample_rate <= 0.0:
+        return
+    if sample_rate < 1.0 and random.random() > sample_rate:
+        return
     ts = now_utc()
     m = metrics or {}
     doc: dict[str, Any] = {
+        "ts": ts,
         "created_at": ts,
         "expires_at": telemetry_expiry(),
         "user_id": user_id,
         "session_id": session_id,
-        "backend": backend,
-        "model": model,
+        "direction": direction,
+        "model_backend": backend,
+        "model_name": model,
         "metrics": {
             "audio_read_ms": safe_ms(m.get("audio_read_ms")),
             "stt_ms": safe_ms(m.get("stt_ms")),
@@ -1582,10 +1678,22 @@ def log_telemetry(
             "tts_ms": safe_ms(m.get("tts_ms")),
             "total_ms": safe_ms(m.get("total_ms")),
         },
+        "audio_read_ms": safe_ms(m.get("audio_read_ms")),
+        "stt_ms": safe_ms(m.get("stt_ms")),
+        "llm_ms": safe_ms(m.get("llm_ms")),
+        "tts_ms": safe_ms(m.get("tts_ms")),
+        "total_ms": safe_ms(m.get("total_ms")),
         "lang": lang,
+        "agent_lang_ui": (agent_lang_ui or "")[:8] or None,
+        "customer_lang_ui": (customer_lang_ui or "")[:8] or None,
         "transcript": (transcript or "")[:MAX_TEXT_CHARS],
         "answer": (answer or "")[:MAX_TEXT_CHARS],
         "status": status,
+        "flags": {
+            "voice": bool(voice),
+            "chat": bool(chat),
+            "translation_used": bool(translation_used),
+        },
         "error_code": (error_code or "")[:128] or None,
         "error_detail": (error_detail or "")[:512] or None,
     }
@@ -1914,6 +2022,11 @@ class UserSettingsUpdateRequest(BaseModel):
 class AdminSettingsUpdateRequest(BaseModel):
     user_id: str = Field(min_length=8)
     retention_days: int | None = Field(default=None, ge=1, le=365)
+    perf_logging_enabled: bool | None = None
+    perf_logging_sample_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    perf_logging_retention_days: int | None = Field(default=None, ge=1, le=365)
+    search_max_results: int | None = Field(default=None, ge=1, le=200)
+    allow_text_regex_fallback: bool | None = None
     listen_silence_ms_default: int | None = Field(default=None, ge=300, le=5000)
     listen_threshold_default: float | None = Field(default=None, ge=0.001, le=0.2)
     crm_export_template_md: str | None = None
@@ -2278,6 +2391,22 @@ def agent_message(req: AgentMessageRequest):
         },
     )
     persist_session_lane_langs(req.session_id, customer_lang_ui=customer_lang, agent_lang_ui=selected_agent_lang)
+    log_telemetry(
+        user_id=str(session.get("user_id") or ""),
+        session_id=req.session_id,
+        backend=backend,
+        model=model,
+        metrics={"audio_read_ms": 0, "stt_ms": 0, "llm_ms": 0, "tts_ms": 0, "total_ms": translation_ms},
+        lang=source_lang,
+        transcript=text,
+        answer=delivered_text,
+        status="ok",
+        direction="agent_to_customer",
+        agent_lang_ui=selected_agent_lang,
+        customer_lang_ui=customer_lang,
+        chat=True,
+        translation_used=delivered_text != text,
+    )
     return {
         "ok": True,
         "session_id": req.session_id,
@@ -2753,6 +2882,16 @@ def admin_settings_update(
     patch: dict[str, Any] = {}
     if req.retention_days is not None:
         patch["retention_days"] = int(req.retention_days)
+    if req.perf_logging_enabled is not None:
+        patch["perf_logging_enabled"] = bool(req.perf_logging_enabled)
+    if req.perf_logging_sample_rate is not None:
+        patch["perf_logging_sample_rate"] = float(req.perf_logging_sample_rate)
+    if req.perf_logging_retention_days is not None:
+        patch["perf_logging_retention_days"] = int(req.perf_logging_retention_days)
+    if req.search_max_results is not None:
+        patch["search_max_results"] = int(req.search_max_results)
+    if req.allow_text_regex_fallback is not None:
+        patch["allow_text_regex_fallback"] = bool(req.allow_text_regex_fallback)
     if req.listen_silence_ms_default is not None or req.listen_threshold_default is not None:
         listen_patch: dict[str, Any] = {}
         if req.listen_silence_ms_default is not None:
@@ -2973,8 +3112,9 @@ def admin_metrics_recent(
 ):
     ensure_ready()
     assert_admin_access(user_id, admin_token)
+    source_col = telemetry_col if telemetry_col is not None else metrics_logs_col
     docs = list(
-        metrics_logs_col.find({}, {"_id": 0})
+        source_col.find({}, {"_id": 0})
         .sort("created_at", DESCENDING)
         .limit(limit)
     )
@@ -2991,10 +3131,11 @@ def admin_metrics_summary(
     assert_admin_access(user_id, admin_token)
     now = now_utc()
     since = now - timedelta(hours=24 if window == "24h" else 24 * 7)
+    source_col = telemetry_col if telemetry_col is not None else metrics_logs_col
     docs = list(
-        metrics_logs_col.find(
+        source_col.find(
             {"created_at": {"$gte": since}},
-            {"_id": 0, "metrics": 1, "status": 1, "backend": 1, "model": 1},
+            {"_id": 0, "metrics": 1, "status": 1, "model_backend": 1, "model_name": 1, "backend": 1, "model": 1},
         )
     )
     count = len(docs)
@@ -3111,6 +3252,121 @@ def admin_conversation_search(
         },
         "sessions": sessions,
         "items": items,
+    }
+
+
+@app.get("/admin/search")
+def admin_search(
+    user_id: str = Query(..., min_length=8),
+    q: str = Query(..., min_length=1, max_length=200),
+    mode: str = Query("auto"),
+    since_days: int = Query(7, ge=1, le=365),
+    limit: int | None = Query(None, ge=1, le=200),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    ensure_ready()
+    assert_admin_access(user_id, admin_token)
+    t0 = time.perf_counter()
+    settings = get_admin_settings()
+    default_limit = max(1, min(200, int(settings.get("search_max_results", 50) or 50)))
+    use_limit = max(1, min(200, int(limit or default_limit)))
+    qv = (q or "").strip()
+    mode_norm = (mode or "auto").strip().lower()
+    if mode_norm not in {"auto", "session_id", "user_id", "text"}:
+        mode_norm = "auto"
+    if mode_norm == "auto":
+        if "-" in qv and len(qv.replace("*", "")) >= 6:
+            mode_norm = "session_id"
+        elif qv.startswith("agent") or qv.startswith("user") or qv.startswith("customer"):
+            mode_norm = "user_id"
+        else:
+            mode_norm = "text"
+    cutoff = now_utc() - timedelta(days=since_days)
+    allow_regex_fallback = bool(settings.get("allow_text_regex_fallback", True))
+    docs: list[dict[str, Any]] = []
+    used_text_fallback = False
+
+    if mode_norm in {"session_id", "user_id"}:
+        field = "session_id" if mode_norm == "session_id" else "user_id"
+        pattern = wildcard_to_safe_regex(qv)
+        docs = list(
+            messages_col.find(
+                {
+                    field: {"$regex": pattern.pattern, "$options": "i"},
+                    "created_at": {"$gte": cutoff},
+                },
+                {"_id": 0, "session_id": 1, "user_id": 1, "content": 1, "role": 1, "created_at": 1, "t": 1},
+            )
+            .sort("t", DESCENDING)
+            .limit(use_limit)
+        )
+    else:
+        try:
+            docs = list(
+                messages_col.find(
+                    {"$text": {"$search": qv}, "created_at": {"$gte": cutoff}},
+                    {
+                        "_id": 0,
+                        "session_id": 1,
+                        "user_id": 1,
+                        "content": 1,
+                        "role": 1,
+                        "created_at": 1,
+                        "t": 1,
+                        "score": {"$meta": "textScore"},
+                    },
+                )
+                .sort([("score", {"$meta": "textScore"}), ("t", DESCENDING)])
+                .limit(use_limit)
+            )
+        except Exception:
+            docs = []
+        if not docs and allow_regex_fallback:
+            used_text_fallback = True
+            docs = list(
+                messages_col.find(
+                    {
+                        "content": {"$regex": re.escape(qv), "$options": "i"},
+                        "created_at": {"$gte": cutoff},
+                    },
+                    {"_id": 0, "session_id": 1, "user_id": 1, "content": 1, "role": 1, "created_at": 1, "t": 1},
+                )
+                .sort("t", DESCENDING)
+                .limit(use_limit)
+            )
+
+    matches: list[dict[str, Any]] = []
+    for d in docs:
+        sid = str(d.get("session_id") or "")
+        uid = str(d.get("user_id") or "")
+        ts = dt_iso(d.get("t") or d.get("created_at"))
+        snippet = first_words(str(d.get("content") or ""), 24)
+        score = d.get("score")
+        match = {
+            "session_id": sid,
+            "user_id": uid,
+            "last_ts": ts,
+            "snippet": snippet,
+            "match_type": mode_norm,
+        }
+        if score is not None:
+            try:
+                match["score"] = float(score)
+            except Exception:
+                pass
+        matches.append(match)
+
+    took_ms = max(0, int((time.perf_counter() - t0) * 1000))
+    return {
+        "matches": matches,
+        "meta": {
+            "mode_used": mode_norm,
+            "limit": use_limit,
+            "since_days": since_days,
+            "used_text_regex_fallback": used_text_fallback,
+            "took_ms": took_ms,
+            "count": len(matches),
+        },
     }
 
 
@@ -3398,6 +3654,11 @@ def chat_text(req: TextChatRequest):
         transcript=text,
         answer=answer,
         status="ok",
+        direction="agent_to_customer",
+        agent_lang_ui=agent_lang_ui,
+        customer_lang_ui=customer_lang_ui,
+        chat=True,
+        translation_used=((agent_dual_lane.get("customer") or {}).get("text") or answer) != answer,
     )
     session_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
     handoff = get_handoff_state(session_doc)
@@ -3521,6 +3782,11 @@ async def voice(
             transcript=transcript,
             answer=answer,
             status="error",
+            direction="customer_to_agent",
+            agent_lang_ui=agent_lang_ui,
+            customer_lang_ui=customer_lang_ui,
+            voice=True,
+            translation_used=((customer_dual_lane.get("agent") or {}).get("text") or transcript) != transcript if 'customer_dual_lane' in locals() else False,
             error_code=error_code,
             error_detail=detail or error,
         )
@@ -3849,6 +4115,11 @@ async def voice(
                 transcript=transcript,
                 answer=answer,
                 status="ok",
+                direction="agent_to_customer",
+                agent_lang_ui=agent_lang_ui,
+                customer_lang_ui=customer_lang_ui,
+                voice=True,
+                translation_used=((agent_dual_lane.get("customer") or {}).get("text") or answer) != answer,
             )
             session_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
             handoff = get_handoff_state(session_doc)
@@ -3918,6 +4189,11 @@ async def voice(
             transcript=transcript,
             answer=answer,
             status="ok",
+            direction="agent_to_customer",
+            agent_lang_ui=agent_lang_ui,
+            customer_lang_ui=customer_lang_ui,
+            voice=True,
+            translation_used=((agent_dual_lane.get("customer") or {}).get("text") or answer) != answer,
         )
         session_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
         handoff = get_handoff_state(session_doc)

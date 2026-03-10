@@ -151,3 +151,10 @@ Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-
 2. Auto-send ist AN.
 3. Upload startet automatisch.
 4. Agent bekommt die Nachricht live im Agent-Lane-Text (z. B. Englisch), Kunde bekommt Antwort in Kundensprache.
+
+## Neu in V9.1.8: Stabilerer Betrieb im Hintergrund
+- Fuer Benutzer bleibt der Ablauf gleich.
+- Im Hintergrund kann ein Admin jetzt Diagnosen gezielt ein-/ausschalten und Sessions schneller finden.
+- Vorteil fuer Nutzer:
+  - schnellere Fehleranalyse bei Stoerungen
+  - weniger Unterbrechungen im Live-Betrieb.

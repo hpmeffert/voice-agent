@@ -244,3 +244,34 @@ Ziel: Agent bekommt bei DE->EN im Voice-Fall dieselbe EN-Lane wie im Chat-Fall.
    - `text_for_agent` EN
    - `lang_for_agent=en`
    - `tts.agent_lang=en`
+
+## Neu in V9.1.8 (Admin): Performance Toggle + Search
+- Neue Admin-Parameter:
+  - `perf_logging_enabled`
+  - `perf_logging_sample_rate` (0.0 bis 1.0)
+  - `perf_logging_retention_days`
+  - `search_max_results`
+  - `allow_text_regex_fallback`
+- Neue API-Suche:
+  - `GET /api/admin/search?user_id=...&q=...&mode=auto|session_id|user_id|text&since_days=7&limit=50`
+- Neue Logging-Collection:
+  - `admin_perf_logs` (separat von `messages`).
+
+### Schnelltest fuer Admins
+1. Admin Settings oeffnen, `perf_logging_enabled=AN`, speichern.
+2. Eine kurze Unterhaltung starten.
+3. Suche testen:
+   - Teil-Session-ID mit `*` (z. B. `abc123*`)
+   - Textfragment (z. B. `breaker`)
+4. Treffer mit `Open Session` oeffnen.
+5. `perf_logging_enabled=AUS` setzen.
+
+### Automatisierter Testlauf
+```bash
+bash scripts/run_v9_1_8_admin_tests.sh
+```
+- Artefakte liegen in `v9/artifacts/<timestamp>/`.
+- ZIP-Helfer:
+```bash
+bash v9/scripts/zip_artifacts.sh v9/artifacts/<timestamp>
+```

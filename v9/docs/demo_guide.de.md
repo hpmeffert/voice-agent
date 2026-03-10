@@ -113,3 +113,12 @@ Stellen Sie sich vor: Sie wollen bewusst eine andere Kundensprache ausliefern (z
   - weniger Klicks
   - weniger Bedienfehler
   - schnellerer Gespraechsfluss.
+
+## V9.1.8 Demo Fokus
+- Admin aktiviert kurz `Perf logging enabled` fuer ein Demo-Fenster.
+- Fuehren Sie eine kurze Konversation durch.
+- Oeffnen Sie die Admin-Suche:
+  - erst Teil-Session-ID (`*`)
+  - dann Textfragment.
+- Oeffnen Sie den Treffer mit `Open Session` und zeigen Sie den direkten Sprung.
+- Danach Logging wieder deaktivieren.

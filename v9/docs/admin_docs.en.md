@@ -244,3 +244,34 @@ Goal: DE->EN voice traffic produces the same EN agent lane as DE->EN chat traffi
    - `text_for_agent` in EN
    - `lang_for_agent=en`
    - `tts.agent_lang=en`
+
+## New in V9.1.8 (Admin): Performance Toggle + Search
+- New admin parameters:
+  - `perf_logging_enabled`
+  - `perf_logging_sample_rate` (0.0 to 1.0)
+  - `perf_logging_retention_days`
+  - `search_max_results`
+  - `allow_text_regex_fallback`
+- New admin search API:
+  - `GET /api/admin/search?user_id=...&q=...&mode=auto|session_id|user_id|text&since_days=7&limit=50`
+- New logging collection:
+  - `admin_perf_logs` (separate from `messages`).
+
+### Quick admin test
+1. Open Admin Settings, set `perf_logging_enabled=ON`, save.
+2. Run one short conversation.
+3. Test search:
+   - partial session id with `*` (example: `abc123*`)
+   - text fragment (example: `breaker`)
+4. Open a hit using `Open Session`.
+5. Set `perf_logging_enabled=OFF`.
+
+### Automated test run
+```bash
+bash scripts/run_v9_1_8_admin_tests.sh
+```
+- Artifacts are written to `v9/artifacts/<timestamp>/`.
+- ZIP helper:
+```bash
+bash v9/scripts/zip_artifacts.sh v9/artifacts/<timestamp>
+```

@@ -151,3 +151,10 @@ If customer language is detected, the response language and customer voice profi
 2. Auto-send is ON.
 3. Upload starts automatically.
 4. Agent receives live agent-lane text (for example English), customer receives response in customer language.
+
+## New in V9.1.8: More stable operations behind the scenes
+- User flow stays the same.
+- In the background, admins can now enable/disable diagnostics and find sessions faster.
+- User-facing benefit:
+  - faster troubleshooting
+  - fewer interruptions during live operation.

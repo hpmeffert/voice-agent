@@ -108,3 +108,12 @@ Imagine: supervisor wants to force a specific output language for verification.
   - fewer clicks
   - fewer operator errors
   - faster live conversation flow.
+
+## V9.1.8 Demo Focus
+- Admin enables `Perf logging enabled` only for a short demo window.
+- Run one short conversation.
+- Open Admin Search:
+  - first partial session id (`*`)
+  - then text fragment search.
+- Open a hit using `Open Session` and show direct navigation.
+- Turn logging OFF again after the demo.
