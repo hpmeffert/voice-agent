@@ -22,3 +22,12 @@ voices/
 # audio outputs
 *.wav
 /tmp/
+
+# test artifacts / evidence packs
+artifacts/
+output/
+test_artifacts/
+*.zip
+*.log
+session_dump*.json
+ENV_SNAPSHOT*.txt

@@ -179,7 +179,10 @@ Sie erhalten immer sechs Zeilen:
 Wenn `RESULT: PASS` steht, ist das Dual-Lane-Routing fuer diesen Lauf korrekt.
 
 ### Wo die Artefakte liegen
-- Ordner: `artifacts/v9_ws_<timestamp>/`
+- Aktueller Lauf: `artifacts/runs/<run_id>/`
+- Letzter Lauf (Schnellzugriff): `artifacts/latest/`
+- Lauf-ZIP: `artifacts/runs/artifacts-<run_id>.zip`
+- Aufbewahrung: standardmaessig bleiben nur die neuesten `10` Laeufe (`RETAIN_RUNS=10`).
 - Pflichtdateien:
   - `test-log-v9.1.5.txt`
   - `SUMMARY.md`
@@ -188,7 +191,14 @@ Wenn `RESULT: PASS` steht, ist das Dual-Lane-Routing fuer diesen Lauf korrekt.
   - `docker-logs-api.txt`, `docker-logs-web-agent.txt`, `docker-logs-web-customer.txt`
   - `ENV_SNAPSHOT.txt`
   - `session_dump.json`
-  - `artifacts.zip`
+  - `artifacts.zip` (im Laufordner) und `artifacts-<run_id>.zip` (unter `artifacts/runs/`)
+
+### Release-Evidence-Regel (wichtig)
+- `artifacts/` bleibt lokaler Arbeitsbereich.
+- Evidence-ZIPs, Logs und Env-Snapshots werden nicht in Git versioniert.
+- Fuer release-relevante Nachweise laden Sie nur 1-3 ZIPs als GitHub-Release-Assets hoch (z. B. FAIL, FIX, PASS).
+- Beispiel-Upload:
+  - `gh release upload v9.1.5 artifacts/runs/artifacts-v9.1.5-YYYYMMDD-HHMMSS.zip`
 
 ### FAIL schnell verstehen
 - `scenario*_eventual_delivery_failed`: Event kam zu spaet (>10s) oder gar nicht.

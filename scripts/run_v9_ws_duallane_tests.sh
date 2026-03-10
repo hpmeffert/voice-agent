@@ -8,6 +8,7 @@ FAST_SEC="${FAST_SEC:-2}"
 EVENTUAL_SEC="${EVENTUAL_SEC:-20}"
 PROBE_DURATION_SEC="${PROBE_DURATION_SEC:-120}"
 PATCH_LABEL="${PATCH_LABEL:-V9.1.5-fix-voice-duallane}"
+RETAIN_RUNS="${RETAIN_RUNS:-10}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -18,9 +19,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-TS="$(date -u +%Y%m%d_%H%M%S)"
-ART_DIR="${OUT_ROOT%/}/v9_ws_${TS}"
-mkdir -p "$ART_DIR"
+TS="$(date -u +%Y%m%d-%H%M%S)"
+OUT_ROOT="${OUT_ROOT%/}"
+OUT_RUNS_DIR="${OUT_ROOT}/runs"
+OUT_LATEST_DIR="${OUT_ROOT}/latest"
+RUN_ID="${RUN_ID:-v9.1.5-${TS}}"
+ART_DIR="${OUT_RUNS_DIR}/${RUN_ID}"
+RUN_ZIP="${OUT_RUNS_DIR}/artifacts-${RUN_ID}.zip"
+mkdir -p "$ART_DIR" "$OUT_LATEST_DIR"
 
 AGENT_WS_BASE="${AGENT_URL/http:/ws:}/api/ws/session"
 CUSTOMER_WS_BASE="${CUSTOMER_URL/http:/ws:}/api/ws/session"
@@ -487,6 +493,52 @@ if fails:
 PY
 
 ( cd "$ART_DIR" && zip -qr artifacts.zip . )
+cp -f "$ART_DIR/artifacts.zip" "$RUN_ZIP"
 
-echo "Artifacts: $ART_DIR"
+# Refresh latest/ snapshot to simplify manual testing workflow.
+find "$OUT_LATEST_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+cp -R "$ART_DIR"/. "$OUT_LATEST_DIR"/
+
+# Retention: keep only the newest N runs and run-zips.
+python3 - <<PY
+from pathlib import Path
+import shutil
+
+runs_dir = Path("$OUT_RUNS_DIR")
+root_dir = Path("$OUT_ROOT")
+keep = int("$RETAIN_RUNS")
+
+dirs = [p for p in runs_dir.iterdir() if p.is_dir()]
+dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+for old in dirs[keep:]:
+    shutil.rmtree(old, ignore_errors=True)
+
+zips = [p for p in runs_dir.iterdir() if p.is_file() and p.name.startswith("artifacts-") and p.suffix == ".zip"]
+zips.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+for old in zips[keep:]:
+    try:
+        old.unlink()
+    except FileNotFoundError:
+        pass
+
+# Legacy cleanup from older layouts in artifacts/ root.
+legacy_dirs = []
+for pat in ("v9_ws_*", "v9_duallane_run_*", "voice_debug_*", "release_gate_v*"):
+    legacy_dirs.extend([p for p in root_dir.glob(pat) if p.is_dir()])
+legacy_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+for old in legacy_dirs[keep:]:
+    shutil.rmtree(old, ignore_errors=True)
+
+legacy_zips = [p for p in root_dir.glob("artifacts-v*.zip") if p.is_file()]
+legacy_zips.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+for old in legacy_zips[keep:]:
+    try:
+        old.unlink()
+    except FileNotFoundError:
+        pass
+PY
+
+echo "Artifacts run dir: $ART_DIR"
+echo "Artifacts latest: $OUT_LATEST_DIR"
+echo "Artifacts zip: $RUN_ZIP"
 exit "$PY_EXIT"

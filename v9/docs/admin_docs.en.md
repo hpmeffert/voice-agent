@@ -179,7 +179,10 @@ You always get six lines:
 If `RESULT: PASS`, dual-lane routing is correct for this run.
 
 ### Where artifacts are stored
-- Folder: `artifacts/v9_ws_<timestamp>/`
+- Current run folder: `artifacts/runs/<run_id>/`
+- Latest pointer folder: `artifacts/latest/`
+- Run ZIP: `artifacts/runs/artifacts-<run_id>.zip`
+- Retention: only the newest `10` runs are kept by default (`RETAIN_RUNS=10`).
 - Required files:
   - `test-log-v9.1.5.txt`
   - `SUMMARY.md`
@@ -188,7 +191,14 @@ If `RESULT: PASS`, dual-lane routing is correct for this run.
   - `docker-logs-api.txt`, `docker-logs-web-agent.txt`, `docker-logs-web-customer.txt`
   - `ENV_SNAPSHOT.txt`
   - `session_dump.json`
-  - `artifacts.zip`
+  - `artifacts.zip` (inside run folder) and `artifacts-<run_id>.zip` (in `artifacts/runs/`)
+
+### Release evidence policy (important)
+- Keep `artifacts/` as local working storage only.
+- Do not commit evidence ZIPs, logs, or env snapshots into Git history.
+- For release-relevant runs, upload only 1-3 ZIPs as GitHub Release Assets (for example: FAIL, FIX, PASS).
+- Example upload command:
+  - `gh release upload v9.1.5 artifacts/runs/artifacts-v9.1.5-YYYYMMDD-HHMMSS.zip`
 
 ### How to read FAIL quickly
 - `scenario*_eventual_delivery_failed`: event arrived too late (>10s) or not at all.
