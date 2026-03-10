@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Customer V9.1.0</title>
+  <title>Voice Agent Customer V9.1.2</title>
   <style>
     body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
     .wrap { max-width: 920px; margin: 20px auto; padding: 0 14px; }
@@ -28,7 +28,7 @@
     <div class="card">
       <div class="hd">
         <div>
-          <b>Voice Agent Customer V9.1.0</b>
+          <b>Voice Agent Customer V9.1.2</b>
           <div class="status" id="status">idle</div>
         </div>
         <div class="status" id="ids">-</div>
@@ -119,8 +119,6 @@ function addMsg(cls, title, text){ const d = document.createElement('div'); d.cl
 function selectedCustomerLang(){
   const v = (customerLangEl.value || '').toLowerCase();
   if (v && v !== 'auto') return v;
-  const t = (ttsLangEl.value || '').toLowerCase();
-  if (t && t !== 'auto') return t;
   return '';
 }
 function wsUrl(path){ const proto = location.protocol === 'https:' ? 'wss' : 'ws'; return `${proto}://${location.host}${path}`; }

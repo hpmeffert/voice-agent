@@ -1,4 +1,4 @@
-# Release Notes (DE) - V7.0.0 bis V9.1.0
+# Release Notes (DE) - V7.0.0 bis V9.1.5
 
 ## Historie
 - V7.0.0: V7-Scaffold isoliert, eigene Ports, Admin-Demo-Defaults.
@@ -18,8 +18,50 @@
 - V8.10.2: TTS-Output-Translation inkl. Agent->Kunde Uebersetzung.
 - V9.0.0: Help System v2, bilinguale DE/EN-Doku, `/api/docs`, Version sichtbar in Header+Menue, Agent-Muttersprache (DE/EN/NO/SV/FI) mit persistierten Agent-Prefs.
 - V9.1.0: Dual-Lane-Sprachrouting (`agent`-Lane + `customer`-Lane) mit expliziter TTS-Bindung (`tts.agent_*`, `tts.customer_*`), WS-Lang-Persistenz (`customer_lang_ui_last`, `agent_lang_ui_last`) und sicherer Verhinderung von falscher Sprachausgabe.
+- V9.1.1: TTS-Text-Sanitizer am Ausgabepunkt; entfernt Markdown-/Control-Zeichen fuer Sprache, ohne Dual-Lane-Routing oder gespeicherte Transkripte zu veraendern.
+- V9.1.2: Agent-UI Auto-Refresh (Inbox), robuster WS-Reconnect und optionaler Anzeige-Filter fuer Sonderzeichen im Chat (nur UI-Darstellung).
+- V9.1.5: WS-Dual-Lane-Test-Hardening mit Artefakt-Nachweisen, robusten Eventual-Delivery-Checks (10s) und Lane-Observability-Metadaten (`event_id`, `event_ts`, `lane.*`, `text_for_*`, `lang_for_*`) fuer eindeutige Fehleranalyse.
+- V9.1.5-fix-voice-duallane: Voice-Paritaetsfix, damit Voice denselben live `message.created` Dual-Lane-Vertrag wie Chat nutzt; behebt fehlende Agent-Lane-Uebersetzung bei Voice-Faellen und behaelt die strikte TTS-Lane-Bindung.
 
 ## Nutzen von V9.1.0
 - Keine falsche Sprache mehr im Agenten- und Kunden-TTS-Pfad.
 - Jede Nachricht hat klare Empfaenger-Lanes: Original, Agent-Ansicht, Kunden-Ansicht.
 - TTS liest nur noch explizit vorgesehene Felder und nie versehentlich den falschen Text.
+
+## Nutzen von V9.1.2
+- Agent-Inbox aktualisiert sich automatisch, neue/veraenderte Sessions werden ohne manuelles Refresh sichtbar.
+- WS-Reconnect stabilisiert Live-Updates nach kurzen Verbindungsabbruechen.
+- Chat-Anzeige kann Sonderzeichen (z. B. Markdown-Marker) ausblenden, ohne TTS/Backend-Logik zu veraendern.
+
+## Nutzen von V9.1.5
+- Testlaeufe trennen jetzt `fast_delivery_ok` und `eventual_delivery_ok`, damit lokale Modell-Laufzeiten keine falschen Negativmeldungen mehr erzeugen.
+- Jeder Lauf erzeugt ein vollstaendiges Artefaktpaket (`artifacts.zip`, SUMMARY, WS-Eventspuren, ENV-Snapshot, Docker-Logs) fuer reproduzierbare Analyse.
+- WS-Events liefern Lane-Zusammenfassungen + IDs, damit Admins die Uebersetzungsdurchsetzung pro Empfaengerrolle eindeutig nachweisen koennen.
+
+## Release Gate - V9.1.5-fix-voice-duallane (Finale Verifikation)
+- Gate-Resultat: **PASS** (automatisierte WS-Suite + Voice-Pfad-Nachweis).
+- Kernnachweis aus den aufgezeichneten Events:
+  - Customer-Voice (DE) bleibt als `text_original=Meine Wallbox geht aus.` erhalten und wird in die Agent-Lane als `text_for_agent=My wallbox is out.` mit `lang_for_agent=en` und `tts_lang_agent=en` geroutet.
+  - Agent-Antwort (EN) wird in die Customer-Lane als deutscher Text mit `lang_for_customer=de` und `tts_lang_customer=de` geroutet.
+- Artefakte fuer Review:
+  - `artifacts/SUMMARY.md`
+  - `artifacts/test-log-v9.1.5-ws.txt`
+  - `artifacts/test-log-v9.1.5.txt`
+  - `artifacts/ws_agent_events.jsonl`
+  - `artifacts/ws_customer_events.jsonl`
+  - `artifacts-v9.1.5-final.zip`
+
+### 2-Minuten Browser-Checkliste (manuell)
+1. Agent UI: Sprache `en`, Incoming Speak `AN`.
+2. Customer UI: Sprache `de`.
+3. Kunde sendet/spricht einen deutschen Text.
+4. Pruefen: Agent sieht Original + englische Lane und hoert nur die englische Lane.
+5. Agent antwortet auf Englisch.
+6. Pruefen: Kunde erhaelt/hoert nur die deutsche Lane.
+
+### Lizenzhinweis
+- In diesem Release-Gate-Lauf wurden keine neuen Runtime-Abhaengigkeiten eingefuehrt.
+- Kommerzialisierungs-Guardrails unveraendert:
+  - permissive OSS in Core bevorzugt
+  - kein GPL/AGPL-Zuwachs im Core Runtime
+  - copyleft-Komponenten bleiben als Sidecar isoliert.

@@ -111,3 +111,31 @@ If customer language is detected, the response language and customer voice profi
 - Agent-side playback now uses only `tts.agent_text`.
 - Customer-side playback now uses only `tts.customer_text`.
 - This prevents cases where source text is spoken in the wrong voice/language.
+
+## New in V9.1.1: TTS Cleanup
+- TTS now strips markdown formatting symbols (e.g., `*`, `**`, backticks) before speech output.
+- This affects audio output only, not stored or displayed text.
+
+## New in V9.1.2: Agent inbox auto-refresh + display cleanup
+- Agent UI now provides `Auto-Refresh` for inbox updates (default: on, 5 seconds).
+- New activity appears in inbox without manual refresh.
+- New toggle: `Display cleanup (hide formatting symbols)`.
+  - This is display-only in chat.
+  - Routing, translation, stored data, and TTS fields are unchanged.
+
+## New in V9.1.5-fix-voice-duallane: Voice = Chat parity fix
+- Voice input now emits the same live `message.created` contract as chat input.
+- When languages differ, the agent reliably gets translated agent-lane text.
+- TTS remains strictly lane-bound:
+  - Agent side speaks only `tts.agent_*`
+  - Customer side speaks only `tts.customer_*`
+- Debug payload now exposes effective source-language hints for faster diagnostics.
+
+### 2-minute parity check
+1. Agent: language `en`, Incoming Speak `ON`.
+2. Customer: language `de`, speak the wallbox sentence.
+3. Expected:
+   - Agent sees `Original (DE)` + `Translation (EN)` live.
+   - Agent hears EN.
+4. Agent replies EN.
+5. Customer sees/hears DE.

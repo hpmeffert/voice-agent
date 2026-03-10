@@ -150,3 +150,72 @@ Bei jeder neuen Version muessen User Guide, Demo Guide und Admin Docs den aktuel
   - `meta.customer_lang_ui_last`
   - `meta.agent_lang_ui_last`
 - Kunden-Client hat Dropdown `Kundensprache`; diese wird beim WS-Connect als `customer_lang` uebergeben.
+
+## Neu in V9.1.1 (Admin)
+- TTS-Sanitize laeuft nur am Audio-Ausgabepunkt.
+- Persistente Daten (Messages/CRM-Exports) bleiben unveraendert.
+- Regressionstest: `v9/scripts/test_tts_sanitize.py` und `v9/scripts/run_tests_v9.1.1.sh`.
+
+## Neu in V9.1.2 (Admin)
+- Agent-UI hat `Auto-Refresh` fuer Inbox-Updates (Intervall 5 Sekunden, per LocalStorage steuerbar).
+- WS-Reconnect im Agent-Client reduziert Aussetzer bei kurzzeitigen Netzwerkabbruechen.
+- `Anzeige bereinigen` wirkt nur auf den sichtbaren Text im Agent-Chat und nicht auf persistente Daten.
+
+## Neu in V9.1.5 (Admin): WS-Testautomation + Nachweise
+### Automatischen Nachweis-Test starten
+```bash
+bash scripts/run_v9_ws_duallane_tests.sh --agent_url http://localhost:8087 --customer_url http://localhost:8086 --out artifacts
+```
+
+### Was "PASS" bedeutet
+Sie erhalten immer sechs Zeilen:
+1. `COMMIT`
+2. `RESULT`
+3. `SCENARIO1` (Kunde -> Agent)
+4. `SCENARIO2` (Agent -> Kunde)
+5. `SCENARIO3` (zweite Kundenrunde mit Antwort)
+6. `P95_MS`
+
+Wenn `RESULT: PASS` steht, ist das Dual-Lane-Routing fuer diesen Lauf korrekt.
+
+### Wo die Artefakte liegen
+- Ordner: `artifacts/v9_ws_<timestamp>/`
+- Pflichtdateien:
+  - `test-log-v9.1.5.txt`
+  - `SUMMARY.md`
+  - `ws_probe_status.json`
+  - `events-agent.jsonl`, `events-customer.jsonl`
+  - `docker-logs-api.txt`, `docker-logs-web-agent.txt`, `docker-logs-web-customer.txt`
+  - `ENV_SNAPSHOT.txt`
+  - `session_dump.json`
+  - `artifacts.zip`
+
+### FAIL schnell verstehen
+- `scenario*_eventual_delivery_failed`: Event kam zu spaet (>10s) oder gar nicht.
+- `*_translation_not_applied_when_langs_differ`: Quell- und Zielsprache sind verschieden, aber die Ziel-Lane wurde nicht uebersetzt.
+- `*_lang_*_not_*`: falsche Empfaengersprache wurde erzeugt.
+
+### Neue WS-Debugfelder (fuer klare Analyse)
+Jedes `message.created`-Event enthaelt jetzt:
+- `event_id`, `event_ts`
+- `text_for_agent`, `lang_for_agent`
+- `text_for_customer`, `lang_for_customer`
+- `lane.agent.lang`, `lane.agent.has_translation`, `lane.agent.text_preview`
+- `lane.customer.lang`, `lane.customer.has_translation`, `lane.customer.text_preview`
+
+## Neu in V9.1.5-fix-voice-duallane (Admin)
+- Voice-Events verwenden jetzt denselben Live-Eventtyp wie Chat: `message.created`.
+- Voice aktualisiert Session-Meta fuer Sprache robust:
+  - STT-Sprache
+  - textbasierte Erkennung
+  - effektive Routing-Sprache
+- Ziel: Agent bekommt bei DE->EN im Voice-Fall dieselbe EN-Lane wie im Chat-Fall.
+
+### Pflicht-Test \"Voice vs Chat parity\"
+1. Agent `en`, Kunde `de`.
+2. Einmal Chat senden (DE), einmal Voice senden (DE).
+3. In beiden Faellen muss im Agent-Event gelten:
+   - `text_original` DE
+   - `text_for_agent` EN
+   - `lang_for_agent=en`
+   - `tts.agent_lang=en`

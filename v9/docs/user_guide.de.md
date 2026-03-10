@@ -111,3 +111,31 @@ Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-
 - Die Sprachausgabe beim Agenten nutzt nur noch `tts.agent_text`.
 - Die Sprachausgabe beim Kunden nutzt nur noch `tts.customer_text`.
 - Dadurch wird verhindert, dass z. B. deutscher Originaltext mit englischer Stimme gesprochen wird.
+
+## Neu in V9.1.1: TTS Cleanup
+- TTS entfernt jetzt Markdown-Formatierungszeichen (z. B. `*`, `**`, Backticks) vor der Sprachausgabe.
+- Das betrifft nur Audio-Ausgabe, nicht gespeicherten oder angezeigten Text.
+
+## Neu in V9.1.2: Agent-Inbox Auto-Refresh + Anzeige-Bereinigung
+- Der Agent-Client hat jetzt `Auto-Refresh` fuer die Inbox (Standard: an, 5 Sekunden).
+- Wenn eine Session neue Aktivitaet hat, wird sie schneller in der Inbox sichtbar.
+- Neuer Schalter: `Anzeige bereinigen (Sonderzeichen ausblenden)`.
+  - Nur die Chat-Anzeige wird bereinigt.
+  - Routing, Uebersetzung, gespeicherte Daten und TTS-Felder bleiben unveraendert.
+
+## Neu in V9.1.5-fix-voice-duallane: Voice = Chat (Paritaetsfix)
+- Voice-Eingaben nutzen jetzt denselben `message.created`-Live-Vertrag wie Chat.
+- Bei unterschiedlicher Sprache bekommt der Agent garantiert die Agent-Lane-Uebersetzung.
+- TTS bleibt strikt lane-gebunden:
+  - Agent spricht nur `tts.agent_*`
+  - Kunde spricht nur `tts.customer_*`
+- Fuer Debugging gibt es zusaetzlich klare Felder wie `source_lang_effective` im Event-Debug.
+
+### Schnelltest (2 Minuten)
+1. Agent: Sprache `en`, Incoming Speak `AN`.
+2. Kunde: Sprache `de`, spricht den Satz zur Wallbox.
+3. Erwartung:
+   - Agent sieht `Original (DE)` + `Uebersetzung (EN)` live.
+   - Agent hoert EN.
+4. Agent antwortet EN.
+5. Kunde sieht/hoert DE.

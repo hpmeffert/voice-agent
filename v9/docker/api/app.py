@@ -29,7 +29,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v9.1.0"
+APP_VERSION = "v9.1.2"
 
 app = FastAPI(
     title=f"Voice Agent API {APP_VERSION}",
@@ -1237,12 +1237,69 @@ def publish_session_event(
 ) -> None:
     if event_bus is None:
         return
+    normalized_payload = dict(payload or {})
+    text_original = str(normalized_payload.get("text_original") or normalized_payload.get("text") or "").strip()
+    lane_agent = normalized_payload.get("agent") if isinstance(normalized_payload.get("agent"), dict) else {}
+    lane_customer = (
+        normalized_payload.get("customer") if isinstance(normalized_payload.get("customer"), dict) else {}
+    )
+    agent_text = str(
+        normalized_payload.get("text_for_agent")
+        or lane_agent.get("text")
+        or normalized_payload.get("text_translated")
+        or normalized_payload.get("text")
+        or ""
+    ).strip()
+    customer_text = str(
+        normalized_payload.get("text_for_customer") or lane_customer.get("text") or normalized_payload.get("text") or ""
+    ).strip()
+    agent_lang = str(normalized_payload.get("lang_for_agent") or lane_agent.get("lang") or normalized_payload.get("agent_lang") or "").strip().lower()
+    customer_lang = str(
+        normalized_payload.get("lang_for_customer")
+        or lane_customer.get("lang")
+        or normalized_payload.get("customer_lang")
+        or normalized_payload.get("tts_lang")
+        or ""
+    ).strip().lower()
+    has_agent_translation = bool(text_original and agent_text and agent_text != text_original)
+    has_customer_translation = bool(text_original and customer_text and customer_text != text_original)
+    normalized_payload["text_for_agent"] = agent_text
+    normalized_payload["lang_for_agent"] = agent_lang
+    normalized_payload["text_for_customer"] = customer_text
+    normalized_payload["lang_for_customer"] = customer_lang
+    normalized_payload["agent"] = {"text": agent_text, "lang": agent_lang}
+    normalized_payload["customer"] = {"text": customer_text, "lang": customer_lang}
+    lane_tts = normalized_payload.get("tts") if isinstance(normalized_payload.get("tts"), dict) else {}
+    lane_tts["agent_text"] = lane_tts.get("agent_text") or agent_text
+    lane_tts["agent_lang"] = lane_tts.get("agent_lang") or agent_lang
+    lane_tts["customer_text"] = lane_tts.get("customer_text") or customer_text
+    lane_tts["customer_lang"] = lane_tts.get("customer_lang") or customer_lang
+    normalized_payload["tts"] = lane_tts
+    normalized_payload["tts_lang_agent"] = str(lane_tts.get("agent_lang") or agent_lang or "").strip().lower()
+    normalized_payload["tts_lang_customer"] = str(
+        lane_tts.get("customer_lang") or customer_lang or ""
+    ).strip().lower()
+    normalized_payload["lane"] = {
+        "agent": {
+            "lang": agent_lang,
+            "has_translation": has_agent_translation,
+            "text_preview": agent_text[:120],
+        },
+        "customer": {
+            "lang": customer_lang,
+            "has_translation": has_customer_translation,
+            "text_preview": customer_text[:120],
+        },
+    }
+    event_ts = now_utc().isoformat()
     event = {
+        "event_id": str(uuid.uuid4()),
+        "event_ts": event_ts,
         "type": event_type,
         "session_id": session_id,
         "from": from_actor,
-        "payload": payload,
-        "ts": now_utc().isoformat(),
+        "payload": normalized_payload,
+        "ts": event_ts,
     }
     try:
         event_bus.publish(session_channel_key(session_id), event)
@@ -1316,6 +1373,14 @@ def get_session_lane_langs(
     return customer_lang_ui, agent_lang_ui
 
 
+def has_persisted_customer_ui_lang(session_doc: dict[str, Any] | None) -> bool:
+    meta = (session_doc or {}).get("meta") if isinstance(session_doc, dict) else {}
+    if not isinstance(meta, dict):
+        return False
+    lang = str(meta.get("customer_lang_ui_last") or "").strip().lower()
+    return lang in set(SUPPORTED_TTS_LANGS)
+
+
 def persist_session_lane_langs(
     session_id: str,
     *,
@@ -1377,7 +1442,10 @@ def build_dual_lane_event(
             event["agent"]["text"] = translated or source_text
         else:
             event["agent"]["text"] = source_text
-        event["tts"]["agent_text"] = event["agent"]["text"]
+        try:
+            event["tts"]["agent_text"] = sanitize_tts_text(event["agent"]["text"])
+        except Exception:
+            event["tts"]["agent_text"] = event["agent"]["text"]
         event["tts"]["agent_lang"] = event["agent"]["lang"]
     else:
         agent_source_lang = lang_original if lang_original != "und" else agent_lang_ui
@@ -1394,7 +1462,10 @@ def build_dual_lane_event(
             event["customer"]["text"] = translated or source_text
         else:
             event["customer"]["text"] = source_text
-        event["tts"]["customer_text"] = event["customer"]["text"]
+        try:
+            event["tts"]["customer_text"] = sanitize_tts_text(event["customer"]["text"])
+        except Exception:
+            event["tts"]["customer_text"] = event["customer"]["text"]
         event["tts"]["customer_lang"] = event["customer"]["lang"]
 
     if canonical_enabled and pivot_lang:
@@ -1651,6 +1722,38 @@ def translate_answer_text(
         return translated_retry or translated or source
     except Exception:
         return source
+
+
+def sanitize_tts_text(text: str) -> str:
+    source = str(text or "")
+    if not source:
+        return ""
+    s = source.replace("\r\n", "\n").replace("\r", "\n")
+    s = re.sub(r"[\x00-\x08\x0B-\x1F\x7F]", "", s)
+
+    # Remove fenced code markers while keeping inner content.
+    s = re.sub(r"```[a-zA-Z0-9_-]*\n?", "", s)
+    s = s.replace("```", "")
+
+    # Remove inline code markers.
+    s = re.sub(r"`([^`]+)`", r"\1", s)
+
+    # Remove paired markdown emphasis wrappers.
+    s = re.sub(r"\*\*([^\n*]+)\*\*", r"\1", s)
+    s = re.sub(r"\*([^\n*]+)\*", r"\1", s)
+    s = re.sub(r"__([^\n_]+)__", r"\1", s)
+    s = re.sub(r"_([^\n_]+)_", r"\1", s)
+
+    cleaned_lines: list[str] = []
+    for line in s.split("\n"):
+        line = re.sub(r"^\s*[-*•]\s+", "", line)
+        line = re.sub(r"^\s*\d+[.)]\s+", "", line)
+        cleaned_lines.append(line)
+    s = "\n".join(cleaned_lines)
+
+    s = re.sub(r"[ \t]{2,}", " ", s)
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s.strip()
 
 
 def generate_crm_summary(
@@ -2300,6 +2403,7 @@ async def ws_session_stream(
     customer_lang: str = Query(""),
 ):
     await websocket.accept()
+    pubsub = None
     try:
         session_doc = sessions_col.find_one({"_id": session_id}, {"meta": 1}) if sessions_col is not None else None
         customer_lang_ui, agent_lang_ui = get_session_lane_langs(
@@ -2307,7 +2411,17 @@ async def ws_session_stream(
             agent_lang_hint=agent_lang,
             customer_lang_hint=customer_lang,
         )
-        persist_session_lane_langs(session_id, customer_lang_ui=customer_lang_ui, agent_lang_ui=agent_lang_ui)
+        explicit_customer_lang = str(customer_lang or "").strip().lower()
+        explicit_agent_lang = str(agent_lang or "").strip().lower()
+        if explicit_customer_lang or explicit_agent_lang:
+            persist_session_lane_langs(
+                session_id,
+                customer_lang_ui=(customer_lang_ui if explicit_customer_lang else None),
+                agent_lang_ui=(agent_lang_ui if explicit_agent_lang else None),
+            )
+        if event_bus is not None:
+            pubsub = event_bus._client.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(event_bus.channel(session_channel_key(session_id)))
         await websocket.send_json(
             {
                 "type": "session.connected",
@@ -2324,7 +2438,16 @@ async def ws_session_stream(
             }
         )
         while True:
-            event = await asyncio.to_thread(event_bus.subscribe_once, session_channel_key(session_id), 1.0) if event_bus else None
+            event = None
+            if pubsub is not None:
+                item = await asyncio.to_thread(pubsub.get_message, timeout=1.0)
+                if item and item.get("type") == "message":
+                    raw = item.get("data")
+                    if raw:
+                        try:
+                            event = json.loads(raw)
+                        except json.JSONDecodeError:
+                            event = {"raw": raw}
             if event:
                 try:
                     payload = dict(event.get("payload") or {})
@@ -2347,8 +2470,20 @@ async def ws_session_stream(
                         if not source_lang and text_original:
                             source_lang = str(detect_lang_from_text(text_original) or "").strip().lower()
 
-                        agent_text = str(lane_agent.get("text") or payload.get("text_translated") or payload.get("text") or "").strip()
-                        if actor == "customer" and text_original:
+                        prebuilt_agent_text = str(
+                            payload.get("text_for_agent")
+                            or lane_agent.get("text")
+                            or payload.get("text_translated")
+                            or ""
+                        ).strip()
+                        prebuilt_agent_lang = str(
+                            payload.get("lang_for_agent")
+                            or lane_agent.get("lang")
+                            or payload.get("agent_lang")
+                            or ""
+                        ).strip().lower()
+                        agent_text = prebuilt_agent_text or str(payload.get("text") or "").strip()
+                        if actor == "customer" and text_original and not (prebuilt_agent_text and prebuilt_agent_lang == ws_agent_lang):
                             # Force receiver-lane translation for customer -> agent events.
                             forced_source_hint = source_lang or "und"
                             agent_text = translate_answer_text(
@@ -2358,7 +2493,12 @@ async def ws_session_stream(
                                 target_lang=ws_agent_lang,
                                 source_lang_hint=forced_source_hint,
                             ) or agent_text
-                        elif text_original and source_lang and source_lang != ws_agent_lang:
+                        elif (
+                            text_original
+                            and source_lang
+                            and source_lang != ws_agent_lang
+                            and not (prebuilt_agent_text and prebuilt_agent_lang == ws_agent_lang)
+                        ):
                             agent_text = translate_answer_text(
                                 backend=str(payload.get("backend") or ((session_doc or {}).get("meta", {}) or {}).get("backend_last") or "ollama"),
                                 model_override=(payload.get("model") or ((session_doc or {}).get("meta", {}) or {}).get("model_last")),
@@ -2372,9 +2512,16 @@ async def ws_session_stream(
                         payload["text_translated"] = agent_text if agent_text and agent_text != text_original else ""
                         payload["agent_lang"] = ws_agent_lang
                         payload["tts_lang_agent"] = ws_agent_lang
+                        tts_agent_text = agent_text
+                        try:
+                            tts_agent_text = sanitize_tts_text(agent_text)
+                        except Exception:
+                            tts_agent_text = agent_text
+                        payload["text_for_agent"] = agent_text
+                        payload["lang_for_agent"] = ws_agent_lang
                         payload["agent"] = {"text": agent_text, "lang": ws_agent_lang}
                         payload["tts"] = {
-                            "agent_text": agent_text,
+                            "agent_text": tts_agent_text,
                             "agent_lang": ws_agent_lang,
                             "customer_text": (lane_tts.get("customer_text") if isinstance(lane_tts, dict) else None),
                             "customer_lang": (lane_tts.get("customer_lang") if isinstance(lane_tts, dict) else None),
@@ -2384,6 +2531,45 @@ async def ws_session_stream(
                         payload["text"] = customer_text
                         payload["customer_lang"] = str(lane_customer.get("lang") or payload.get("customer_lang") or customer_lang_ui or "")
                         payload["tts_lang"] = str(lane_tts.get("customer_lang") or payload.get("tts_lang") or payload.get("customer_lang") or "")
+                    text_original = str(payload.get("text_original") or payload.get("text") or "").strip()
+                    lane_agent = payload.get("agent") if isinstance(payload.get("agent"), dict) else {}
+                    lane_customer = payload.get("customer") if isinstance(payload.get("customer"), dict) else {}
+                    agent_text = str(
+                        payload.get("text_for_agent")
+                        or lane_agent.get("text")
+                        or payload.get("text_translated")
+                        or payload.get("text")
+                        or ""
+                    ).strip()
+                    customer_text = str(
+                        payload.get("text_for_customer") or lane_customer.get("text") or payload.get("text") or ""
+                    ).strip()
+                    agent_lang = str(
+                        payload.get("lang_for_agent") or lane_agent.get("lang") or payload.get("agent_lang") or ""
+                    ).strip().lower()
+                    customer_lang_payload = str(
+                        payload.get("lang_for_customer")
+                        or lane_customer.get("lang")
+                        or payload.get("customer_lang")
+                        or payload.get("tts_lang")
+                        or ""
+                    ).strip().lower()
+                    payload["text_for_agent"] = agent_text
+                    payload["lang_for_agent"] = agent_lang
+                    payload["text_for_customer"] = customer_text
+                    payload["lang_for_customer"] = customer_lang_payload
+                    payload["lane"] = {
+                        "agent": {
+                            "lang": agent_lang,
+                            "has_translation": bool(text_original and agent_text and agent_text != text_original),
+                            "text_preview": agent_text[:120],
+                        },
+                        "customer": {
+                            "lang": customer_lang_payload,
+                            "has_translation": bool(text_original and customer_text and customer_text != text_original),
+                            "text_preview": customer_text[:120],
+                        },
+                    }
                     event = {**event, "payload": payload}
                 except Exception:
                     pass
@@ -2405,6 +2591,12 @@ async def ws_session_stream(
             await websocket.close()
         except Exception:
             pass
+    finally:
+        if pubsub is not None:
+            try:
+                pubsub.close()
+            except Exception:
+                pass
 
 
 @app.get("/config")
@@ -3081,6 +3273,7 @@ def chat_text(req: TextChatRequest):
     explicit_customer_lang = requested_lang if requested_lang in set(SUPPORTED_UI_LANGS) else ""
     detected_customer_lang = detect_lang_from_text(text) or user_lang_pref or DEFAULT_UI_LANG
     session_lang_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
+    has_persisted_customer_lang = has_persisted_customer_ui_lang(session_lang_doc)
     if explicit_customer_lang:
         customer_lang_ui, agent_lang_ui = get_session_lane_langs(
             session_lang_doc,
@@ -3088,6 +3281,8 @@ def chat_text(req: TextChatRequest):
         )
     else:
         customer_lang_ui, agent_lang_ui = get_session_lane_langs(session_lang_doc)
+        if not has_persisted_customer_lang and detected_customer_lang:
+            customer_lang_ui = _normalize_lang(detected_customer_lang, set(SUPPORTED_TTS_LANGS), DEFAULT_UI_LANG)
     persist_session_lane_langs(sid, customer_lang_ui=customer_lang_ui, agent_lang_ui=agent_lang_ui)
 
     customer_voice_lang = ((req.tts_lang or "").strip().lower() or customer_lang_ui)
@@ -3286,6 +3481,7 @@ async def voice(
         session_meta_doc,
         customer_lang_hint=requested_customer_lang,
     )
+    has_persisted_customer_lang = has_persisted_customer_ui_lang(session_meta_doc)
 
     metrics: dict[str, int] = {
         "audio_read_ms": 0,
@@ -3297,6 +3493,8 @@ async def voice(
     transcript = ""
     answer = ""
     lang: str | None = None
+    lang_text_detected: str | None = None
+    effective_source_lang: str | None = None
     tts_lang_selected: str | None = None
     handoff_recommended = False
 
@@ -3385,18 +3583,39 @@ async def voice(
             return error_response(status_code=400, error="Unsupported/invalid audio", error_code="stt_decode_failed")
         transcript = "".join(seg.text for seg in segments).strip()
         lang = str(getattr(info, "language", "") or "").strip().lower() or None
+        lang_text_detected = detect_lang_from_text(transcript) or None
         if not lang:
-            lang = detect_lang_from_text(transcript) or get_user_ui_lang(uid)
+            lang = lang_text_detected or get_user_ui_lang(uid)
         if not lang:
             lang = DEFAULT_UI_LANG
-        customer_voice_lang = tts_lang_selected or customer_lang_ui or lang
-        customer_lang_ui = _normalize_lang(customer_lang_ui or lang, set(SUPPORTED_TTS_LANGS), lang or DEFAULT_UI_LANG)
+        if requested_customer_lang in set(SUPPORTED_TTS_LANGS):
+            effective_source_lang = requested_customer_lang
+        elif lang in set(SUPPORTED_TTS_LANGS):
+            effective_source_lang = lang
+        elif lang_text_detected in set(SUPPORTED_TTS_LANGS):
+            effective_source_lang = lang_text_detected
+        else:
+            effective_source_lang = DEFAULT_UI_LANG
+        if not requested_customer_lang and not has_persisted_customer_lang and (lang_text_detected or lang):
+            customer_lang_ui = _normalize_lang(
+                (lang_text_detected or lang),
+                set(SUPPORTED_TTS_LANGS),
+                DEFAULT_UI_LANG,
+            )
+        customer_voice_lang = tts_lang_selected or customer_lang_ui or effective_source_lang or lang
+        customer_lang_ui = _normalize_lang(
+            customer_lang_ui or effective_source_lang or lang,
+            set(SUPPORTED_TTS_LANGS),
+            effective_source_lang or lang or DEFAULT_UI_LANG,
+        )
         persist_session_lane_langs(sid, customer_lang_ui=customer_lang_ui, agent_lang_ui=agent_lang_ui)
         sessions_col.update_one(
             {"_id": sid, "user_id": uid},
             {
                 "$set": {
-                    "meta.customer_lang_last": lang,
+                    "meta.customer_lang_last": effective_source_lang,
+                    "meta.customer_lang_stt_last": lang,
+                    "meta.customer_lang_text_detected_last": lang_text_detected,
                     "meta.customer_lang_ui_last": customer_lang_ui,
                     "meta.customer_voice_lang_last": customer_voice_lang,
                 }
@@ -3421,11 +3640,19 @@ async def voice(
             )
 
         prompt = build_prompt_with_history(sid, transcript, SYSTEM_PROMPT)
-        append_message(uid, sid, role="customer", content=transcript, lang=lang, backend=backend, model=selected_model)
+        append_message(
+            uid,
+            sid,
+            role="customer",
+            content=transcript,
+            lang=effective_source_lang or lang,
+            backend=backend,
+            model=selected_model,
+        )
         customer_dual_lane = build_dual_lane_event(
             from_role="customer",
             text_original=transcript,
-            lang_original_hint=lang,
+            lang_original_hint=effective_source_lang or lang,
             customer_lang_ui=customer_lang_ui,
             agent_lang_ui=agent_lang_ui,
             backend=backend,
@@ -3444,10 +3671,18 @@ async def voice(
                 "customer": customer_dual_lane.get("customer"),
                 "tts": customer_dual_lane.get("tts"),
                 "user_id": uid,
-                "source_lang": lang,
+                "source_lang": effective_source_lang or lang,
                 "agent_lang": agent_lang_ui,
                 "customer_lang": customer_lang_ui,
                 "customer_voice_lang": customer_voice_lang,
+                "debug": {
+                    "source_lang_stt": lang,
+                    "source_lang_text_detected": lang_text_detected,
+                    "source_lang_effective": effective_source_lang or lang,
+                    "agent_lang_ui": agent_lang_ui,
+                    "customer_lang_ui": customer_lang_ui,
+                    "customer_lang_requested": requested_customer_lang,
+                },
             },
         )
 
@@ -3489,22 +3724,30 @@ async def voice(
         metrics["tts_ms"] = 0
         metrics["total_ms"] = max(0, int((t3 - t0) * 1000))
 
+        answer_lang = detect_lang_from_text(answer) or agent_lang_ui or effective_source_lang or lang or DEFAULT_UI_LANG
         agent_dual_lane = build_dual_lane_event(
             from_role="agent",
             text_original=answer,
-            lang_original_hint=lang,
+            lang_original_hint=answer_lang,
             customer_lang_ui=customer_lang_ui,
             agent_lang_ui=agent_lang_ui,
             backend=backend,
             model_override=selected_model,
         )
         answer_for_customer = str(((agent_dual_lane.get("customer") or {}).get("text") or answer)).strip() or answer
+        tts_text_for_customer = answer_for_customer
+        try:
+            sanitized = sanitize_tts_text(answer_for_customer)
+            if sanitized:
+                tts_text_for_customer = sanitized
+        except Exception:
+            tts_text_for_customer = answer_for_customer
         if return_audio == "1":
             t3_tts = time.perf_counter()
             try:
                 tts_resp = requests.post(
                     f"{PIPER_BASE_URL}/tts",
-                    json={"text": answer_for_customer, "lang": (tts_lang_selected or customer_voice_lang or customer_lang_ui or lang)},
+                    json={"text": tts_text_for_customer, "lang": (tts_lang_selected or customer_voice_lang or customer_lang_ui or lang)},
                     timeout=180,
                 )
                 tts_resp.raise_for_status()
@@ -3514,12 +3757,12 @@ async def voice(
                     sid,
                     role="agent",
                     content=answer,
-                    lang=lang,
+                    lang=answer_lang,
                     backend=backend,
                     model=selected_model,
                     metrics=metrics,
                 )
-                mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
+                mark_session_activity(sid, backend=backend, model=selected_model, lang=answer_lang)
                 publish_session_event(
                     event_type="message.created",
                     session_id=sid,
@@ -3534,10 +3777,15 @@ async def voice(
                         "tts": agent_dual_lane.get("tts"),
                         "model": selected_model,
                         "backend": backend,
-                        "source_lang": lang,
+                        "source_lang": answer_lang,
                         "agent_lang": agent_lang_ui,
                         "customer_lang": customer_lang_ui,
                         "tts_lang": (tts_lang_selected or customer_voice_lang or customer_lang_ui or lang),
+                        "debug": {
+                            "source_lang_effective": answer_lang,
+                            "agent_lang_ui": agent_lang_ui,
+                            "customer_lang_ui": customer_lang_ui,
+                        },
                     },
                 )
                 return error_response(
@@ -3554,12 +3802,12 @@ async def voice(
                 sid,
                 role="agent",
                 content=answer,
-                lang=lang,
+                lang=answer_lang,
                 backend=backend,
                 model=selected_model,
                 metrics=metrics,
             )
-            mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
+            mark_session_activity(sid, backend=backend, model=selected_model, lang=answer_lang)
             publish_session_event(
                 event_type="message.created",
                 session_id=sid,
@@ -3574,10 +3822,15 @@ async def voice(
                     "tts": agent_dual_lane.get("tts"),
                     "model": selected_model,
                     "backend": backend,
-                    "source_lang": lang,
+                    "source_lang": answer_lang,
                     "agent_lang": agent_lang_ui,
                     "customer_lang": customer_lang_ui,
                     "tts_lang": (tts_lang_selected or customer_voice_lang or customer_lang_ui or lang),
+                    "debug": {
+                        "source_lang_effective": answer_lang,
+                        "agent_lang_ui": agent_lang_ui,
+                        "customer_lang_ui": customer_lang_ui,
+                    },
                 },
             )
 
@@ -3592,7 +3845,7 @@ async def voice(
                 backend=backend,
                 model=selected_model,
                 metrics=metrics,
-                lang=lang,
+                lang=answer_lang,
                 transcript=transcript,
                 answer=answer,
                 status="ok",
@@ -3607,7 +3860,7 @@ async def voice(
                 headers={
                     "X-Session-Id": sid,
                     "X-User-Id": uid,
-                    "X-Detected-Lang": (lang or ""),
+                    "X-Detected-Lang": (effective_source_lang or lang or ""),
                     "X-TTS-Lang": (tts_lang_selected or customer_voice_lang or customer_lang_ui or lang or ""),
                     "X-TTS-Audio-Duration-Ms": str(tts_audio_duration_ms),
                     "X-Crm-Export-Enabled": "1" if crm_export_user_enabled else "0",
@@ -3624,12 +3877,12 @@ async def voice(
             sid,
             role="agent",
             content=answer,
-            lang=lang,
+            lang=answer_lang,
             backend=backend,
             model=selected_model,
             metrics=metrics,
         )
-        mark_session_activity(sid, backend=backend, model=selected_model, lang=lang)
+        mark_session_activity(sid, backend=backend, model=selected_model, lang=answer_lang)
         publish_session_event(
             event_type="message.created",
             session_id=sid,
@@ -3644,10 +3897,15 @@ async def voice(
                 "tts": agent_dual_lane.get("tts"),
                 "model": selected_model,
                 "backend": backend,
-                "source_lang": lang,
+                "source_lang": answer_lang,
                 "agent_lang": agent_lang_ui,
                 "customer_lang": customer_lang_ui,
                 "tts_lang": (tts_lang_selected or customer_voice_lang or customer_lang_ui or lang),
+                "debug": {
+                    "source_lang_effective": answer_lang,
+                    "agent_lang_ui": agent_lang_ui,
+                    "customer_lang_ui": customer_lang_ui,
+                },
             },
         )
         log_telemetry(
@@ -3656,7 +3914,7 @@ async def voice(
             backend=backend,
             model=selected_model,
             metrics=metrics,
-            lang=lang,
+            lang=answer_lang,
             transcript=transcript,
             answer=answer,
             status="ok",

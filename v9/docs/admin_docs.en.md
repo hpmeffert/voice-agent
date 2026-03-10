@@ -150,3 +150,72 @@ Every release must keep language-flow docs updated in User Guide, Demo Guide, an
   - `meta.customer_lang_ui_last`
   - `meta.agent_lang_ui_last`
 - Customer client now has a `Customer language` dropdown and sends `customer_lang` on WS connect.
+
+## New in V9.1.1 (Admin)
+- TTS sanitization runs only at the audio output boundary.
+- Persistent data (messages/CRM exports) remains unchanged.
+- Regression tests: `v9/scripts/test_tts_sanitize.py` and `v9/scripts/run_tests_v9.1.1.sh`.
+
+## New in V9.1.2 (Admin)
+- Agent UI includes `Auto-Refresh` for inbox updates (5-second interval, persisted in localStorage).
+- WebSocket reconnect in Agent UI improves continuity after short network drops.
+- `Display cleanup` affects only visible chat text in Agent UI; stored data and routing remain unchanged.
+
+## New in V9.1.5 (Admin): WS test automation + evidence
+### Run the automated proof test
+```bash
+bash scripts/run_v9_ws_duallane_tests.sh --agent_url http://localhost:8087 --customer_url http://localhost:8086 --out artifacts
+```
+
+### What "PASS" means
+You always get six lines:
+1. `COMMIT`
+2. `RESULT`
+3. `SCENARIO1` (customer -> agent)
+4. `SCENARIO2` (agent -> customer)
+5. `SCENARIO3` (second customer roundtrip)
+6. `P95_MS`
+
+If `RESULT: PASS`, dual-lane routing is correct for this run.
+
+### Where artifacts are stored
+- Folder: `artifacts/v9_ws_<timestamp>/`
+- Required files:
+  - `test-log-v9.1.5.txt`
+  - `SUMMARY.md`
+  - `ws_probe_status.json`
+  - `events-agent.jsonl`, `events-customer.jsonl`
+  - `docker-logs-api.txt`, `docker-logs-web-agent.txt`, `docker-logs-web-customer.txt`
+  - `ENV_SNAPSHOT.txt`
+  - `session_dump.json`
+  - `artifacts.zip`
+
+### How to read FAIL quickly
+- `scenario*_eventual_delivery_failed`: event arrived too late (>10s) or not at all.
+- `*_translation_not_applied_when_langs_differ`: source/target languages differ but translated lane is still equal to original.
+- `*_lang_*_not_*`: wrong receiver language lane was generated.
+
+### New WS debug metadata (for reliable troubleshooting)
+Each `message.created` event now includes:
+- `event_id`, `event_ts`
+- `text_for_agent`, `lang_for_agent`
+- `text_for_customer`, `lang_for_customer`
+- `lane.agent.lang`, `lane.agent.has_translation`, `lane.agent.text_preview`
+- `lane.customer.lang`, `lane.customer.has_translation`, `lane.customer.text_preview`
+
+## New in V9.1.5-fix-voice-duallane (Admin)
+- Voice events now use the same live event type as chat: `message.created`.
+- Voice updates language metadata more robustly:
+  - STT language
+  - text-detected language
+  - effective routing language
+- Goal: DE->EN voice traffic produces the same EN agent lane as DE->EN chat traffic.
+
+### Required \"Voice vs Chat parity\" check
+1. Agent `en`, Customer `de`.
+2. Send one chat message (DE), then one voice message (DE).
+3. In both cases, agent event must contain:
+   - `text_original` in DE
+   - `text_for_agent` in EN
+   - `lang_for_agent=en`
+   - `tts.agent_lang=en`

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Agent UI V9.1.0</title>
+  <title>Voice Agent Agent UI V9.1.2</title>
   <style>
     body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
     .wrap { max-width: 1200px; margin: 18px auto; padding: 0 14px; }
@@ -40,7 +40,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:10px;">
       <div>
-        <h2 style="margin:0;">Voice Agent Agent UI V9.1.0</h2>
+        <h2 style="margin:0;">Voice Agent Agent UI V9.1.2</h2>
         <div class="muted">Inbox + Live Chat (Call-Center Handoff MVP)</div>
       </div>
       <div class="row">
@@ -75,6 +75,9 @@
         <button id="searchBtn">Suchen</button>
         <button id="clearSearchBtn">Reset</button>
         <button id="refreshBtn">Refresh Inbox</button>
+        <label><input id="autoRefresh" type="checkbox" checked /> Auto-Refresh</label>
+        <span id="refreshState" class="muted">Auto-Refresh: an (5s)</span>
+        <label><input id="cleanDisplay" type="checkbox" checked /> Anzeige bereinigen (Sonderzeichen ausblenden)</label>
         <button id="helpBtn">Benutzer Handbuch</button>
       </div>
     </div>
@@ -145,6 +148,9 @@ const agentIdEl = document.getElementById('agentId');
 const msgInputEl = document.getElementById('msgInput');
 const sendBtn = document.getElementById('sendBtn');
 const refreshBtn = document.getElementById('refreshBtn');
+const autoRefreshEl = document.getElementById('autoRefresh');
+const refreshStateEl = document.getElementById('refreshState');
+const cleanDisplayEl = document.getElementById('cleanDisplay');
 const searchInputEl = document.getElementById('searchInput');
 const searchTypeEl = document.getElementById('searchType');
 const searchBtn = document.getElementById('searchBtn');
@@ -164,10 +170,14 @@ const AGENT_KEY = 'v8_agent_id';
 const AGENT_LANG_KEY = 'v9_agent_lang';
 const AGENT_VOICE_INCOMING_KEY = 'v9_agent_voice_incoming';
 const AGENT_VOICE_CUSTOMER_OUT_KEY = 'v9_agent_voice_customer_out';
+const AGENT_AUTO_REFRESH_KEY = 'v9_agent_auto_refresh';
+const AGENT_CLEAN_DISPLAY_KEY = 'v9_agent_clean_display';
 agentIdEl.value = localStorage.getItem(AGENT_KEY) || 'agent-01';
 agentLangEl.value = localStorage.getItem(AGENT_LANG_KEY) || 'de';
 agentVoiceIncomingEl.checked = localStorage.getItem(AGENT_VOICE_INCOMING_KEY) !== '0';
 agentVoiceCustomerOutEl.checked = localStorage.getItem(AGENT_VOICE_CUSTOMER_OUT_KEY) === '1';
+autoRefreshEl.checked = localStorage.getItem(AGENT_AUTO_REFRESH_KEY) !== '0';
+cleanDisplayEl.checked = localStorage.getItem(AGENT_CLEAN_DISPLAY_KEY) !== '0';
 if ([...agentPresetEl.options].some(o => o.value === agentIdEl.value)) {
   agentPresetEl.value = agentIdEl.value;
 }
@@ -199,12 +209,26 @@ agentVoiceIncomingEl.onchange = () => {
 agentVoiceCustomerOutEl.onchange = () => {
   localStorage.setItem(AGENT_VOICE_CUSTOMER_OUT_KEY, agentVoiceCustomerOutEl.checked ? '1' : '0');
 };
+autoRefreshEl.onchange = () => {
+  localStorage.setItem(AGENT_AUTO_REFRESH_KEY, autoRefreshEl.checked ? '1' : '0');
+  updateAutoRefreshState();
+  startAutoRefresh();
+};
+cleanDisplayEl.onchange = async () => {
+  localStorage.setItem(AGENT_CLEAN_DISPLAY_KEY, cleanDisplayEl.checked ? '1' : '0');
+  if (activeSessionId) await loadRecentMessages(true);
+};
 
 let activeSessionId = '';
 let activeSessionUserId = '';
 let activeCustomerLang = '';
 let activeCustomerVoiceLang = '';
 let ws = null;
+let wsSeq = 0;
+let wsReconnectTimer = null;
+let autoRefreshTimer = null;
+let loadSessionsBusy = false;
+let loadSessionsQueued = false;
 let currentSearch = '';
 let currentSearchType = 'all';
 let activeHandoffRequested = false;
@@ -260,7 +284,7 @@ function addMsg(role, text, ts) {
   const d = document.createElement('div');
   d.className = `msg ${role || 'system'}`;
   const stamp = ts ? `[${new Date(ts).toLocaleTimeString()}] ` : '';
-  d.textContent = `${stamp}${(role || 'system').toUpperCase()}: ${text || ''}`;
+  d.textContent = `${stamp}${(role || 'system').toUpperCase()}: ${formatDisplayText(text || '')}`;
   chatEl.appendChild(d);
   chatEl.scrollTop = chatEl.scrollHeight;
 }
@@ -288,7 +312,7 @@ function addMsgSplit(role, originalText, translatedText, ts, originalLang, trans
   originalTitle.textContent = `Original (${originalLang || '-'})`;
   const originalBody = document.createElement('div');
   originalBody.style.marginTop = '4px';
-  originalBody.textContent = originalText || '';
+  originalBody.textContent = formatDisplayText(originalText || '');
   originalWrap.appendChild(originalTitle);
   originalWrap.appendChild(originalBody);
 
@@ -303,7 +327,7 @@ function addMsgSplit(role, originalText, translatedText, ts, originalLang, trans
   translatedTitle.textContent = `Uebersetzung (${translatedLang || '-'})`;
   const translatedBody = document.createElement('div');
   translatedBody.style.marginTop = '4px';
-  translatedBody.textContent = translatedText || '';
+  translatedBody.textContent = formatDisplayText(translatedText || '');
   translatedWrap.appendChild(translatedTitle);
   translatedWrap.appendChild(translatedBody);
 
@@ -314,8 +338,38 @@ function addMsgSplit(role, originalText, translatedText, ts, originalLang, trans
 }
 
 function clearChat() { chatEl.innerHTML = ''; }
+function formatDisplayText(text) {
+  const input = String(text || '');
+  if (!cleanDisplayEl.checked) return input;
+  return input
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
+    .replace(/```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_\n]+)_/g, '$1')
+    .replace(/^[\t ]*(?:[-*•][\t ]+|\d+[.)][\t ]+)/gm, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 function updateCustomerLangMeta() {
   customerLangMetaEl.textContent = `Customer language: ${activeCustomerLang || '-'} | Voice profile: ${activeCustomerVoiceLang || activeCustomerLang || '-'}`;
+}
+function updateAutoRefreshState() {
+  refreshStateEl.textContent = autoRefreshEl.checked ? 'Auto-Refresh: an (5s)' : 'Auto-Refresh: aus';
+}
+function startAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+  if (!autoRefreshEl.checked) return;
+  autoRefreshTimer = setInterval(() => {
+    loadSessions().catch(() => {});
+  }, 5000);
 }
 
 function applyDetectedCustomerProfile(s) {
@@ -372,24 +426,37 @@ function wsUrl(path){
 }
 
 async function loadSessions(){
+  if (loadSessionsBusy) {
+    loadSessionsQueued = true;
+    return;
+  }
+  loadSessionsBusy = true;
   const params = new URLSearchParams({ status: 'active', limit: '120' });
   if (currentSearch) {
     if (currentSearchType === 'session') params.set('session_id', currentSearch);
     else if (currentSearchType === 'user') params.set('user_id', currentSearch);
     else params.set('q', currentSearch);
   }
-  const r = await fetch(`/api/agent/sessions?${params.toString()}`);
-  const data = await r.json();
-  const sessions = Array.isArray(data.sessions) ? data.sessions : [];
-  inboxCountEl.textContent = String(sessions.length);
-  sessionsEl.innerHTML = '';
-  for (const s of sessions) {
-    const card = document.createElement('div');
-    card.className = `session ${s.session_id === activeSessionId ? 'active' : ''}`;
-    const badge = s.handoff_requested ? '<span class="badge handoff">handoff requested</span>' : '';
-    card.innerHTML = `<div class="row" style="justify-content:space-between;"><b>${s.session_id}</b>${badge}</div><div class="small">User: ${s.user_id || '-'} | Lang: ${s.customer_lang || s.lang || '-'}</div><div class="small">${s.preview || ''}</div>`;
-    card.onclick = () => joinSession(s);
-    sessionsEl.appendChild(card);
+  try {
+    const r = await fetch(`/api/agent/sessions?${params.toString()}`);
+    const data = await r.json();
+    const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+    inboxCountEl.textContent = String(sessions.length);
+    sessionsEl.innerHTML = '';
+    for (const s of sessions) {
+      const card = document.createElement('div');
+      card.className = `session ${s.session_id === activeSessionId ? 'active' : ''}`;
+      const badge = s.handoff_requested ? '<span class="badge handoff">handoff requested</span>' : '';
+      card.innerHTML = `<div class="row" style="justify-content:space-between;"><b>${s.session_id}</b>${badge}</div><div class="small">User: ${s.user_id || '-'} | Lang: ${s.customer_lang || s.lang || '-'}</div><div class="small">${s.preview || ''}</div>`;
+      card.onclick = () => joinSession(s);
+      sessionsEl.appendChild(card);
+    }
+  } finally {
+    loadSessionsBusy = false;
+    if (loadSessionsQueued) {
+      loadSessionsQueued = false;
+      loadSessions().catch(() => {});
+    }
   }
 }
 
@@ -420,8 +487,9 @@ async function joinSession(s){
   await loadSessions();
 }
 
-async function loadRecentMessages(){
+async function loadRecentMessages(reset = false){
   if (!activeSessionId || !activeSessionUserId) return;
+  if (reset) clearChat();
   const q = new URLSearchParams({ user_id: activeSessionUserId, limit: '40' });
   const r = await fetch(`/api/session/${encodeURIComponent(activeSessionId)}?${q.toString()}`);
   if (!r.ok) return;
@@ -433,17 +501,35 @@ async function loadRecentMessages(){
 
 function connectWs(){
   if (!activeSessionId) return;
+  wsSeq += 1;
+  const seq = wsSeq;
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
+  }
   if (ws) { try { ws.close(); } catch(_) {} }
   ws = new WebSocket(
     wsUrl(
       `/api/ws/session/${encodeURIComponent(activeSessionId)}?client=agent&user_id=${encodeURIComponent(agentIdEl.value || 'agent-01')}&agent_lang=${encodeURIComponent(agentLangEl.value || 'de')}`
     )
   );
-  ws.onopen = () => { wsStateEl.textContent = 'WS: online'; };
-  ws.onclose = () => { wsStateEl.textContent = 'WS: offline'; };
+  ws.onopen = () => {
+    if (seq !== wsSeq) return;
+    wsStateEl.textContent = 'WS: online';
+  };
+  ws.onclose = () => {
+    if (seq !== wsSeq) return;
+    wsStateEl.textContent = 'WS: offline';
+    if (!activeSessionId) return;
+    wsReconnectTimer = setTimeout(() => {
+      if (seq !== wsSeq) return;
+      connectWs();
+    }, 1800);
+  };
   ws.onerror = () => { wsStateEl.textContent = 'WS: error'; };
   ws.onmessage = (ev) => {
     try {
+      if (seq !== wsSeq) return;
       const e = JSON.parse(ev.data);
       if (e.type === 'session.keepalive') return;
       if (e.type === 'session.connected') {
@@ -454,10 +540,12 @@ function connectWs(){
       if (e.type === 'handoff.request') {
         setActiveHandoff('requested', true);
         chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=requested`;
+        loadSessions().catch(() => {});
       }
       if (e.type === 'handoff.accept') {
         setActiveHandoff('accepted', false);
         chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=accepted`;
+        loadSessions().catch(() => {});
       }
       const role = e.from || 'system';
       const payload = e.payload || {};
@@ -472,7 +560,7 @@ function connectWs(){
       if (role === 'agent' && payload.text_original) {
         text = payload.text_original;
       }
-      const translatedForAgent = laneAgent.text || payload.text_translated || payload.text || '';
+      const translatedForAgent = payload.text_for_agent || laneAgent.text || payload.text_translated || payload.text || '';
       const hasSplit = !!(payload.text_original && translatedForAgent && payload.text_original !== translatedForAgent);
       if (hasSplit) {
         addMsgSplit(
@@ -487,11 +575,18 @@ function connectWs(){
         addMsg(role, text, e.ts);
       }
       if (role === 'customer' && agentVoiceIncomingEl.checked) {
-        const ttsLang = laneTts.agent_lang || payload.tts_lang_agent || laneAgent.lang || agentLangEl.value || 'de';
+        const ttsLang =
+          payload.lang_for_agent ||
+          laneTts.agent_lang ||
+          payload.tts_lang_agent ||
+          laneAgent.lang ||
+          agentLangEl.value ||
+          'de';
         const shouldHaveTranslation = !!(payload.lang_original && (laneAgent.lang || payload.agent_lang) && payload.lang_original !== (laneAgent.lang || payload.agent_lang));
         const speakText = laneTts.agent_text || translatedForAgent || (!shouldHaveTranslation ? (payload.text || text) : "");
         if (speakText) playAgentVoice(speakText, ttsLang);
       }
+      loadSessions().catch(() => {});
     } catch(_) {}
   };
 }
@@ -561,6 +656,8 @@ helpCloseBtn.onclick = () => { closeHelp(); };
 helpModalBackdrop.onclick = (ev) => { if (ev.target === helpModalBackdrop) closeHelp(); };
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeHelp(); });
 loadAgentPrefs();
+updateAutoRefreshState();
+startAutoRefresh();
 updateCustomerLangMeta();
 loadSessions();
 </script>

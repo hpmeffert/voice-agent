@@ -90,3 +90,12 @@ Imagine: supervisor wants to force a specific output language for verification.
   - Only translated agent-lane audio should be spoken.
 - Let the agent reply:
   - Customer must see/hear only customer-lane output in customer language.
+
+## V9.1.1 Demo Focus
+- Use a sentence with markdown markers (e.g., `**Important**: *Please* check`).
+- Expected: display unchanged, speech output without formatting artifacts.
+
+## V9.1.2 Demo Focus
+- Show that new sessions appear in inbox without clicking `Refresh Inbox` (auto-refresh enabled).
+- Simulate a short connection drop and show the return to `WS: online`.
+- Toggle `Display cleanup` on/off to demonstrate the Agent-side text rendering difference.

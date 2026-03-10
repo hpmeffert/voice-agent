@@ -95,3 +95,12 @@ Stellen Sie sich vor: Sie wollen bewusst eine andere Kundensprache ausliefern (z
   - Es darf nur die Uebersetzung in Agent-Sprache gesprochen werden.
 - Lassen Sie den Agenten antworten:
   - Kunde sieht/hoert nur `customer`-Lane in Kundensprache.
+
+## V9.1.1 Demo Fokus
+- Zeigen Sie einen Satz mit Markdown-Zeichen (z. B. `**Wichtig**: *Bitte* pruefen`).
+- Erwartung: Anzeige bleibt unveraendert, Audio spricht ohne Formatierungszeichen.
+
+## V9.1.2 Demo Fokus
+- Zeigen Sie, dass neue Sessions ohne Klick auf `Refresh Inbox` sichtbar werden (Auto-Refresh aktiv).
+- Simulieren Sie kurz einen Verbindungsabbruch und zeigen Sie die Rueckkehr von `WS: online`.
+- Aktivieren/Deaktivieren Sie `Anzeige bereinigen`, um den Unterschied in der Agent-Textdarstellung zu zeigen.
