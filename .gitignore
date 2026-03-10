@@ -29,6 +29,10 @@ output/
 test_artifacts/
 *.zip
 *.log
+docker-logs*.txt
+ws_*events*.jsonl
+SUMMARY*.md
+test-log-*.txt
 session_dump*.json
 ENV_SNAPSHOT*.txt
 v9/artifacts/**
