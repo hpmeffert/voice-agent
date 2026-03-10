@@ -161,10 +161,10 @@ Bei jeder neuen Version muessen User Guide, Demo Guide und Admin Docs den aktuel
 - WS-Reconnect im Agent-Client reduziert Aussetzer bei kurzzeitigen Netzwerkabbruechen.
 - `Anzeige bereinigen` wirkt nur auf den sichtbaren Text im Agent-Chat und nicht auf persistente Daten.
 
-## Neu in V9.1.5 (Admin): WS-Testautomation + Nachweise
+## Neu in V9.1.6 (Admin): WS-Testautomation + Artefakt-Hardening
 ### Automatischen Nachweis-Test starten
 ```bash
-bash scripts/run_v9_ws_duallane_tests.sh --agent_url http://localhost:8087 --customer_url http://localhost:8086 --out artifacts
+bash v9/scripts/tests/run_v9_duallane_ws_tests.sh
 ```
 
 ### Was "PASS" bedeutet
@@ -179,10 +179,9 @@ Sie erhalten immer sechs Zeilen:
 Wenn `RESULT: PASS` steht, ist das Dual-Lane-Routing fuer diesen Lauf korrekt.
 
 ### Wo die Artefakte liegen
-- Aktueller Lauf: `artifacts/runs/<run_id>/`
-- Letzter Lauf (Schnellzugriff): `artifacts/latest/`
-- Lauf-ZIP: `artifacts/runs/artifacts-<run_id>.zip`
-- Aufbewahrung: standardmaessig bleiben nur die neuesten `10` Laeufe (`RETAIN_RUNS=10`).
+- Aktueller Lauf: `v9/artifacts/<YYYYMMDD-HHMMSS>/`
+- Optionales Lauf-ZIP: `v9/artifacts/<YYYYMMDD-HHMMSS>/artifacts.zip`
+- Aufbewahrung: standardmaessig bleiben nur die neuesten `10` Laeufe.
 - Pflichtdateien:
   - `test-log-v9.1.5.txt`
   - `SUMMARY.md`
@@ -191,14 +190,14 @@ Wenn `RESULT: PASS` steht, ist das Dual-Lane-Routing fuer diesen Lauf korrekt.
   - `docker-logs-api.txt`, `docker-logs-web-agent.txt`, `docker-logs-web-customer.txt`
   - `ENV_SNAPSHOT.txt`
   - `session_dump.json`
-  - `artifacts.zip` (im Laufordner) und `artifacts-<run_id>.zip` (unter `artifacts/runs/`)
+  - `artifacts.zip` (im Laufordner)
 
 ### Release-Evidence-Regel (wichtig)
 - `artifacts/` bleibt lokaler Arbeitsbereich.
 - Evidence-ZIPs, Logs und Env-Snapshots werden nicht in Git versioniert.
 - Fuer release-relevante Nachweise laden Sie nur 1-3 ZIPs als GitHub-Release-Assets hoch (z. B. FAIL, FIX, PASS).
 - Beispiel-Upload:
-  - `gh release upload v9.1.5 artifacts/runs/artifacts-v9.1.5-YYYYMMDD-HHMMSS.zip`
+  - `gh release upload v9.1.6 v9/artifacts/<run-id>/artifacts.zip`
 
 ### FAIL schnell verstehen
 - `scenario*_eventual_delivery_failed`: Event kam zu spaet (>10s) oder gar nicht.

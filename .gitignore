@@ -31,3 +31,6 @@ test_artifacts/
 *.log
 session_dump*.json
 ENV_SNAPSHOT*.txt
+v9/artifacts/**
+v9/.artifacts_work/**
+artifacts.zip

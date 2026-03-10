@@ -22,6 +22,7 @@
 - V9.1.2: Agent-UI Auto-Refresh (Inbox), robuster WS-Reconnect und optionaler Anzeige-Filter fuer Sonderzeichen im Chat (nur UI-Darstellung).
 - V9.1.5: WS-Dual-Lane-Test-Hardening mit Artefakt-Nachweisen, robusten Eventual-Delivery-Checks (10s) und Lane-Observability-Metadaten (`event_id`, `event_ts`, `lane.*`, `text_for_*`, `lang_for_*`) fuer eindeutige Fehleranalyse.
 - V9.1.5-fix-voice-duallane: Voice-Paritaetsfix, damit Voice denselben live `message.created` Dual-Lane-Vertrag wie Chat nutzt; behebt fehlende Agent-Lane-Uebersetzung bei Voice-Faellen und behaelt die strikte TTS-Lane-Bindung.
+- V9.1.6: Post-fix-Hardening fuer wiederholbare WS/Voice-Tests, formale Artefakt-Policy (`v9/docs/ARTIFACT_POLICY.md`) sowie Retention/Cleanup-Automation fuer lokale Nachweise.
 
 ## Nutzen von V9.1.0
 - Keine falsche Sprache mehr im Agenten- und Kunden-TTS-Pfad.
@@ -65,3 +66,8 @@
   - permissive OSS in Core bevorzugt
   - kein GPL/AGPL-Zuwachs im Core Runtime
   - copyleft-Komponenten bleiben als Sidecar isoliert.
+
+## Nutzen von V9.1.6
+- Standardisierte Testskripte unter `v9/scripts/tests/` machen V9-Laeufe auf jedem Rechner reproduzierbar.
+- Jeder Testlauf schreibt jetzt in einen klaren Ordner `v9/artifacts/<timestamp>/`.
+- Die Cleanup-Routine begrenzt lokalen Speicherverbrauch durch Aufbewahrung nur der neuesten Laeufe.
