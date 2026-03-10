@@ -154,17 +154,17 @@ Bei jeder neuen Version muessen User Guide, Demo Guide und Admin Docs den aktuel
 ## Neu in V9.1.1 (Admin)
 - TTS-Sanitize laeuft nur am Audio-Ausgabepunkt.
 - Persistente Daten (Messages/CRM-Exports) bleiben unveraendert.
-- Regressionstest: `v9/scripts/test_tts_sanitize.py` und `v9/scripts/run_tests_v9.1.1.sh`.
+- Regressionstest: `v9/scripts/tests/test_tts_sanitize.py`.
 
 ## Neu in V9.1.2 (Admin)
 - Agent-UI hat `Auto-Refresh` fuer Inbox-Updates (Intervall 5 Sekunden, per LocalStorage steuerbar).
 - WS-Reconnect im Agent-Client reduziert Aussetzer bei kurzzeitigen Netzwerkabbruechen.
 - `Anzeige bereinigen` wirkt nur auf den sichtbaren Text im Agent-Chat und nicht auf persistente Daten.
 
-## Neu in V9.1.5 (Admin): WS-Testautomation + Nachweise
+## Neu in V9.1.6 (Admin): WS-Testautomation + Artefakt-Hardening
 ### Automatischen Nachweis-Test starten
 ```bash
-bash scripts/run_v9_ws_duallane_tests.sh --agent_url http://localhost:8087 --customer_url http://localhost:8086 --out artifacts
+bash v9/scripts/tests/run_v9_duallane_ws_tests.sh
 ```
 
 ### Was "PASS" bedeutet
@@ -179,10 +179,9 @@ Sie erhalten immer sechs Zeilen:
 Wenn `RESULT: PASS` steht, ist das Dual-Lane-Routing fuer diesen Lauf korrekt.
 
 ### Wo die Artefakte liegen
-- Aktueller Lauf: `artifacts/runs/<run_id>/`
-- Letzter Lauf (Schnellzugriff): `artifacts/latest/`
-- Lauf-ZIP: `artifacts/runs/artifacts-<run_id>.zip`
-- Aufbewahrung: standardmaessig bleiben nur die neuesten `10` Laeufe (`RETAIN_RUNS=10`).
+- Aktueller Lauf: `v9/artifacts/<YYYYMMDD-HHMMSS>/`
+- Optionales Lauf-ZIP: `v9/artifacts/<YYYYMMDD-HHMMSS>/artifacts.zip`
+- Aufbewahrung: standardmaessig bleiben nur die neuesten `10` Laeufe.
 - Pflichtdateien:
   - `test-log-v9.1.5.txt`
   - `SUMMARY.md`
@@ -191,14 +190,14 @@ Wenn `RESULT: PASS` steht, ist das Dual-Lane-Routing fuer diesen Lauf korrekt.
   - `docker-logs-api.txt`, `docker-logs-web-agent.txt`, `docker-logs-web-customer.txt`
   - `ENV_SNAPSHOT.txt`
   - `session_dump.json`
-  - `artifacts.zip` (im Laufordner) und `artifacts-<run_id>.zip` (unter `artifacts/runs/`)
+  - `artifacts.zip` (im Laufordner)
 
 ### Release-Evidence-Regel (wichtig)
 - `artifacts/` bleibt lokaler Arbeitsbereich.
 - Evidence-ZIPs, Logs und Env-Snapshots werden nicht in Git versioniert.
 - Fuer release-relevante Nachweise laden Sie nur 1-3 ZIPs als GitHub-Release-Assets hoch (z. B. FAIL, FIX, PASS).
 - Beispiel-Upload:
-  - `gh release upload v9.1.5 artifacts/runs/artifacts-v9.1.5-YYYYMMDD-HHMMSS.zip`
+  - `gh release upload v9.1.6 v9/artifacts/<run-id>/artifacts.zip`
 
 ### FAIL schnell verstehen
 - `scenario*_eventual_delivery_failed`: Event kam zu spaet (>10s) oder gar nicht.
@@ -219,7 +218,23 @@ Jedes `message.created`-Event enthaelt jetzt:
   - STT-Sprache
   - textbasierte Erkennung
   - effektive Routing-Sprache
-- Ziel: Agent bekommt bei DE->EN im Voice-Fall dieselbe EN-Lane wie im Chat-Fall.
+
+## Neu in V9.1.7 (Admin)
+- Customer UI hat jetzt den Schalter `Auto-send after recording` (Standard: AN, in LocalStorage gespeichert).
+- Compose/API-Defaults nutzen `qwen2.5:3b` als Standardmodell.
+- Fallback bleibt aktiv:
+  - wenn `qwen2.5:3b` nicht verfuegbar ist, wird auf vorhandenes Modell (typisch `qwen2.5:7b`) gewechselt.
+- TTS-Sanitizer bleibt low-risk:
+  - nur direkt am TTS-Ausgabepunkt,
+  - keine Aenderung an gespeicherten Transkripten oder Dual-Lane-Routing.
+
+### Admin-Kurztest V9.1.7
+1. `docker compose -f v9/docker/compose.dev.yml up -d --build`
+2. Customer-Client: Aufnahme starten, sprechen, stoppen.
+3. Pruefen: Upload startet sofort (bei aktivem Auto-send).
+4. `python3 v9/scripts/tests/test_tts_sanitize.py` ausfuehren.
+5. `bash v9/scripts/tests/run_v9_duallane_ws_tests.sh` ausfuehren.
+Ziel: Agent bekommt bei DE->EN im Voice-Fall dieselbe EN-Lane wie im Chat-Fall.
 
 ### Pflicht-Test \"Voice vs Chat parity\"
 1. Agent `en`, Kunde `de`.
@@ -229,3 +244,34 @@ Jedes `message.created`-Event enthaelt jetzt:
    - `text_for_agent` EN
    - `lang_for_agent=en`
    - `tts.agent_lang=en`
+
+## Neu in V9.1.8 (Admin): Performance Toggle + Search
+- Neue Admin-Parameter:
+  - `perf_logging_enabled`
+  - `perf_logging_sample_rate` (0.0 bis 1.0)
+  - `perf_logging_retention_days`
+  - `search_max_results`
+  - `allow_text_regex_fallback`
+- Neue API-Suche:
+  - `GET /api/admin/search?user_id=...&q=...&mode=auto|session_id|user_id|text&since_days=7&limit=50`
+- Neue Logging-Collection:
+  - `admin_perf_logs` (separat von `messages`).
+
+### Schnelltest fuer Admins
+1. Admin Settings oeffnen, `perf_logging_enabled=AN`, speichern.
+2. Eine kurze Unterhaltung starten.
+3. Suche testen:
+   - Teil-Session-ID mit `*` (z. B. `abc123*`)
+   - Textfragment (z. B. `breaker`)
+4. Treffer mit `Open Session` oeffnen.
+5. `perf_logging_enabled=AUS` setzen.
+
+### Automatisierter Testlauf
+```bash
+bash scripts/run_v9_1_8_admin_tests.sh
+```
+- Artefakte liegen in `v9/artifacts/<timestamp>/`.
+- ZIP-Helfer:
+```bash
+bash v9/scripts/zip_artifacts.sh v9/artifacts/<timestamp>
+```

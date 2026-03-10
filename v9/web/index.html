@@ -412,6 +412,21 @@
               <label class="muted">Metrics retention (days)
                 <input id="adminRetentionDays" type="number" min="1" max="365" step="1" value="30" />
               </label>
+              <label class="muted">Perf logging enabled
+                <input id="adminPerfLoggingEnabled" type="checkbox" />
+              </label>
+              <label class="muted">Perf sample rate (0..1)
+                <input id="adminPerfSampleRate" type="number" min="0" max="1" step="0.05" value="1.00" />
+              </label>
+              <label class="muted">Perf retention (days)
+                <input id="adminPerfRetentionDays" type="number" min="1" max="365" step="1" value="30" />
+              </label>
+              <label class="muted">Search max results
+                <input id="adminSearchMaxResults" type="number" min="1" max="200" step="1" value="50" />
+              </label>
+              <label class="muted">Allow text regex fallback
+                <input id="adminAllowRegexFallback" type="checkbox" checked />
+              </label>
               <label class="muted">Default silence (ms)
                 <input id="adminDefaultSilence" type="number" min="300" max="5000" step="100" value="1300" />
               </label>
@@ -516,7 +531,7 @@
 
           <div id="adminMetricsPanel" class="latencyBox" style="display:none;">
             <div class="row" style="justify-content:space-between;">
-              <div class="muted">Admin Metrics (metrics_logs)</div>
+              <div class="muted">Admin Metrics (admin_perf_logs)</div>
               <button id="btnMetricsRefresh">Refresh</button>
             </div>
             <div id="adminMetricsSummary" class="muted" style="margin-top:6px;">-</div>
@@ -524,27 +539,32 @@
           </div>
 
           <div id="adminConversationSearchPanel" class="latencyBox" style="display:none;">
-            <div class="muted" style="margin-bottom:6px;">Admin Conversation Search</div>
+            <div class="muted" style="margin-bottom:6px;">Admin Search (session/user/text)</div>
             <div class="controlGrid">
-              <label class="muted">Search User ID
-                <input id="adminSearchUserId" type="text" placeholder="target user id" />
+              <label class="muted">Query
+                <input id="adminSearchQuery" type="text" placeholder="session id / user id / text fragment" />
               </label>
-              <label class="muted">Search Session ID
-                <input id="adminSearchSessionId" type="text" placeholder="session id" />
+              <label class="muted">Mode
+                <select id="adminSearchMode">
+                  <option value="auto" selected>auto</option>
+                  <option value="session_id">session_id</option>
+                  <option value="user_id">user_id</option>
+                  <option value="text">text</option>
+                </select>
               </label>
-              <label class="muted">Content (word/text)
-                <input id="adminSearchQuery" type="text" placeholder="word or text section" />
+              <label class="muted">Since days
+                <input id="adminSearchSinceDays" type="number" min="1" max="365" step="1" value="7" />
               </label>
               <label class="muted">Limit
-                <input id="adminSearchLimit" type="number" min="1" max="500" step="1" value="80" />
+                <input id="adminSearchLimit" type="number" min="1" max="200" step="1" value="50" />
               </label>
             </div>
             <div class="row" style="margin-top:8px;">
-              <button id="adminSearchRun">Search Conversations</button>
+              <button id="adminSearchRun">Run Search</button>
               <button id="adminSearchClear">Clear</button>
               <span id="adminSearchStatus" class="muted">-</span>
             </div>
-            <pre id="adminSearchResult" style="margin-top:8px; max-height:240px; overflow:auto;">-</pre>
+            <div id="adminSearchResult" class="textBlock" style="margin-top:8px; max-height:260px; overflow:auto;">-</div>
           </div>
 
           <details id="debugBox" class="debugBox">
@@ -626,9 +646,9 @@ const adminMetricsPanel = el("adminMetricsPanel");
 const adminMetricsSummary = el("adminMetricsSummary");
 const adminMetricsRecent = el("adminMetricsRecent");
 const adminConversationSearchPanel = el("adminConversationSearchPanel");
-const adminSearchUserId = el("adminSearchUserId");
-const adminSearchSessionId = el("adminSearchSessionId");
 const adminSearchQuery = el("adminSearchQuery");
+const adminSearchMode = el("adminSearchMode");
+const adminSearchSinceDays = el("adminSearchSinceDays");
 const adminSearchLimit = el("adminSearchLimit");
 const adminSearchRun = el("adminSearchRun");
 const adminSearchClear = el("adminSearchClear");
@@ -637,6 +657,11 @@ const adminSearchResult = el("adminSearchResult");
 const btnMetricsRefresh = el("btnMetricsRefresh");
 const adminSettingsCard = el("adminSettingsCard");
 const adminRetentionDays = el("adminRetentionDays");
+const adminPerfLoggingEnabled = el("adminPerfLoggingEnabled");
+const adminPerfSampleRate = el("adminPerfSampleRate");
+const adminPerfRetentionDays = el("adminPerfRetentionDays");
+const adminSearchMaxResults = el("adminSearchMaxResults");
+const adminAllowRegexFallback = el("adminAllowRegexFallback");
 const adminDefaultSilence = el("adminDefaultSilence");
 const adminDefaultThreshold = el("adminDefaultThreshold");
 const adminTemplatePath = el("adminTemplatePath");
@@ -861,6 +886,17 @@ function setBusy(isBusy) {
   demoModeChk.disabled = isBusy || !uiAdmin;
   debugPanelToggle.disabled = isBusy || !uiAdmin;
   adminSettingsSave.disabled = isBusy || !uiAdmin;
+  adminPerfLoggingEnabled.disabled = isBusy || !uiAdmin;
+  adminPerfSampleRate.disabled = isBusy || !uiAdmin;
+  adminPerfRetentionDays.disabled = isBusy || !uiAdmin;
+  adminSearchMaxResults.disabled = isBusy || !uiAdmin;
+  adminAllowRegexFallback.disabled = isBusy || !uiAdmin;
+  adminSearchRun.disabled = isBusy || !uiAdmin;
+  adminSearchClear.disabled = isBusy || !uiAdmin;
+  adminSearchQuery.disabled = isBusy || !uiAdmin;
+  adminSearchMode.disabled = isBusy || !uiAdmin;
+  adminSearchSinceDays.disabled = isBusy || !uiAdmin;
+  adminSearchLimit.disabled = isBusy || !uiAdmin;
   silenceMsInput.disabled = isBusy || !autoStopChk.checked;
   voiceThresholdInput.disabled = isBusy || !autoStopChk.checked;
   maxRecordSecInput.disabled = isBusy || !autoStopChk.checked;
@@ -1037,6 +1073,12 @@ function applyAdminSettingsForm(settings) {
   const templates = src.templates || {};
   const toggles = src.feature_toggles || {};
   adminRetentionDays.value = String(Number(src.retention_days || 30));
+  adminPerfLoggingEnabled.checked = !!src.perf_logging_enabled;
+  adminPerfSampleRate.value = Number(src.perf_logging_sample_rate ?? 1).toFixed(2);
+  adminPerfRetentionDays.value = String(Number(src.perf_logging_retention_days || src.retention_days || 30));
+  adminSearchMaxResults.value = String(Number(src.search_max_results || 50));
+  adminAllowRegexFallback.checked = src.allow_text_regex_fallback !== false;
+  adminSearchLimit.value = String(Number(src.search_max_results || 50));
   adminDefaultSilence.value = String(Number(listen.silence_ms || 1300));
   const th = Number(listen.threshold || 0.012);
   adminDefaultThreshold.value = Number.isFinite(th) ? th.toFixed(3) : "0.012";
@@ -1243,30 +1285,55 @@ async function loadAdminMetrics() {
 async function runAdminConversationSearch() {
   if (!uiAdmin) return;
   adminSearchStatus.textContent = "Searching...";
-  adminSearchResult.textContent = "-";
+  adminSearchResult.innerHTML = "-";
   try {
-    const targetUser = (adminSearchUserId.value || "").trim();
-    const targetSession = (adminSearchSessionId.value || "").trim();
-    const targetText = (adminSearchQuery.value || "").trim();
-    const limit = Math.max(1, Math.min(500, Number(adminSearchLimit.value || 80)));
-    if (!targetUser && !targetSession && !targetText) {
-      adminSearchStatus.textContent = "Enter at least one filter";
+    const queryText = (adminSearchQuery.value || "").trim();
+    const mode = (adminSearchMode.value || "auto").trim().toLowerCase();
+    const sinceDays = Math.max(1, Math.min(365, Number(adminSearchSinceDays.value || 7)));
+    const limit = Math.max(1, Math.min(200, Number(adminSearchLimit.value || 50)));
+    if (!queryText) {
+      adminSearchStatus.textContent = "Enter a query first";
       return;
     }
     const qs = new URLSearchParams();
     qs.set("user_id", userId);
+    qs.set("q", queryText);
+    qs.set("mode", mode || "auto");
+    qs.set("since_days", String(sinceDays));
     qs.set("limit", String(limit));
-    if (targetUser) qs.set("search_user_id", targetUser);
-    if (targetSession) qs.set("session_id", targetSession);
-    if (targetText) qs.set("q", targetText);
-    const r = await fetch(`/api/admin/conversations/search?${qs.toString()}`, {
+    const r = await fetch(`/api/admin/search?${qs.toString()}`, {
       headers: authHeaders(),
       cache: "no-store",
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data?.error || `search failed: ${r.status}`);
-    adminSearchStatus.textContent = `Found ${data.count} messages in ${data.session_count} sessions`;
-    adminSearchResult.textContent = JSON.stringify(data, null, 2);
+    if (!r.ok) throw new Error(data?.detail || data?.error || `search failed: ${r.status}`);
+    const matches = Array.isArray(data?.matches) ? data.matches : [];
+    const meta = data?.meta || {};
+    adminSearchStatus.textContent = `Found ${matches.length} matches (${meta.mode_used || "auto"}) in ${meta.took_ms || 0}ms`;
+    if (!matches.length) {
+      adminSearchResult.textContent = "No matches";
+      return;
+    }
+    adminSearchResult.innerHTML = matches.map((m, idx) => {
+      const sid = String(m.session_id || "");
+      const uid = String(m.user_id || "");
+      const ts = String(m.last_ts || "-");
+      const snippet = String(m.snippet || "-")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      const button = sid ? `<button type=\"button\" data-open-session=\"${sid}\" data-open-user=\"${uid}\">Open Session</button>` : "";
+      return `<div style=\"border-bottom:1px solid #d9e1ee; padding:8px 0;\"><div><b>${idx + 1}.</b> session=<code>${sid || "-"}</code> user=<code>${uid || "-"}</code> ts=${ts}</div><div class=\"muted\" style=\"margin-top:3px;\">${snippet}</div><div style=\"margin-top:6px;\">${button}</div></div>`;
+    }).join("");
+    for (const btn of adminSearchResult.querySelectorAll("button[data-open-session]")) {
+      btn.addEventListener("click", () => {
+        const sid = btn.getAttribute("data-open-session") || "";
+        const uid = btn.getAttribute("data-open-user") || "";
+        if (uid) setUserId(uid);
+        if (sid) setSessionId(sid);
+        adminSearchStatus.textContent = `Opened session ${sid}`;
+      });
+    }
   } catch (err) {
     adminSearchStatus.textContent = "Search failed";
     adminSearchResult.textContent = String(err);
@@ -1282,7 +1349,7 @@ async function loadModels() {
   modelCatalog = data;
 
   const ollamaModels = data?.ollama?.models || [];
-  const defaultOllama = data?.ollama?.default_model || "qwen2.5:7b";
+  const defaultOllama = data?.ollama?.default_model || "qwen2.5:3b";
   setModelOptions(ollamaModels.length ? ollamaModels : [defaultOllama], defaultOllama);
 
   const openaiOpt = Array.from(backendSel.options).find((o) => o.value === "openai");
@@ -1461,7 +1528,7 @@ backendSel.onchange = () => {
   }
 
   const ollamaModels = modelCatalog?.ollama?.models || [];
-  const defaultOllama = modelCatalog?.ollama?.default_model || "qwen2.5:7b";
+  const defaultOllama = modelCatalog?.ollama?.default_model || "qwen2.5:3b";
   setModelOptions(ollamaModels.length ? ollamaModels : [defaultOllama], defaultOllama);
   setAppState("listening");
 };
@@ -1534,6 +1601,11 @@ adminSettingsSave.onclick = async () => {
     const payload = {
       user_id: userId,
       retention_days: Math.max(1, Math.min(365, Number(adminRetentionDays.value || 30))),
+      perf_logging_enabled: !!adminPerfLoggingEnabled.checked,
+      perf_logging_sample_rate: Math.max(0, Math.min(1, Number(adminPerfSampleRate.value || 1))),
+      perf_logging_retention_days: Math.max(1, Math.min(365, Number(adminPerfRetentionDays.value || 30))),
+      search_max_results: Math.max(1, Math.min(200, Number(adminSearchMaxResults.value || 50))),
+      allow_text_regex_fallback: !!adminAllowRegexFallback.checked,
       listen_silence_ms_default: Math.max(300, Math.min(5000, Number(adminDefaultSilence.value || 1300))),
       listen_threshold_default: Math.max(0.001, Math.min(0.2, Number(adminDefaultThreshold.value || 0.012))),
       crm_export_template_md: String(adminTemplatePath.value || "").trim(),
@@ -1952,12 +2024,12 @@ adminSearchRun.onclick = async () => {
 };
 
 adminSearchClear.onclick = () => {
-  adminSearchUserId.value = "";
-  adminSearchSessionId.value = "";
   adminSearchQuery.value = "";
-  adminSearchLimit.value = "80";
+  adminSearchMode.value = "auto";
+  adminSearchSinceDays.value = "7";
+  adminSearchLimit.value = "50";
   adminSearchStatus.textContent = "-";
-  adminSearchResult.textContent = "-";
+  adminSearchResult.innerHTML = "-";
 };
 
 async function sendRecording() {
