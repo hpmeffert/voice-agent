@@ -1,33 +1,43 @@
-# V9.1.12 — Release Notes (DE) — 2026-03-11
+## Voice Agent v9.1.12 (DE)
 
-## Highlights
-- Neuer `?` Hilfe-Button im Kunden-Client.
-- Eigene Kunden-Hilfe in DE/EN mit Schritt-fuer-Schritt-Anleitung fuer Voice und Chat.
-- Hilfe wird als formatiertes Markdown dargestellt.
-- Neuer `UI` Sprach-Dropdown im Kunden-Client (Label-Sprache, nicht TTS/Sprachlane).
-- UI-Sprachpraeferenz wird in DB (`user_prefs`) gespeichert und aus DB geladen.
-- UI-Strings kommen aus DB (`ui_i18n_strings`) ueber `/api/i18n?scope=customer&lang=...`.
+**Release:** v9.1.12  
+**Datum:** 2026-03-11  
+**Scope:** UI-Polish (Admin/Agent/Customer), Dual-Lane Stabilität, Doku & Smoke-Checks
 
-## Details
-- Kunden-Client:
-  - Header um `?` Hilfe-Button erweitert.
-  - Help-Modal mit Version und sauber gerendertem Markdown.
-- API:
-  - `/api/docs` unterstuetzt neuen Typ `customer`.
-  - `GET /api/i18n?scope=customer&lang=...`
-  - `GET /api/prefs/ui_lang?user_id=...&scope=customer`
-  - `POST /api/prefs/ui_lang`
-- Doku:
-  - `customer_guide.de.md`
-  - `customer_guide.en.md`
+### Highlights
+- **Admin UI:** Conversation/Session History Panel integriert (scrollbar, lesbar, ideal für Demo/Review)
+- **Customer UI:** Kunden-Voice-Input erscheint im Chatverlauf (nicht nur Agentenantworten)
+- **Agent UI:** Dual-Lane Darstellung (Original + Übersetzung) konsistenter, inkl. Verlauf/Reload
+- **Dokumentation:** User/Demo/Admin/Release Notes gepflegt (DE/EN), Help-Menü-Struktur eingehalten
+- **Quality Gates:** UI-Smoke & Doc-Checks grün (inkl. Silence Threshold Standard = 1300 ms)
 
-## Test (Kurz)
-1. Customer-Client `http://localhost:8086` oeffnen.
-2. `?` klicken.
-3. Pruefen: Ueberschriften, Listen und Codebereiche sind korrekt formatiert.
-4. `Kundensprache=de` -> DE-Hilfe.
-5. `Kundensprache=en` -> EN-Hilfe.
+### Änderungen im Detail
+#### Admin
+- Admin Search -> Session öffnen -> Verlauf wird direkt im Admin-Client angezeigt
+- Ergonomie verbessert (weniger Scroll, bessere Lesbarkeit)
 
-## Lizenzhinweis
-- Keine neuen externen Dependencies.
-- Keine GPL/AGPL-Erweiterung im Core.
+#### Agent
+- Kopfzeile zeigt eindeutig **Agent Client + Version**
+- Dual-Lane Rendering: Original + Übersetzung sichtbar (auch bei History/Reload)
+
+#### Customer
+- Eigenes Voice-Transcript wird in der Kundenansicht sichtbar
+- Hilfe/Guide verfügbar (Schritt-für-Schritt für Voice & Chat)
+
+### Bugfixes
+- Stabilisierung der Anzeige bei Reload (History + Live konsistent)
+- Verbesserte Darstellung / Layout-Fixes (Wrapping/Overflow)
+
+### Tests / Proof (Kurz)
+- `python3 v9/scripts/check_docs.py` -> PASS
+- `bash scripts/run_v9_1_11_ui_smoke.sh` -> PASS
+- Dual-Lane Quick Proof: Customer DE -> Agent EN (Voice/Chat), Agent EN -> Customer DE -> PASS
+- Artefakte lokal (nicht committed): `v9/artifacts/20260311-160303`
+
+### Bekannte Einschränkungen / Notes
+- Performance-Messung ist noch „Basis“ und wird in späteren Releases ausgebaut (togglebar + Log-DB geplant)
+- Echte User-/Role-Management folgt später (Demo User aktuell Admin)
+
+### Upgrade / Run
+- Standard-Start via Compose wie gewohnt
+- Nach Upgrade: Browser Hard-Reload (Cmd+Shift+R) empfohlen
