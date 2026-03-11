@@ -297,4 +297,46 @@ bash v9/scripts/zip_artifacts.sh v9/artifacts/<timestamp>
 ```bash
 bash scripts/run_v9_1_9_ui_smoke.sh
 ```
-- Output and artifacts: `artifacts/v9.1.9/<run-id>/`
+- Output and artifacts: `v9/artifacts/<YYYYMMDD-HHMMSS>/`
+
+## New in V9.1.11 (Admin): Agent/Admin role separation
+- Agent client:
+  - now exposes only `Agent Settings` (no global admin controls)
+  - uses `/api/agent/search` for search
+- Admin client:
+  - remains the central place for global admin settings (`/api/admin/settings`)
+  - shows header perf badges (`STT/LLM/TTS/Total avg/p95`)
+  - keeps unified admin search (`/api/admin/search`) with `auto|session_id|user_id|text` and wildcard `*`
+
+### Admin quick test V9.1.11
+1. Open Admin client and verify:
+   - header shows version `v9.1.11`
+   - perf badges are populated
+2. Header search:
+   - `fe774f*` (session/user fragment)
+   - `Wallbox` (text)
+   - click result -> session opens
+3. Open Agent client:
+   - no admin token / no global admin settings exposed
+
+## New in V9.1.12 Patch 2: Customer UI language from DB
+- New collection for UI strings:
+  - `ui_i18n_strings`
+  - Schema: `scope`, `key`, `lang`, `text`, `updated_at`
+- New collection for UI preferences:
+  - `user_prefs`
+  - Schema: `user_id`, `scope`, `ui_lang`, `updated_at`
+
+### Where is the translation table?
+- In MongoDB:
+  - DB: `voice_agent` (or your configured `MONGO_DB`)
+  - Collection: `ui_i18n_strings`
+- Customer UI scope:
+  - `scope=customer`
+
+### How to add another language
+1. Insert rows for each UI key in `ui_i18n_strings` with the new `lang`.
+2. Verify via API:
+   - `GET /api/i18n?scope=customer&lang=<new>`
+3. Select that UI language in customer client.
+4. If a key is missing, UI falls back to English (`en`).

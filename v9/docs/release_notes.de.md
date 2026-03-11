@@ -1,4 +1,4 @@
-# Release Notes (DE) - V7.0.0 bis V9.1.9
+# Release Notes (DE) - V7.0.0 bis V9.1.11
 
 ## Historie
 - V7.0.0: V7-Scaffold isoliert, eigene Ports, Admin-Demo-Defaults.
@@ -26,6 +26,7 @@
 - V9.1.7: Customer Auto-Upload nach Recording-Ende, Default-Modell auf `qwen2.5:3b` vereinheitlicht und TTS-Sanitizer-Regressionstest unter `v9/scripts/tests/test_tts_sanitize.py`.
 - V9.1.8: Admin-Performance-Toggle + neue Suche (`/api/admin/search`) mit Mode `auto|session_id|user_id|text`, Wildcard `*` fuer IDs und klickbarem Session-Open im Admin-UI.
 - V9.1.9: Agent-UI aufgeraeumt (sticky Header), einheitliche Suche (`q` + `mode`) immer sichtbar, Admin-Einstellungen in Drawer mit sicheren Controls, und Performance-Header mit `avg/p95` aus `window=10m`.
+- V9.1.11: Klare Rollentrennung: Agent-Client nur mit agentenspezifischen Settings, Admin-Client mit globalem Admin-Panel + Header-Perf-Badges + zentraler Admin-Suche; Agent-Suche ueber `/api/agent/search`.
 
 ## Nutzen von V9.1.0
 - Keine falsche Sprache mehr im Agenten- und Kunden-TTS-Pfad.
@@ -90,3 +91,16 @@
 - Suchworkflow ist konsistent: ein Feld `q`, Mode-Dropdown (`auto|session_id|user_id|text`), Wildcard `*` und direkter Session-Sprung aus Treffern.
 - Admin-Drawer reduziert Bedienfehler (Dropdowns/Toggles statt Freitext) und speichert relevante Defaults in DB (`/api/admin/settings`).
 - Performance-Werte sind live sichtbar (`STT/LLM/Total avg+p95`), mit schonender Polling-Strategie (10s offen, 30s geschlossen).
+
+## Nutzen von V9.1.11
+- Agenten sehen keine globalen Admin-Einstellungen mehr und koennen weniger versehentlich falsch konfigurieren.
+- Admins erhalten die globale Steuerung zentral im Admin-Client (Settings, Suche, Metrics).
+- Dual-Lane bleibt stabil fuer Live + Verlauf; bei alten Nachrichten ohne Lane-Daten bleibt die Anzeige robust (Best-Effort).
+
+## Nutzen von V9.1.12
+- Kunden haben jetzt eine eigene Hilfe im Customer-Client (`?` Button) mit klaren Schritt-fuer-Schritt-Anleitungen.
+- Voice- und Chat-Ablauf sind fuer Endnutzer einfacher nachvollziehbar (DE/EN).
+- Kunden-Hilfe wird als formatiertes Markdown gerendert (keine Rohtext- oder Einzeilen-Darstellung).
+- Kunden koennen die Oberflaechensprache (`UI`) direkt im Header zwischen DE/EN umstellen.
+- UI-Strings kommen DB-basiert aus `ui_i18n_strings`, damit neue Sprachen spaeter ohne Frontend-Code eingefuegt werden koennen.
+- Die UI-Sprachpraeferenz wird pro Benutzer in `user_prefs` gespeichert und beim Laden wiederhergestellt.

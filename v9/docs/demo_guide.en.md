@@ -127,3 +127,14 @@ Imagine: supervisor wants to force a specific output language for verification.
    - Save/Cancel flow
    - quick link to Admin Docs
 5. Point to the performance strip (`STT/LLM/Total avg+p95`) and explain why it helps during live support.
+
+## V9.1.11 Demo Focus: strict Agent/Admin separation
+1. Open Agent client:
+   - show `Agent Settings ⚙︎`
+   - show that no global admin settings are exposed
+2. Open Admin client:
+   - demonstrate header search (`q` + `mode`)
+   - show STT/LLM/TTS/Total perf badges
+3. Quick dual-lane proof:
+   - Customer DE voice -> Agent EN (Original + Translation visible)
+   - Agent EN -> Customer DE

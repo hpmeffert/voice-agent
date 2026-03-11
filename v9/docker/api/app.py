@@ -30,7 +30,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v9.1.9"
+APP_VERSION = "v9.1.11"
 
 app = FastAPI(
     title=f"Voice Agent API {APP_VERSION}",
@@ -153,6 +153,8 @@ metrics_logs_col: Collection | None = None
 admin_perf_logs_col: Collection | None = None
 admin_settings_col: Collection | None = None
 ui_translations_col: Collection | None = None
+ui_i18n_strings_col: Collection | None = None
+user_prefs_col: Collection | None = None
 event_bus: EventBus | None = None
 rate_limit_lock = threading.Lock()
 rate_limit_buckets: dict[str, deque[float]] = defaultdict(deque)
@@ -160,6 +162,9 @@ admin_settings_cache_lock = threading.Lock()
 admin_settings_cache_value: dict[str, Any] | None = None
 admin_settings_cache_until: float = 0.0
 ADMIN_SETTINGS_CACHE_TTL_SEC = 5.0
+UI_I18N_CACHE_TTL_SEC = 60.0
+ui_i18n_cache_lock = threading.Lock()
+ui_i18n_cache: dict[tuple[str, str], tuple[float, dict[str, str]]] = {}
 
 
 # ----------------------------
@@ -219,6 +224,8 @@ def ensure_ready() -> None:
         or telemetry_col is None
         or admin_settings_col is None
         or ui_translations_col is None
+        or ui_i18n_strings_col is None
+        or user_prefs_col is None
     ):
         raise RuntimeError("MongoDB not initialized")
 
@@ -827,7 +834,7 @@ def normalized_listen_settings(raw: Any) -> dict[str, Any]:
 # ----------------------------
 @app.on_event("startup")
 def on_startup() -> None:
-    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col, admin_perf_logs_col, admin_settings_col, ui_translations_col, event_bus
+    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col, admin_perf_logs_col, admin_settings_col, ui_translations_col, ui_i18n_strings_col, user_prefs_col, event_bus
 
     whisper = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type=WHISPER_COMPUTE)
 
@@ -843,6 +850,8 @@ def on_startup() -> None:
     telemetry_col = admin_perf_logs_col
     admin_settings_col = mongo_db["admin_settings"]
     ui_translations_col = mongo_db["ui_translations"]
+    ui_i18n_strings_col = mongo_db["ui_i18n_strings"]
+    user_prefs_col = mongo_db["user_prefs"]
 
     users_col.create_index([("updated_at", DESCENDING)])
 
@@ -871,8 +880,13 @@ def on_startup() -> None:
     admin_perf_logs_col.create_index([("direction", ASCENDING), ("ts", DESCENDING)])
     admin_settings_col.create_index([("updated_at", DESCENDING)])
     ui_translations_col.create_index([("updated_at", DESCENDING)])
+    ui_i18n_strings_col.create_index([("scope", ASCENDING), ("key", ASCENDING), ("lang", ASCENDING)], unique=True)
+    ui_i18n_strings_col.create_index([("scope", ASCENDING), ("lang", ASCENDING), ("updated_at", DESCENDING)])
+    user_prefs_col.create_index([("scope", ASCENDING), ("user_id", ASCENDING)], unique=True)
+    user_prefs_col.create_index([("updated_at", DESCENDING)])
     get_admin_settings()
     seed_ui_translations()
+    seed_customer_ui_i18n_strings()
     event_bus = EventBus(url=VALKEY_URL, channel_prefix=VALKEY_CHANNEL_PREFIX)
 
 
@@ -1219,6 +1233,162 @@ def get_ui_translations(lang: str) -> dict[str, str]:
         value = d.get(chosen) or d.get("en") or key
         out[str(key)] = str(value)
     return out
+
+
+def seed_customer_ui_i18n_strings() -> None:
+    ensure_ready()
+    ts = now_utc()
+    docs = [
+        {"scope": "customer", "key": "customer.title", "lang": "en", "text": "Voice Agent Customer"},
+        {"scope": "customer", "key": "customer.title", "lang": "de", "text": "Voice Agent Kunde"},
+        {"scope": "customer", "key": "customer.help", "lang": "en", "text": "Customer Help"},
+        {"scope": "customer", "key": "customer.help", "lang": "de", "text": "Kunden-Hilfe"},
+        {"scope": "customer", "key": "customer.user", "lang": "en", "text": "User"},
+        {"scope": "customer", "key": "customer.user", "lang": "de", "text": "User"},
+        {"scope": "customer", "key": "customer.session", "lang": "en", "text": "Session"},
+        {"scope": "customer", "key": "customer.session", "lang": "de", "text": "Session"},
+        {"scope": "customer", "key": "customer.new_session", "lang": "en", "text": "New Session"},
+        {"scope": "customer", "key": "customer.new_session", "lang": "de", "text": "Neue Session"},
+        {"scope": "customer", "key": "customer.record", "lang": "en", "text": "Record"},
+        {"scope": "customer", "key": "customer.record", "lang": "de", "text": "Aufnehmen"},
+        {"scope": "customer", "key": "customer.stop", "lang": "en", "text": "Stop"},
+        {"scope": "customer", "key": "customer.stop", "lang": "de", "text": "Stopp"},
+        {"scope": "customer", "key": "customer.send_audio", "lang": "en", "text": "Send Audio"},
+        {"scope": "customer", "key": "customer.send_audio", "lang": "de", "text": "Audio senden"},
+        {"scope": "customer", "key": "customer.auto_send", "lang": "en", "text": "Auto-send after recording"},
+        {"scope": "customer", "key": "customer.auto_send", "lang": "de", "text": "Auto-Senden nach Aufnahme"},
+        {"scope": "customer", "key": "customer.request_handoff", "lang": "en", "text": "Request human agent"},
+        {"scope": "customer", "key": "customer.request_handoff", "lang": "de", "text": "Menschlichen Agenten anfordern"},
+        {"scope": "customer", "key": "customer.end_conversation", "lang": "en", "text": "End Conversation"},
+        {"scope": "customer", "key": "customer.end_conversation", "lang": "de", "text": "Konversation beenden"},
+        {"scope": "customer", "key": "customer.listen_mode", "lang": "en", "text": "Listen Mode"},
+        {"scope": "customer", "key": "customer.listen_mode", "lang": "de", "text": "Listen Mode"},
+        {"scope": "customer", "key": "customer.silence", "lang": "en", "text": "Silence"},
+        {"scope": "customer", "key": "customer.silence", "lang": "de", "text": "Stille"},
+        {"scope": "customer", "key": "customer.handoff", "lang": "en", "text": "Handoff"},
+        {"scope": "customer", "key": "customer.handoff", "lang": "de", "text": "Handoff"},
+        {"scope": "customer", "key": "customer.language", "lang": "en", "text": "Customer language"},
+        {"scope": "customer", "key": "customer.language", "lang": "de", "text": "Kundensprache"},
+        {"scope": "customer", "key": "customer.tts", "lang": "en", "text": "TTS"},
+        {"scope": "customer", "key": "customer.tts", "lang": "de", "text": "TTS"},
+        {"scope": "customer", "key": "customer.send_text", "lang": "en", "text": "Send Text"},
+        {"scope": "customer", "key": "customer.send_text", "lang": "de", "text": "Text senden"},
+        {"scope": "customer", "key": "customer.text_placeholder", "lang": "en", "text": "Type text and send..."},
+        {"scope": "customer", "key": "customer.text_placeholder", "lang": "de", "text": "Text eingeben und senden..."},
+        {"scope": "customer", "key": "customer.help_loading", "lang": "en", "text": "Loading help..."},
+        {"scope": "customer", "key": "customer.help_loading", "lang": "de", "text": "Lade Hilfe..."},
+        {"scope": "customer", "key": "customer.help_close", "lang": "en", "text": "Close"},
+        {"scope": "customer", "key": "customer.help_close", "lang": "de", "text": "Schliessen"},
+        {"scope": "customer", "key": "status.idle", "lang": "en", "text": "idle"},
+        {"scope": "customer", "key": "status.idle", "lang": "de", "text": "bereit"},
+        {"scope": "customer", "key": "status.listening", "lang": "en", "text": "listening"},
+        {"scope": "customer", "key": "status.listening", "lang": "de", "text": "hoert zu"},
+        {"scope": "customer", "key": "status.recording", "lang": "en", "text": "recording"},
+        {"scope": "customer", "key": "status.recording", "lang": "de", "text": "nimmt auf"},
+        {"scope": "customer", "key": "status.uploading", "lang": "en", "text": "uploading"},
+        {"scope": "customer", "key": "status.uploading", "lang": "de", "text": "laedt hoch"},
+        {"scope": "customer", "key": "status.speaking", "lang": "en", "text": "speaking"},
+        {"scope": "customer", "key": "status.speaking", "lang": "de", "text": "spricht"},
+        {"scope": "customer", "key": "chat.customer", "lang": "en", "text": "Customer"},
+        {"scope": "customer", "key": "chat.customer", "lang": "de", "text": "Kunde"},
+        {"scope": "customer", "key": "chat.agent", "lang": "en", "text": "Agent"},
+        {"scope": "customer", "key": "chat.agent", "lang": "de", "text": "Agent"},
+        {"scope": "customer", "key": "chat.system", "lang": "en", "text": "System"},
+        {"scope": "customer", "key": "chat.system", "lang": "de", "text": "System"},
+    ]
+    for d in docs:
+        ui_i18n_strings_col.update_one(
+            {"scope": d["scope"], "key": d["key"], "lang": d["lang"]},
+            {"$setOnInsert": {**d, "created_at": ts}, "$set": {"updated_at": ts}},
+            upsert=True,
+        )
+
+
+def resolve_ui_i18n_lang(scope: str, lang: str | None) -> str:
+    chosen = (lang or "").strip().lower()
+    if chosen in {"de", "en"}:
+        return chosen
+    if chosen and ui_i18n_strings_col.count_documents({"scope": scope, "lang": chosen}, limit=1) > 0:
+        return chosen
+    return "en"
+
+
+def get_ui_i18n_strings(scope: str, lang: str | None) -> tuple[str, dict[str, str]]:
+    ensure_ready()
+    scope_v = (scope or "").strip().lower()
+    if not scope_v:
+        raise HTTPException(status_code=400, detail="scope is required")
+    resolved_lang = resolve_ui_i18n_lang(scope_v, lang)
+    key = (scope_v, resolved_lang)
+    now_ts = time.time()
+    with ui_i18n_cache_lock:
+        entry = ui_i18n_cache.get(key)
+        if entry and entry[0] > now_ts:
+            return resolved_lang, dict(entry[1])
+    docs = list(ui_i18n_strings_col.find({"scope": scope_v, "lang": resolved_lang}, {"_id": 0, "key": 1, "text": 1}))
+    if not docs and resolved_lang != "en":
+        resolved_lang = "en"
+        key = (scope_v, resolved_lang)
+        docs = list(ui_i18n_strings_col.find({"scope": scope_v, "lang": resolved_lang}, {"_id": 0, "key": 1, "text": 1}))
+    strings: dict[str, str] = {}
+    for d in docs:
+        k = str(d.get("key") or "").strip()
+        if not k:
+            continue
+        strings[k] = str(d.get("text") or "")
+    with ui_i18n_cache_lock:
+        ui_i18n_cache[key] = (now_ts + UI_I18N_CACHE_TTL_SEC, dict(strings))
+    return resolved_lang, strings
+
+
+def get_user_scope_ui_lang_pref(user_id: str, scope: str) -> str | None:
+    ensure_ready()
+    uid = (user_id or "").strip()
+    scope_v = (scope or "").strip().lower()
+    if not uid or len(uid) < 3 or not scope_v:
+        return None
+    doc = user_prefs_col.find_one({"scope": scope_v, "user_id": uid}, {"ui_lang": 1})
+    if not doc:
+        return None
+    lang = str(doc.get("ui_lang") or "").strip().lower()
+    if not lang:
+        return None
+    if lang in {"de", "en"}:
+        return lang
+    if ui_i18n_strings_col.count_documents({"scope": scope_v, "lang": lang}, limit=1) > 0:
+        return lang
+    return None
+
+
+def set_user_scope_ui_lang_pref(user_id: str, scope: str, ui_lang: str) -> str:
+    ensure_ready()
+    uid = (user_id or "").strip()
+    scope_v = (scope or "").strip().lower()
+    lang = (ui_lang or "").strip().lower()
+    if len(uid) < 3:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    if not scope_v:
+        raise HTTPException(status_code=400, detail="Invalid scope")
+    if lang in {"de", "en"}:
+        resolved_lang = lang
+    elif ui_i18n_strings_col.count_documents({"scope": scope_v, "lang": lang}, limit=1) > 0:
+        resolved_lang = lang
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported ui_lang for scope={scope_v}: {lang}")
+    ts = now_utc()
+    user_prefs_col.update_one(
+        {"scope": scope_v, "user_id": uid},
+        {
+            "$set": {"ui_lang": resolved_lang, "updated_at": ts},
+            "$setOnInsert": {"scope": scope_v, "user_id": uid, "created_at": ts},
+        },
+        upsert=True,
+    )
+    with ui_i18n_cache_lock:
+        stale_keys = [k for k in ui_i18n_cache.keys() if k[0] == scope_v]
+        for stale in stale_keys:
+            ui_i18n_cache.pop(stale, None)
+    return resolved_lang
 
 
 def is_crm_export_enabled_for_user(user_id: str) -> bool:
@@ -2039,6 +2209,12 @@ class UserPrefsRequest(BaseModel):
     agent_lang: str | None = Field(default=None, min_length=2, max_length=8)
 
 
+class UiLangScopePreferenceRequest(BaseModel):
+    user_id: str = Field(min_length=3, max_length=128)
+    scope: str = Field(min_length=2, max_length=64)
+    ui_lang: str = Field(min_length=2, max_length=16)
+
+
 class UserSettingsUpdateRequest(BaseModel):
     user_id: str = Field(min_length=8)
     listen_mode_default: bool | None = None
@@ -2838,6 +3014,21 @@ def ui_i18n(
     }
 
 
+@app.get("/i18n")
+def i18n_scope(
+    scope: str = Query("customer", min_length=2, max_length=64),
+    lang: str = Query("en"),
+):
+    scope_v = (scope or "").strip().lower()
+    resolved_lang, strings = get_ui_i18n_strings(scope_v, lang)
+    return {
+        "scope": scope_v,
+        "lang": resolved_lang,
+        "default_lang": "en",
+        "strings": strings,
+    }
+
+
 def normalize_doc_lang(lang: str | None) -> str:
     value = (lang or "").strip().lower()
     return "de" if value == "de" else "en"
@@ -2847,6 +3038,7 @@ def resolve_doc_path(doc_type: str, lang: str) -> Path | None:
     doc_lang = normalize_doc_lang(lang)
     mapping = {
         "user": f"/app/docs/user_guide.{doc_lang}.md",
+        "customer": f"/app/docs/customer_guide.{doc_lang}.md",
         "demo": f"/app/docs/demo_guide.{doc_lang}.md",
         "admin": f"/app/docs/admin_docs.{doc_lang}.md",
         "release": f"/app/docs/release_notes.{doc_lang}.md",
@@ -2859,7 +3051,7 @@ def resolve_doc_path(doc_type: str, lang: str) -> Path | None:
 
 @app.get("/docs")
 def docs_api(
-    type: str = Query(..., pattern="^(user|demo|admin|release)$"),
+    type: str = Query(..., pattern="^(user|customer|demo|admin|release)$"),
     lang: str = Query("en"),
     user_id: str | None = Query(None),
     admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
@@ -2877,6 +3069,35 @@ def docs_api(
     except OSError:
         raise HTTPException(status_code=500, detail="Failed to read docs file")
     return PlainTextResponse(content, media_type="text/markdown; charset=utf-8")
+
+
+@app.get("/prefs/ui_lang")
+def get_ui_lang_pref(
+    user_id: str = Query(..., min_length=3, max_length=128),
+    scope: str = Query("customer", min_length=2, max_length=64),
+):
+    scope_v = (scope or "").strip().lower()
+    lang = get_user_scope_ui_lang_pref(user_id.strip(), scope_v)
+    return {
+        "ok": True,
+        "user_id": user_id.strip(),
+        "scope": scope_v,
+        "ui_lang": lang,
+        "found": bool(lang),
+        "fallback_lang": "en",
+    }
+
+
+@app.post("/prefs/ui_lang")
+def set_ui_lang_pref(req: UiLangScopePreferenceRequest):
+    scope_v = (req.scope or "").strip().lower()
+    lang = set_user_scope_ui_lang_pref(req.user_id.strip(), scope_v, req.ui_lang.strip().lower())
+    return {
+        "ok": True,
+        "user_id": req.user_id.strip(),
+        "scope": scope_v,
+        "ui_lang": lang,
+    }
 
 
 @app.post("/ui/lang")
@@ -3348,10 +3569,39 @@ def admin_search(
 ):
     ensure_ready()
     assert_admin_access(user_id, admin_token)
-    t0 = time.perf_counter()
     settings = get_admin_settings()
     default_limit = max(1, min(200, int(settings.get("search_max_results", 50) or 50)))
     use_limit = max(1, min(200, int(limit or default_limit)))
+    allow_regex_fallback = bool(settings.get("allow_text_regex_fallback", True))
+    matches, mode_used, used_text_fallback, took_ms = run_conversation_search(
+        q=q,
+        mode=mode,
+        since_days=since_days,
+        limit=use_limit,
+        allow_text_regex_fallback=allow_regex_fallback,
+    )
+    return {
+        "matches": matches,
+        "meta": {
+            "mode_used": mode_used,
+            "limit": use_limit,
+            "since_days": since_days,
+            "used_text_regex_fallback": used_text_fallback,
+            "took_ms": took_ms,
+            "count": len(matches),
+        },
+    }
+
+
+def run_conversation_search(
+    *,
+    q: str,
+    mode: str,
+    since_days: int,
+    limit: int,
+    allow_text_regex_fallback: bool,
+) -> tuple[list[dict[str, Any]], str, bool, int]:
+    t0 = time.perf_counter()
     qv = (q or "").strip()
     mode_norm = (mode or "auto").strip().lower()
     if mode_norm not in {"auto", "session_id", "user_id", "text"}:
@@ -3364,7 +3614,6 @@ def admin_search(
         else:
             mode_norm = "text"
     cutoff = now_utc() - timedelta(days=since_days)
-    allow_regex_fallback = bool(settings.get("allow_text_regex_fallback", True))
     docs: list[dict[str, Any]] = []
     used_text_fallback = False
 
@@ -3380,7 +3629,7 @@ def admin_search(
                 {"_id": 0, "session_id": 1, "user_id": 1, "content": 1, "role": 1, "created_at": 1, "t": 1},
             )
             .sort("t", DESCENDING)
-            .limit(use_limit)
+            .limit(limit)
         )
     else:
         try:
@@ -3399,11 +3648,11 @@ def admin_search(
                     },
                 )
                 .sort([("score", {"$meta": "textScore"}), ("t", DESCENDING)])
-                .limit(use_limit)
+                .limit(limit)
             )
         except Exception:
             docs = []
-        if not docs and allow_regex_fallback:
+        if not docs and allow_text_regex_fallback:
             used_text_fallback = True
             docs = list(
                 messages_col.find(
@@ -3414,7 +3663,7 @@ def admin_search(
                     {"_id": 0, "session_id": 1, "user_id": 1, "content": 1, "role": 1, "created_at": 1, "t": 1},
                 )
                 .sort("t", DESCENDING)
-                .limit(use_limit)
+                .limit(limit)
             )
 
     matches: list[dict[str, Any]] = []
@@ -3439,15 +3688,36 @@ def admin_search(
         matches.append(match)
 
     took_ms = max(0, int((time.perf_counter() - t0) * 1000))
+    return matches, mode_norm, used_text_fallback, took_ms
+
+
+@app.get("/agent/search")
+def agent_search(
+    user_id: str = Query(..., min_length=4),
+    q: str = Query(..., min_length=1, max_length=200),
+    mode: str = Query("auto"),
+    since_days: int = Query(7, ge=1, le=365),
+    limit: int = Query(50, ge=1, le=200),
+):
+    ensure_ready()
+    # Agent search intentionally avoids admin-only controls. It uses conservative fallback defaults.
+    matches, mode_used, used_text_fallback, took_ms = run_conversation_search(
+        q=q,
+        mode=mode,
+        since_days=since_days,
+        limit=max(1, min(200, int(limit))),
+        allow_text_regex_fallback=True,
+    )
     return {
         "matches": matches,
         "meta": {
-            "mode_used": mode_norm,
-            "limit": use_limit,
+            "mode_used": mode_used,
+            "limit": max(1, min(200, int(limit))),
             "since_days": since_days,
             "used_text_regex_fallback": used_text_fallback,
             "took_ms": took_ms,
             "count": len(matches),
+            "scope": "agent",
         },
     }
 

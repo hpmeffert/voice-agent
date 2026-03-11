@@ -21,6 +21,26 @@
     .msg { padding:10px; border-radius:10px; border:1px solid #dbe3f0; background:#fff; white-space:pre-wrap; }
     .me { background:#eefbf8; }
     .bot { background:#f8f4ff; }
+    .iconBtn {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0;
+    }
+    .helpModal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:120; }
+    .helpModal.show { display:flex; }
+    .helpCard { width:min(920px,96vw); max-height:86vh; overflow:auto; background:#fff; border:1px solid #d9e1ee; border-radius:12px; }
+    .helpHd { padding:10px 12px; border-bottom:1px solid #d9e1ee; display:flex; justify-content:space-between; align-items:center; }
+    .helpBd { padding:12px; line-height:1.45; }
+    .helpBd h1, .helpBd h2, .helpBd h3 { margin:12px 0 8px; line-height:1.25; }
+    .helpBd p { margin:8px 0; }
+    .helpBd ul, .helpBd ol { margin:8px 0 8px 18px; padding:0; }
+    .helpBd li { margin:4px 0; }
+    .helpBd pre { margin:8px 0; padding:10px; border:1px solid #dbe3f0; border-radius:8px; background:#f8fafc; overflow:auto; }
+    .helpBd code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12px; }
   </style>
 </head>
 <body>
@@ -29,15 +49,19 @@
       <div class="hd">
         <div>
           <b id="headerTitle">Voice Agent Customer</b>
-          <div class="status" id="headerVersion">Version: v9.1.9</div>
+          <div class="status" id="headerVersion">Version: v9.1.11</div>
           <div class="status" id="status">idle</div>
         </div>
-        <div class="status" id="ids">-</div>
+        <div class="row">
+          <label><span id="uiLangLabel">UI</span> <select id="uiLang"><option value="en">en</option><option value="de">de</option></select></label>
+          <button id="helpBtn" class="iconBtn" title="Benutzerhilfe">?</button>
+          <div class="status" id="ids">-</div>
+        </div>
       </div>
       <div class="bd">
         <div class="row">
-          <label>User <input id="userId" size="30" /></label>
-          <label>Session <input id="sessionId" size="30" /></label>
+          <label><span id="labelUser">User</span> <input id="userId" size="30" /></label>
+          <label><span id="labelSession">Session</span> <input id="sessionId" size="30" /></label>
           <button id="btnNewSession">Neue Session</button>
         </div>
 
@@ -45,14 +69,14 @@
           <button id="btnRecord" class="primary">Record</button>
           <button id="btnStop" disabled>Stop</button>
           <button id="btnSendAudio" disabled>Send Audio</button>
-          <label><input id="autoSendAfterRecord" type="checkbox" checked /> Auto-send after recording</label>
+          <label><input id="autoSendAfterRecord" type="checkbox" checked /> <span id="labelAutoSendAfterRecord">Auto-send after recording</span></label>
           <button id="btnRequestHandoff">Menschlichen Agenten anfordern</button>
           <button id="btnEndConversation" class="warn">End Conversation</button>
-          <label><input id="listenMode" type="checkbox" /> Listen Mode</label>
-          <span class="status">Silence: <b>1300ms</b></span>
+          <label><input id="listenMode" type="checkbox" /> <span id="labelListenMode">Listen Mode</span></label>
+          <span class="status"><span id="labelSilence">Silence</span>: <b>1300ms</b></span>
           <span class="status" id="handoffStatus">Handoff: none</span>
-          <label>Kundensprache <select id="customerLang"><option value="auto">auto</option><option>de</option><option>en</option><option>no</option><option>sv</option><option>fi</option></select></label>
-          <label>TTS <select id="ttsLang"><option value="auto">auto</option><option>de</option><option>en</option><option>no</option><option>sv</option><option>fi</option></select></label>
+          <label><span id="labelCustomerLang">Kundensprache</span> <select id="customerLang"><option value="auto">auto</option><option>de</option><option>en</option><option>no</option><option>sv</option><option>fi</option></select></label>
+          <label><span id="labelTts">TTS</span> <select id="ttsLang"><option value="auto">auto</option><option>de</option><option>en</option><option>no</option><option>sv</option><option>fi</option></select></label>
         </div>
 
         <div style="margin-top:10px;">
@@ -69,11 +93,19 @@
     </div>
   </div>
 
+  <div id="helpModal" class="helpModal">
+    <div class="helpCard">
+      <div class="helpHd"><b id="helpTitleText">Kunden-Hilfe</b><span id="helpVersion" class="status">Version: v9.1.11</span><button id="helpCloseBtn">Schliessen</button></div>
+      <div id="helpBody" class="helpBd">Lade Hilfe...</div>
+    </div>
+  </div>
+
 <script>
 const USER_KEY = "v8_customer_user_id";
 const SESSION_KEY = "v8_customer_session_id";
 const LISTEN_KEY = "v8_customer_listen_mode";
 const CUSTOMER_LANG_KEY = "v9_customer_lang";
+const CUSTOMER_UI_LANG_KEY = "v9_customer_ui_lang";
 const AUTO_SEND_AFTER_RECORD_KEY = "v9_customer_auto_send_after_record";
 const SILENCE_MS = 1300;
 const MIN_VOICE_RMS = 0.012;
@@ -101,6 +133,21 @@ const handoffStatusEl = document.getElementById("handoffStatus");
 const autoSendAfterRecordEl = document.getElementById("autoSendAfterRecord");
 const headerTitleEl = document.getElementById("headerTitle");
 const headerVersionEl = document.getElementById("headerVersion");
+const uiLangEl = document.getElementById("uiLang");
+const uiLangLabelEl = document.getElementById("uiLangLabel");
+const labelUserEl = document.getElementById("labelUser");
+const labelSessionEl = document.getElementById("labelSession");
+const labelAutoSendAfterRecordEl = document.getElementById("labelAutoSendAfterRecord");
+const labelListenModeEl = document.getElementById("labelListenMode");
+const labelSilenceEl = document.getElementById("labelSilence");
+const labelCustomerLangEl = document.getElementById("labelCustomerLang");
+const labelTtsEl = document.getElementById("labelTts");
+const helpBtn = document.getElementById("helpBtn");
+const helpTitleText = document.getElementById("helpTitleText");
+const helpModal = document.getElementById("helpModal");
+const helpVersion = document.getElementById("helpVersion");
+const helpCloseBtn = document.getElementById("helpCloseBtn");
+const helpBody = document.getElementById("helpBody");
 
 let mediaRecorder = null;
 let chunks = [];
@@ -116,13 +163,86 @@ let speechStartedAt = 0;
 let lastVoiceAt = 0;
 let handoffRequested = false;
 let handoffState = "none";
+let uiStrings = {};
+let uiLangCurrent = "en";
 
-function setStatus(s){ statusEl.textContent = s; }
+const BUILTIN_UI_STRINGS = {
+  en: {
+    "customer.title": "Voice Agent Customer",
+    "customer.help": "Customer Help",
+    "customer.user": "User",
+    "customer.session": "Session",
+    "customer.new_session": "New Session",
+    "customer.record": "Record",
+    "customer.stop": "Stop",
+    "customer.send_audio": "Send Audio",
+    "customer.auto_send": "Auto-send after recording",
+    "customer.request_handoff": "Request human agent",
+    "customer.end_conversation": "End Conversation",
+    "customer.listen_mode": "Listen Mode",
+    "customer.silence": "Silence",
+    "customer.handoff": "Handoff",
+    "customer.language": "Customer language",
+    "customer.tts": "TTS",
+    "customer.send_text": "Send Text",
+    "customer.text_placeholder": "Type text and send...",
+    "customer.help_loading": "Loading help...",
+    "customer.help_close": "Close",
+    "status.idle": "idle",
+    "status.listening": "listening",
+    "status.recording": "recording",
+    "status.uploading": "uploading",
+    "status.speaking": "speaking",
+    "chat.customer": "Customer",
+    "chat.agent": "Agent",
+    "chat.system": "System"
+  },
+  de: {
+    "customer.title": "Voice Agent Kunde",
+    "customer.help": "Kunden-Hilfe",
+    "customer.user": "User",
+    "customer.session": "Session",
+    "customer.new_session": "Neue Session",
+    "customer.record": "Aufnehmen",
+    "customer.stop": "Stopp",
+    "customer.send_audio": "Audio senden",
+    "customer.auto_send": "Auto-Senden nach Aufnahme",
+    "customer.request_handoff": "Menschlichen Agenten anfordern",
+    "customer.end_conversation": "Konversation beenden",
+    "customer.listen_mode": "Listen Mode",
+    "customer.silence": "Stille",
+    "customer.handoff": "Handoff",
+    "customer.language": "Kundensprache",
+    "customer.tts": "TTS",
+    "customer.send_text": "Text senden",
+    "customer.text_placeholder": "Text eingeben und senden...",
+    "customer.help_loading": "Lade Hilfe...",
+    "customer.help_close": "Schliessen",
+    "status.idle": "bereit",
+    "status.listening": "hoert zu",
+    "status.recording": "nimmt auf",
+    "status.uploading": "laedt hoch",
+    "status.speaking": "spricht",
+    "chat.customer": "Kunde",
+    "chat.agent": "Agent",
+    "chat.system": "System"
+  }
+};
+
+function t(key, fallback){
+  return uiStrings[key] || fallback || key;
+}
+
+function setStatus(s){
+  const key = `status.${String(s || "").toLowerCase()}`;
+  statusEl.textContent = t(key, String(s || ""));
+}
 function setVersion(v){
-  const ver = v || "v9.1.9";
-  document.title = `Voice Agent Customer ${ver}`;
-  headerTitleEl.textContent = `Voice Agent Customer ${ver}`;
+  const ver = v || "v9.1.11";
+  document.title = `${t("customer.title", "Voice Agent Customer")} ${ver}`;
+  headerTitleEl.textContent = `${t("customer.title", "Voice Agent Customer")} ${ver}`;
   headerVersionEl.textContent = `Version: ${ver}`;
+  helpVersion.textContent = `Version: ${ver}`;
 }
 function makeId(){ return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()); }
 function refreshIds(){ idsEl.textContent = `User: ${userIdEl.value} | Session: ${sessionIdEl.value || "-"}`; }
@@ -138,9 +258,127 @@ function setHandoff(state, requested){
   handoffState = state || "none";
   handoffRequested = !!requested;
   const txt = handoffRequested ? `requested (${handoffState})` : handoffState;
-  handoffStatusEl.textContent = `Handoff: ${txt}`;
+  handoffStatusEl.textContent = `${t("customer.handoff", "Handoff")}: ${txt}`;
   btnRequestHandoff.disabled = handoffRequested;
 }
+
+function resolveUiLang(lang) {
+  return String(lang || "").trim().toLowerCase() === "de" ? "de" : "en";
+}
+
+function applyUiStrings() {
+  uiLangLabelEl.textContent = "UI";
+  labelUserEl.textContent = t("customer.user", "User");
+  labelSessionEl.textContent = t("customer.session", "Session");
+  btnNewSession.textContent = t("customer.new_session", "New Session");
+  btnRecord.textContent = t("customer.record", "Record");
+  btnStop.textContent = t("customer.stop", "Stop");
+  btnSendAudio.textContent = t("customer.send_audio", "Send Audio");
+  labelAutoSendAfterRecordEl.textContent = t("customer.auto_send", "Auto-send after recording");
+  btnRequestHandoff.textContent = t("customer.request_handoff", "Request human agent");
+  btnEndConversation.textContent = t("customer.end_conversation", "End Conversation");
+  labelListenModeEl.textContent = t("customer.listen_mode", "Listen Mode");
+  labelSilenceEl.textContent = t("customer.silence", "Silence");
+  labelCustomerLangEl.textContent = t("customer.language", "Customer language");
+  labelTtsEl.textContent = t("customer.tts", "TTS");
+  btnSendText.textContent = t("customer.send_text", "Send Text");
+  textInputEl.placeholder = t("customer.text_placeholder", "Type text and send...");
+  helpBtn.title = t("customer.help", "Customer Help");
+  helpTitleText.textContent = t("customer.help", "Customer Help");
+  helpCloseBtn.textContent = t("customer.help_close", "Close");
+}
+
+async function loadUiI18n(lang) {
+  const resolved = resolveUiLang(lang);
+  uiStrings = { ...(BUILTIN_UI_STRINGS[resolved] || BUILTIN_UI_STRINGS.en) };
+  try {
+    const r = await fetch(`/api/i18n?scope=customer&lang=${encodeURIComponent(resolved)}`, { cache: "no-store" });
+    if (r.ok) {
+      const data = await r.json();
+      const remote = (data && data.strings && typeof data.strings === "object") ? data.strings : {};
+      uiStrings = { ...uiStrings, ...remote };
+    }
+  } catch (_) {}
+  applyUiStrings();
+  setVersion(headerVersionEl.textContent.replace(/^Version:\s*/, "") || "v9.1.11");
+  setStatus(loopActive ? "listening" : "idle");
+  setHandoff(handoffState, handoffRequested);
+}
+
+async function loadUiLangPreferenceFromDb() {
+  const uid = (userIdEl.value || "").trim();
+  if (!uid || uid.length < 3) return null;
+  try {
+    const r = await fetch(`/api/prefs/ui_lang?user_id=${encodeURIComponent(uid)}&scope=customer`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const lang = String((data || {}).ui_lang || "").trim().toLowerCase();
+    return lang ? resolveUiLang(lang) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function persistUiLangPreference(lang) {
+  const uid = (userIdEl.value || "").trim();
+  if (!uid || uid.length < 3) return;
+  try {
+    await fetch("/api/prefs/ui_lang", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: uid, scope: "customer", ui_lang: resolveUiLang(lang) }),
+    });
+  } catch (_) {}
+}
+
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function renderMarkdown(md) {
+  let html = escapeHtml(md || '');
+  html = html.replace(/```([\s\S]*?)```/g, (_m, code) => `<pre><code>${code}</code></pre>`);
+  html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.*)$/gm, '<h1>$1</h1>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/^\- (.*)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>');
+  html = html.replace(/<\/ul>\s*<ul>/g, '');
+  html = html.replace(/\n{2,}/g, '</p><p>');
+  html = `<p>${html}</p>`;
+  html = html.replace(/<p>\s*(<h[1-3]>)/g, '$1');
+  html = html.replace(/(<\/h[1-3]>)\s*<\/p>/g, '$1');
+  html = html.replace(/<p>\s*(<ul>)/g, '$1');
+  html = html.replace(/(<\/ul>)\s*<\/p>/g, '$1');
+  html = html.replace(/<p>\s*(<pre>)/g, '$1');
+  html = html.replace(/(<\/pre>)\s*<\/p>/g, '$1');
+  return html;
+}
+
+function helpLang() {
+  return uiLangCurrent === 'de' ? 'de' : 'en';
+}
+
+async function openHelp() {
+  helpModal.classList.add('show');
+  helpBody.textContent = t("customer.help_loading", "Loading help...");
+  const lang = helpLang();
+  try {
+    const r = await fetch(`/api/docs?type=customer&lang=${encodeURIComponent(lang)}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const txt = await r.text();
+    helpBody.innerHTML = renderMarkdown(txt);
+  } catch (err) {
+    helpBody.textContent = `Kunden-Hilfe konnte nicht geladen werden: ${String(err)}`;
+  }
+}
+
+function closeHelp() { helpModal.classList.remove('show'); }
 
 function stateIdle(){ setStatus(loopActive ? 'listening' : 'idle'); }
 
@@ -183,7 +421,7 @@ function connectSessionWs(){
         const laneCustomer = p.customer || {};
         const laneTts = p.tts || {};
         const customerText = String(laneCustomer.text || p.text || '');
-        if (customerText) addMsg('bot','Agent', customerText);
+        if (customerText) addMsg('bot', t("chat.agent", "Agent"), customerText);
         const ttsText = String(laneTts.customer_text || '');
         const ttsLang = String(laneTts.customer_lang || p.tts_lang || laneCustomer.lang || ttsLangEl.value || 'de');
         if (ttsText) await playAgentTts(ttsText, ttsLang);
@@ -191,18 +429,18 @@ function connectSessionWs(){
       if (e.from === 'customer' && e.payload) {
         const p = e.payload || {};
         const ownText = String((p.customer && p.customer.text) || p.text_original || p.text || '');
-        if (ownText) addMsg('me','Kunde', ownText);
+        if (ownText) addMsg('me', t("chat.customer", "Kunde"), ownText);
       }
       if (e.from === 'system' && e.type === 'session.joined') {
-        addMsg('bot','System', `Agent ${e.payload?.agent_id || ''} joined`);
+        addMsg('bot', t("chat.system", "System"), `Agent ${e.payload?.agent_id || ''} joined`);
       }
       if (e.type === 'handoff.request') {
         setHandoff('requested', true);
-        addMsg('bot','System','Handoff requested. Bitte kurz warten, ein Agent uebernimmt.');
+        addMsg('bot', t("chat.system", "System"), 'Handoff requested. Bitte kurz warten, ein Agent uebernimmt.');
       }
       if (e.type === 'handoff.accept') {
         setHandoff('accepted', false);
-        addMsg('bot','System', `Agent ${e.payload?.agent_id || ''} hat den Handoff angenommen.`);
+        addMsg('bot', t("chat.system", "System"), `Agent ${e.payload?.agent_id || ''} hat den Handoff angenommen.`);
       }
     } catch(_) {}
   };
@@ -323,7 +561,7 @@ async function sendAudio({ fromLoop = false } = {}){
       setHandoff(handoffStateHeader || "none", handoffRequestedHeader === "1");
     }
 
-    if (transcript) addMsg('me','Kunde',decodeURIComponent(transcript));
+    if (transcript) addMsg('me', t("chat.customer", "Kunde"), decodeURIComponent(transcript));
 
     audioEl.src = URL.createObjectURL(blob);
     setStatus('speaking');
@@ -349,21 +587,41 @@ sessionIdEl.value = localStorage.getItem(SESSION_KEY) || '';
 listenModeEl.checked = localStorage.getItem(LISTEN_KEY) === '1';
 customerLangEl.value = localStorage.getItem(CUSTOMER_LANG_KEY) || 'auto';
 autoSendAfterRecordEl.checked = localStorage.getItem(AUTO_SEND_AFTER_RECORD_KEY) !== '0';
+uiLangCurrent = resolveUiLang(localStorage.getItem(CUSTOMER_UI_LANG_KEY) || 'en');
+uiLangEl.value = uiLangCurrent;
 loopActive = listenModeEl.checked;
 refreshIds();
 connectSessionWs();
 
 (async () => {
+  let cfgDefaultLang = "en";
   try {
     const cfg = await fetch('/api/config', { cache: 'no-store' }).then(r => r.json());
-    setVersion((cfg?.ui?.version) || "v9.1.9");
+    cfgDefaultLang = resolveUiLang((cfg && cfg.ui_lang_default) || "en");
+    setVersion((cfg?.ui?.version) || "v9.1.11");
   } catch (_) {
-    setVersion("v9.1.9");
+    setVersion("v9.1.11");
   }
+  const dbLang = await loadUiLangPreferenceFromDb();
+  const preferred = resolveUiLang(dbLang || localStorage.getItem(CUSTOMER_UI_LANG_KEY) || cfgDefaultLang || "en");
+  uiLangCurrent = preferred;
+  uiLangEl.value = preferred;
+  localStorage.setItem(CUSTOMER_UI_LANG_KEY, preferred);
+  await loadUiI18n(preferred);
 })();
 stateIdle();
 
-userIdEl.addEventListener('change', () => { persistIds(); connectSessionWs(); });
+userIdEl.addEventListener('change', async () => {
+  persistIds();
+  connectSessionWs();
+  const dbLang = await loadUiLangPreferenceFromDb();
+  if (dbLang) {
+    uiLangCurrent = resolveUiLang(dbLang);
+    uiLangEl.value = uiLangCurrent;
+    localStorage.setItem(CUSTOMER_UI_LANG_KEY, uiLangCurrent);
+    await loadUiI18n(uiLangCurrent);
+  }
+});
 sessionIdEl.addEventListener('change', () => { persistIds(); connectSessionWs(); });
 listenModeEl.addEventListener('change', () => {
   loopActive = !!listenModeEl.checked;
@@ -380,13 +638,20 @@ autoSendAfterRecordEl.addEventListener('change', () => {
 ttsLangEl.addEventListener('change', () => {
   connectSessionWs();
 });
+uiLangEl.addEventListener('change', async () => {
+  uiLangCurrent = resolveUiLang(uiLangEl.value);
+  uiLangEl.value = uiLangCurrent;
+  localStorage.setItem(CUSTOMER_UI_LANG_KEY, uiLangCurrent);
+  await loadUiI18n(uiLangCurrent);
+  await persistUiLangPreference(uiLangCurrent);
+});
 
 btnNewSession.onclick = () => {
   sessionIdEl.value = '';
   persistIds();
   connectSessionWs();
   setHandoff('none', false);
-  addMsg('me','System','Neue Session gestartet');
+  addMsg('me', t("chat.system", "System"), 'Neue Session gestartet');
 };
 
 btnRecord.onclick = async () => {
@@ -417,7 +682,7 @@ btnRequestHandoff.onclick = async () => {
   const sid = (sessionIdEl.value || '').trim();
   const uid = (userIdEl.value || '').trim();
   if (!sid || !uid) {
-    addMsg('bot','System','Bitte zuerst eine aktive Session starten.');
+    addMsg('bot', t("chat.system", "System"), 'Bitte zuerst eine aktive Session starten.');
     return;
   }
   try {
@@ -432,7 +697,7 @@ btnRequestHandoff.onclick = async () => {
       return;
     }
     setHandoff(String(data.handoff_state || 'requested'), !!data.handoff_requested);
-    addMsg('me','System','Menschlicher Agent wurde angefordert.');
+    addMsg('me', t("chat.system", "System"), 'Menschlicher Agent wurde angefordert.');
   } catch (e) {
     addMsg('bot','Fehler', String(e));
   }
@@ -441,7 +706,7 @@ btnRequestHandoff.onclick = async () => {
 btnSendText.onclick = async () => {
   const text = (textInputEl.value || '').trim();
   if (!text) return;
-  addMsg('me','Kunde',text);
+  addMsg('me', t("chat.customer", "Kunde"), text);
   setStatus('thinking');
   const r = await fetch('/api/chat/text', {
     method:'POST',
@@ -461,10 +726,16 @@ btnSendText.onclick = async () => {
   connectSessionWs();
   setHandoff(String(data.handoff_state || "none"), !!data.handoff_requested);
   if (data.handoff_recommended) {
-    addMsg('bot','System','LLM-Triage empfiehlt Handoff an menschlichen Agenten.');
+    addMsg('bot', t("chat.system", "System"), 'LLM-Triage empfiehlt Handoff an menschlichen Agenten.');
   }
   textInputEl.value = '';
   stateIdle();
+};
+
+helpBtn.onclick = () => { openHelp(); };
+helpCloseBtn.onclick = () => { closeHelp(); };
+helpModal.onclick = (ev) => {
+  if (ev.target === helpModal) closeHelp();
 };
 
 if (loopActive) {

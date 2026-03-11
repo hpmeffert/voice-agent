@@ -1,4 +1,4 @@
-# User Guide (EN) - V9.0.0
+# User Guide (EN, Agent View) - V9.1.11
 
 ## What does Voice Agent do?
 Voice Agent keeps customer and agent conversations in sync across languages:
@@ -10,8 +10,7 @@ Voice Agent keeps customer and agent conversations in sync across languages:
 
 Goal: both sides work in their own language without losing context.
 
-## UIs (where to go)
-- Admin UI: `http://localhost:8085`
+## UIs (Agent flow)
 - Customer UI: `http://localhost:8086`
 - Agent UI: `http://localhost:8087`
 
@@ -100,7 +99,7 @@ If customer language is detected, the response language and customer voice profi
   - Turn on `Play incoming on agent`.
 - No audio:
   - Allow browser autoplay.
-  - Check Piper health in Admin checks.
+  - Escalate to technical support if backend audio services are unavailable.
 - Two voices at the same time:
   - Keep `Play customer output on agent` OFF (default).
 
@@ -159,14 +158,17 @@ If customer language is detected, the response language and customer voice profi
   - faster troubleshooting
   - fewer interruptions during live operation.
 
-## New in V9.1.9: Cleaner Agent UI
+## New in V9.1.11: Clean Agent/Admin separation
 - Agent now has a consistent top header:
   - connection status + version
   - always-visible search (`q` + mode)
-  - admin button
-- Search is always available and uses `/api/admin/search`.
-- Admin settings are grouped in a Drawer with safe dropdown/toggle controls to reduce mistakes.
-- Compact performance strip shows:
+  - `Agent Settings ⚙︎`
+- Search is always available and now uses `/api/agent/search` (no admin endpoint in agent view).
+- Drawer now contains only agent-scoped controls:
+  - backend/model (local agent behavior)
+  - agent language
+  - incoming speak, customer-speak-on-agent, debug/metrics, auto-refresh
+- Compact performance strip shows local summary:
   - `STT avg/p95`
   - `LLM avg/p95`
   - `Total avg/p95`
@@ -175,4 +177,4 @@ If customer language is detected, the response language and customer voice profi
 1. Agent enters `fe774f*` in search and keeps mode `auto`.
 2. Result list shows session id, snippet, and timestamp.
 3. Clicking a result opens that session directly.
-4. Agent opens `Admin ⚙︎` to adjust and save settings.
+4. Agent opens `Agent Settings ⚙︎` to adjust and save settings.

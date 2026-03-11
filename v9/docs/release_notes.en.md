@@ -1,4 +1,4 @@
-# Release Notes (EN) - V7.0.0 through V9.1.9
+# Release Notes (EN) - V7.0.0 through V9.1.11
 
 ## History
 - V7.0.0: isolated V7 scaffold, dedicated ports, admin demo defaults.
@@ -26,6 +26,7 @@
 - V9.1.7: Customer auto-upload after recording stop, aligned default model `qwen2.5:3b`, and sanitizer regression test standardized at `v9/scripts/tests/test_tts_sanitize.py`.
 - V9.1.8: Admin performance toggle + new search endpoint (`/api/admin/search`) with `auto|session_id|user_id|text` modes, ID wildcard `*`, and clickable session open in Admin UI.
 - V9.1.9: Cleaned Agent UI (sticky header), unified always-visible search (`q` + `mode`), admin settings moved into a safe Drawer panel, and header performance summary (`avg/p95`) via `window=10m`.
+- V9.1.11: Strict role separation: Agent client now has agent-scoped settings only, while Admin client keeps global admin settings + header perf badges + unified admin search; agent search uses `/api/agent/search`.
 
 ## Why V9.1.0 matters
 - Prevents wrong-language speech on both Agent and Customer clients.
@@ -90,3 +91,16 @@
 - Search UX is consistent: one `q` field, mode dropdown (`auto|session_id|user_id|text`), wildcard `*`, and direct open-session from result rows.
 - Admin Drawer reduces operator mistakes by using dropdowns/toggles instead of free-text where possible; settings persist via `/api/admin/settings`.
 - Performance summary is visible and lightweight (`STT/LLM/Total avg+p95`) with adaptive polling (10s when drawer is open, 30s otherwise).
+
+## Why V9.1.11 matters
+- Agents are protected from accidental global admin changes.
+- Admins get all global controls in one place (settings, search, metrics).
+- Dual-lane remains stable in live flow and history; older messages without lane metadata still render safely (best effort).
+
+## Why V9.1.12 matters
+- Customers now have a dedicated in-app help in the customer client (`?` button) with clear step-by-step guidance.
+- Voice and chat workflows are easier to follow for end users (DE/EN).
+- Customer help is rendered as formatted Markdown (no raw single-line blob).
+- Customers can switch UI label language (DE/EN) directly in the header.
+- UI strings are DB-backed in `ui_i18n_strings`, enabling future language expansion without frontend rewrites.
+- UI language preference is persisted per user in `user_prefs` and restored on load.

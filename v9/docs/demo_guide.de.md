@@ -132,3 +132,14 @@ Stellen Sie sich vor: Sie wollen bewusst eine andere Kundensprache ausliefern (z
    - Save/Cancel
    - Quick Link zu Admin Docs
 5. Zeigen Sie den Performance-Header (`STT/LLM/Total avg+p95`) und erlaeutern Sie den Nutzen fuer Live-Betrieb.
+
+## V9.1.11 Demo Fokus: Agent/Admin sauber getrennt
+1. Agent-Client oeffnen:
+   - zeigen, dass der Button `Agent Settings ⚙︎` heisst
+   - zeigen, dass keine globalen Admin-Settings mehr sichtbar sind
+2. Admin-Client oeffnen:
+   - Header-Suche (`q` + `mode`) vorfuehren
+   - Perf-Badges fuer STT/LLM/TTS/Total zeigen
+3. Dual-Lane kurz live pruefen:
+   - Kunde DE Voice -> Agent EN (Original + Uebersetzung sichtbar)
+   - Agent EN -> Kunde DE

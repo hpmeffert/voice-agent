@@ -101,6 +101,12 @@
     .helpCard { width:min(920px,96vw); max-height:86vh; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:12px; }
     .helpHd { padding:10px 12px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
     .helpBd { padding:12px; line-height:1.45; }
+    .helpBd h1, .helpBd h2, .helpBd h3 { margin:12px 0 8px; line-height:1.25; }
+    .helpBd p { margin:8px 0; }
+    .helpBd ul, .helpBd ol { margin:8px 0 8px 18px; padding:0; }
+    .helpBd li { margin:4px 0; }
+    .helpBd pre { margin:8px 0; padding:10px; border:1px solid var(--line); border-radius:8px; background:#f8fafc; overflow:auto; }
+    .helpBd code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12px; }
     @media (max-width:980px) {
       .mainGrid { grid-template-columns:1fr; }
       .headerBar { flex-wrap:wrap; }
@@ -112,9 +118,9 @@
   <div class="wrap">
     <div class="headerBar">
       <div class="headerLeft">
-        <span id="agentHeaderTitle" class="pill">Voice Agent Agent Client v9.1.9</span>
+        <span id="agentHeaderTitle" class="pill">Voice Agent Agent Client v9.1.11</span>
         <span id="wsState" class="pill off">WS: offline</span>
-        <span id="versionBadge" class="pill">Version: v9.1.9</span>
+        <span id="versionBadge" class="pill">Version: v9.1.11</span>
       </div>
       <div class="headerCenter">
         <input id="searchInput" placeholder="Search q (supports wildcard *)" />
@@ -129,7 +135,7 @@
       </div>
       <div class="headerRight">
         <button id="helpBtn">Benutzer Handbuch</button>
-        <button id="adminBtn" class="primary">Admin ⚙︎</button>
+        <button id="adminBtn" class="primary">Agent Settings ⚙︎</button>
       </div>
     </div>
 
@@ -179,8 +185,8 @@
   </div>
 
   <div id="drawerBackdrop" class="drawerBackdrop"></div>
-  <aside id="adminDrawer" class="drawer" aria-label="Admin Settings">
-    <div class="drawerHd"><b>Admin Settings</b><button id="drawerCloseBtn">Close</button></div>
+  <aside id="adminDrawer" class="drawer" aria-label="Agent Settings">
+    <div class="drawerHd"><b>Agent Settings</b><button id="drawerCloseBtn">Close</button></div>
     <div class="drawerBd">
       <div class="group">
         <div class="groupTitle">Identity</div>
@@ -199,7 +205,7 @@
       </div>
 
       <div class="group">
-        <div class="groupTitle">Model Defaults</div>
+        <div class="groupTitle">Agent Runtime</div>
         <label>Backend
           <select id="backendSelect"><option value="ollama">ollama</option><option value="openai">openai</option></select>
         </label>
@@ -215,14 +221,7 @@
         <label><input id="showDebugPanel" type="checkbox" /> Show debug panels</label>
         <label><input id="showMetricsPanel" type="checkbox" checked /> Show metrics panel</label>
         <label><input id="autoRefresh" type="checkbox" checked /> Auto-refresh inbox</label>
-        <label><input id="perfMetricsEnabled" type="checkbox" /> Enable perf metrics</label>
-      </div>
-
-      <div class="group">
-        <div class="groupTitle">Admin Token + Search</div>
-        <input id="adminTokenInput" type="password" placeholder="Admin token (optional)" />
-        <label>Search max results <input id="searchLimit" type="number" min="1" max="200" value="50" /></label>
-        <label><input id="allowRegexFallback" type="checkbox" checked /> Allow text regex fallback</label>
+        <label><input id="perfMetricsEnabled" type="checkbox" /> Enable local perf summary</label>
       </div>
 
       <div class="group row">
@@ -234,14 +233,13 @@
         <div class="groupTitle">Danger Zone</div>
         <button id="btnResetSessionView">Reset session view</button>
         <button id="btnClearLocal">Clear local storage</button>
-        <button id="btnOpenAdminDocs">Open Admin Docs</button>
       </div>
     </div>
   </aside>
 
   <div id="helpModal" class="helpModal">
     <div class="helpCard">
-      <div class="helpHd"><b>Benutzer Handbuch</b><span id="helpVersion" class="muted">Version: v9.1.9</span><button id="helpCloseBtn">Schliessen</button></div>
+      <div class="helpHd"><b>Benutzer Handbuch</b><span id="helpVersion" class="muted">Version: v9.1.11</span><button id="helpCloseBtn">Schliessen</button></div>
       <div id="helpBody" class="helpBd">Lade Benutzer Handbuch...</div>
     </div>
   </div>
@@ -252,9 +250,11 @@ const AGENT_LANG_KEY = 'v9_agent_lang';
 const AGENT_VOICE_INCOMING_KEY = 'v9_agent_voice_incoming';
 const AGENT_VOICE_CUSTOMER_OUT_KEY = 'v9_agent_voice_customer_out';
 const AGENT_AUTO_REFRESH_KEY = 'v9_agent_auto_refresh';
-const AGENT_ADMIN_TOKEN_KEY = 'v9_admin_token';
 const AGENT_SHOW_DEBUG_KEY = 'v9_agent_show_debug';
 const AGENT_SHOW_METRICS_KEY = 'v9_agent_show_metrics';
+const AGENT_BACKEND_KEY = 'v9_agent_backend';
+const AGENT_MODEL_KEY = 'v9_agent_model';
+const AGENT_PERF_ENABLED_KEY = 'v9_agent_perf_enabled';
 
 const sessionsEl = document.getElementById('sessions');
 const inboxCountEl = document.getElementById('inboxCount');
@@ -279,11 +279,8 @@ const autoRefreshEl = document.getElementById('autoRefresh');
 const showDebugPanelEl = document.getElementById('showDebugPanel');
 const showMetricsPanelEl = document.getElementById('showMetricsPanel');
 const perfMetricsEnabledEl = document.getElementById('perfMetricsEnabled');
-const adminTokenInput = document.getElementById('adminTokenInput');
 const backendSelect = document.getElementById('backendSelect');
 const modelSelect = document.getElementById('modelSelect');
-const searchLimitEl = document.getElementById('searchLimit');
-const allowRegexFallbackEl = document.getElementById('allowRegexFallback');
 
 const searchInputEl = document.getElementById('searchInput');
 const searchModeEl = document.getElementById('searchMode');
@@ -304,7 +301,6 @@ const adminSaveBtn = document.getElementById('adminSaveBtn');
 const adminCancelBtn = document.getElementById('adminCancelBtn');
 const btnResetSessionView = document.getElementById('btnResetSessionView');
 const btnClearLocal = document.getElementById('btnClearLocal');
-const btnOpenAdminDocs = document.getElementById('btnOpenAdminDocs');
 
 const perfStrip = document.getElementById('perfStrip');
 const perfSttEl = document.getElementById('perfStt');
@@ -332,19 +328,12 @@ let autoRefreshTimer = null;
 let perfTimer = null;
 let searchCache = [];
 let modelsCatalog = {};
-let adminSnapshot = null;
+let agentSettingsSnapshot = null;
 let recentDebugEvents = [];
 
 function wsUrl(path){
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   return `${proto}://${location.host}${path}`;
-}
-
-function authHeaders(extra = {}) {
-  const h = {...extra};
-  const tok = (adminTokenInput.value || '').trim();
-  if (tok) h['X-Admin-Token'] = tok;
-  return h;
 }
 
 function setWsState(isOnline) {
@@ -353,7 +342,7 @@ function setWsState(isOnline) {
 }
 
 function setVersion(v) {
-  const val = v || 'v9.1.9';
+  const val = v || 'v9.1.11';
   agentHeaderTitleEl.textContent = `Voice Agent Agent Client ${val}`;
   versionBadge.textContent = `Version: ${val}`;
   helpVersion.textContent = `Version: ${val}`;
@@ -372,9 +361,11 @@ function rememberLocal() {
   localStorage.setItem(AGENT_VOICE_INCOMING_KEY, agentVoiceIncomingEl.checked ? '1' : '0');
   localStorage.setItem(AGENT_VOICE_CUSTOMER_OUT_KEY, agentVoiceCustomerOutEl.checked ? '1' : '0');
   localStorage.setItem(AGENT_AUTO_REFRESH_KEY, autoRefreshEl.checked ? '1' : '0');
-  localStorage.setItem(AGENT_ADMIN_TOKEN_KEY, adminTokenInput.value || '');
   localStorage.setItem(AGENT_SHOW_DEBUG_KEY, showDebugPanelEl.checked ? '1' : '0');
   localStorage.setItem(AGENT_SHOW_METRICS_KEY, showMetricsPanelEl.checked ? '1' : '0');
+  localStorage.setItem(AGENT_BACKEND_KEY, backendSelect.value || 'ollama');
+  localStorage.setItem(AGENT_MODEL_KEY, modelSelect.value || '');
+  localStorage.setItem(AGENT_PERF_ENABLED_KEY, perfMetricsEnabledEl.checked ? '1' : '0');
 }
 
 function restoreLocal() {
@@ -384,9 +375,13 @@ function restoreLocal() {
   agentVoiceIncomingEl.checked = localStorage.getItem(AGENT_VOICE_INCOMING_KEY) !== '0';
   agentVoiceCustomerOutEl.checked = localStorage.getItem(AGENT_VOICE_CUSTOMER_OUT_KEY) === '1';
   autoRefreshEl.checked = localStorage.getItem(AGENT_AUTO_REFRESH_KEY) !== '0';
-  adminTokenInput.value = localStorage.getItem(AGENT_ADMIN_TOKEN_KEY) || '';
   showDebugPanelEl.checked = localStorage.getItem(AGENT_SHOW_DEBUG_KEY) === '1';
   showMetricsPanelEl.checked = localStorage.getItem(AGENT_SHOW_METRICS_KEY) !== '0';
+  perfMetricsEnabledEl.checked = localStorage.getItem(AGENT_PERF_ENABLED_KEY) !== '0';
+  const localBackend = localStorage.getItem(AGENT_BACKEND_KEY) || '';
+  if (localBackend && [...backendSelect.options].some(o => o.value === localBackend)) {
+    backendSelect.value = localBackend;
+  }
   syncPanelToggles();
 }
 
@@ -431,91 +426,42 @@ function rebuildModelSelect() {
   else if (cfg.default_model && [...modelSelect.options].some(o => o.value === cfg.default_model)) modelSelect.value = cfg.default_model;
 }
 
-async function loadAdminSettings() {
-  const uid = (agentIdEl.value || '').trim();
-  if (!uid) return;
-  try {
-    const r = await fetch(`/api/admin/settings?user_id=${encodeURIComponent(uid)}`, {
-      headers: authHeaders(),
-      cache: 'no-store'
-    });
-    if (!r.ok) return;
-    const data = await r.json();
-    const s = data.settings || {};
-    perfMetricsEnabledEl.checked = !!(s.perf_metrics_enabled ?? s.perf_logging_enabled);
-    searchLimitEl.value = String(Number(s.search_max_results || 50));
-    allowRegexFallbackEl.checked = !!s.allow_text_regex_fallback;
-    backendSelect.value = s.default_backend || 'ollama';
-    rebuildModelSelect();
-    if (s.default_model && [...modelSelect.options].some(o => o.value === s.default_model)) {
-      modelSelect.value = s.default_model;
-    }
-    adminSnapshot = {
-      perf: perfMetricsEnabledEl.checked,
-      limit: searchLimitEl.value,
-      regex: allowRegexFallbackEl.checked,
-      backend: backendSelect.value,
-      model: modelSelect.value,
-      agentLang: agentLangEl.value,
-      incoming: agentVoiceIncomingEl.checked,
-      customerOut: agentVoiceCustomerOutEl.checked,
-      debug: showDebugPanelEl.checked,
-      metrics: showMetricsPanelEl.checked,
-      refresh: autoRefreshEl.checked,
-      token: adminTokenInput.value,
-    };
-  } catch (_) {}
+function captureAgentSettingsSnapshot() {
+  agentSettingsSnapshot = {
+    backend: backendSelect.value || 'ollama',
+    model: modelSelect.value || '',
+    agentLang: agentLangEl.value || 'de',
+    incoming: !!agentVoiceIncomingEl.checked,
+    customerOut: !!agentVoiceCustomerOutEl.checked,
+    debug: !!showDebugPanelEl.checked,
+    metrics: !!showMetricsPanelEl.checked,
+    refresh: !!autoRefreshEl.checked,
+    perf: !!perfMetricsEnabledEl.checked,
+  };
 }
 
 function resetDrawerChanges() {
-  if (!adminSnapshot) return;
-  perfMetricsEnabledEl.checked = adminSnapshot.perf;
-  searchLimitEl.value = adminSnapshot.limit;
-  allowRegexFallbackEl.checked = adminSnapshot.regex;
-  backendSelect.value = adminSnapshot.backend;
+  if (!agentSettingsSnapshot) return;
+  backendSelect.value = agentSettingsSnapshot.backend;
   rebuildModelSelect();
-  modelSelect.value = adminSnapshot.model;
-  agentLangEl.value = adminSnapshot.agentLang;
-  agentVoiceIncomingEl.checked = adminSnapshot.incoming;
-  agentVoiceCustomerOutEl.checked = adminSnapshot.customerOut;
-  showDebugPanelEl.checked = adminSnapshot.debug;
-  showMetricsPanelEl.checked = adminSnapshot.metrics;
-  autoRefreshEl.checked = adminSnapshot.refresh;
-  adminTokenInput.value = adminSnapshot.token;
+  if ([...modelSelect.options].some(o => o.value === agentSettingsSnapshot.model)) {
+    modelSelect.value = agentSettingsSnapshot.model;
+  }
+  agentLangEl.value = agentSettingsSnapshot.agentLang;
+  agentVoiceIncomingEl.checked = agentSettingsSnapshot.incoming;
+  agentVoiceCustomerOutEl.checked = agentSettingsSnapshot.customerOut;
+  showDebugPanelEl.checked = agentSettingsSnapshot.debug;
+  showMetricsPanelEl.checked = agentSettingsSnapshot.metrics;
+  autoRefreshEl.checked = agentSettingsSnapshot.refresh;
+  perfMetricsEnabledEl.checked = agentSettingsSnapshot.perf;
   syncPanelToggles();
 }
 
-async function saveAdminSettings() {
-  const uid = (agentIdEl.value || '').trim();
-  if (!uid) return;
+async function saveAgentSettings() {
   rememberLocal();
-  const payload = {
-    user_id: uid,
-    perf_metrics_enabled: !!perfMetricsEnabledEl.checked,
-    perf_logging_enabled: !!perfMetricsEnabledEl.checked,
-    search_max_results: Math.max(1, Math.min(200, Number(searchLimitEl.value || 50))),
-    allow_text_regex_fallback: !!allowRegexFallbackEl.checked,
-    default_backend: backendSelect.value || 'ollama',
-    default_model: modelSelect.value || '',
-  };
-  try {
-    const r = await fetch('/api/admin/settings', {
-      method: 'POST',
-      headers: authHeaders({'Content-Type': 'application/json'}),
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) {
-      const txt = await r.text();
-      alert(`Save failed: ${txt}`);
-      return;
-    }
-    await saveAgentPrefs();
-    await loadAdminSettings();
-    schedulePerfPolling();
-    closeDrawer();
-  } catch (err) {
-    alert(`Save failed: ${String(err)}`);
-  }
+  await saveAgentPrefs();
+  schedulePerfPolling();
+  closeDrawer();
 }
 
 async function saveAgentPrefs() {
@@ -637,9 +583,9 @@ async function runSearch() {
   }
   const mode = searchModeEl.value || 'auto';
   const uid = (agentIdEl.value || '').trim() || 'agenten-02';
-  const qs = new URLSearchParams({ user_id: uid, q, mode, since_days: '7', limit: String(Math.max(1, Math.min(200, Number(searchLimitEl.value || 50)))) });
+  const qs = new URLSearchParams({ user_id: uid, q, mode, since_days: '7', limit: '50' });
   try {
-    const r = await fetch(`/api/admin/search?${qs.toString()}`, { headers: authHeaders(), cache: 'no-store' });
+    const r = await fetch(`/api/agent/search?${qs.toString()}`, { cache: 'no-store' });
     if (!r.ok) {
       searchMetaEl.textContent = `error ${r.status}`;
       return;
@@ -784,18 +730,27 @@ function connectWs() {
 }
 
 async function loadPerfSummary() {
-  if (!showMetricsPanelEl.checked) return;
-  const uid = (agentIdEl.value || '').trim();
-  if (!uid) return;
+  if (!showMetricsPanelEl.checked || !perfMetricsEnabledEl.checked) return;
+  const uid = (activeSessionUserId || '').trim();
+  if (!uid || uid.length < 4) return;
   try {
-    const r = await fetch(`/api/admin/metrics/summary?user_id=${encodeURIComponent(uid)}&window=10m`, { headers: authHeaders(), cache: 'no-store' });
+    const r = await fetch(`/api/metrics/recent?user_id=${encodeURIComponent(uid)}&limit=40`, { cache: 'no-store' });
     if (!r.ok) return;
-    const data = await r.json();
-    const avg = data.avg_ms || {};
-    const p95 = data.p95_ms || {};
-    perfSttEl.textContent = `${avg.stt_ms || 0}ms / ${p95.stt_ms || 0}ms`;
-    perfLlmEl.textContent = `${avg.llm_ms || 0}ms / ${p95.llm_ms || 0}ms`;
-    perfTotalEl.textContent = `${avg.total_ms || 0}ms / ${p95.total_ms || 0}ms`;
+    const rows = (await r.json()) || [];
+    const toMs = (k) => rows.map(x => Number((x || {})[k] || 0)).filter(v => Number.isFinite(v) && v >= 0);
+    const avgOf = (vals) => vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+    const p95Of = (vals) => {
+      if (!vals.length) return 0;
+      const s = [...vals].sort((a, b) => a - b);
+      const idx = Math.max(0, Math.min(s.length - 1, Math.round((s.length - 1) * 0.95)));
+      return Math.round(s[idx]);
+    };
+    const stt = toMs('stt_ms');
+    const llm = toMs('llm_ms');
+    const total = toMs('total_ms');
+    perfLlmEl.textContent = `${avgOf(llm)}ms / ${p95Of(llm)}ms`;
+    perfTotalEl.textContent = `${avgOf(total)}ms / ${p95Of(total)}ms`;
+    perfSttEl.textContent = `${avgOf(stt)}ms / ${p95Of(stt)}ms`;
   } catch (_) {}
 }
 
@@ -805,11 +760,40 @@ function schedulePerfPolling() {
   perfTimer = setInterval(() => { loadPerfSummary().catch(() => {}); }, ms);
 }
 
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function renderMarkdown(md) {
+  let html = escapeHtml(md || '');
+  html = html.replace(/```([\s\S]*?)```/g, (_m, code) => `<pre><code>${code}</code></pre>`);
+  html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.*)$/gm, '<h1>$1</h1>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/^\- (.*)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>');
+  html = html.replace(/<\/ul>\s*<ul>/g, '');
+  html = html.replace(/\n{2,}/g, '</p><p>');
+  html = `<p>${html}</p>`;
+  html = html.replace(/<p>\s*(<h[1-3]>)/g, '$1');
+  html = html.replace(/(<\/h[1-3]>)\s*<\/p>/g, '$1');
+  html = html.replace(/<p>\s*(<ul>)/g, '$1');
+  html = html.replace(/(<\/ul>)\s*<\/p>/g, '$1');
+  html = html.replace(/<p>\s*(<pre>)/g, '$1');
+  html = html.replace(/(<\/pre>)\s*<\/p>/g, '$1');
+  return html;
+}
+
 function openDrawer() {
   drawer.classList.add('show');
   drawerBackdrop.classList.add('show');
-  loadAdminSettings().catch(() => {});
   loadModelsCatalog().catch(() => {});
+  captureAgentSettingsSnapshot();
   schedulePerfPolling();
 }
 
@@ -827,7 +811,7 @@ async function openHelp() {
     const r = await fetch(`/api/docs?type=user&lang=${encodeURIComponent(lang)}`, { cache: 'no-store' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const txt = await r.text();
-    helpBody.textContent = txt;
+    helpBody.innerHTML = renderMarkdown(txt);
   } catch (err) {
     helpBody.textContent = `Benutzer Handbuch konnte nicht geladen werden: ${String(err)}`;
   }
@@ -894,7 +878,7 @@ adminBtn.onclick = () => openDrawer();
 drawerCloseBtn.onclick = () => closeDrawer();
 drawerBackdrop.onclick = () => closeDrawer();
 adminCancelBtn.onclick = () => { resetDrawerChanges(); closeDrawer(); };
-adminSaveBtn.onclick = () => saveAdminSettings();
+adminSaveBtn.onclick = () => saveAgentSettings();
 btnResetSessionView.onclick = () => resetSessionView();
 btnClearLocal.onclick = () => {
   localStorage.removeItem(AGENT_KEY);
@@ -902,25 +886,12 @@ btnClearLocal.onclick = () => {
   localStorage.removeItem(AGENT_VOICE_INCOMING_KEY);
   localStorage.removeItem(AGENT_VOICE_CUSTOMER_OUT_KEY);
   localStorage.removeItem(AGENT_AUTO_REFRESH_KEY);
-  localStorage.removeItem(AGENT_ADMIN_TOKEN_KEY);
   localStorage.removeItem(AGENT_SHOW_DEBUG_KEY);
   localStorage.removeItem(AGENT_SHOW_METRICS_KEY);
+  localStorage.removeItem(AGENT_BACKEND_KEY);
+  localStorage.removeItem(AGENT_MODEL_KEY);
+  localStorage.removeItem(AGENT_PERF_ENABLED_KEY);
   alert('Local storage cleared.');
-};
-btnOpenAdminDocs.onclick = async () => {
-  const lang = (agentLangEl.value || 'de').toLowerCase() === 'de' ? 'de' : 'en';
-  try {
-    const r = await fetch(`/api/docs?type=admin&lang=${encodeURIComponent(lang)}&user_id=${encodeURIComponent(agentIdEl.value || '')}`, { headers: authHeaders() });
-    if (!r.ok) {
-      alert(`Admin docs failed: HTTP ${r.status}`);
-      return;
-    }
-    const txt = await r.text();
-    helpBody.textContent = txt;
-    helpModal.classList.add('show');
-  } catch (err) {
-    alert(`Admin docs failed: ${String(err)}`);
-  }
 };
 
 agentPresetEl.onchange = async () => {
@@ -934,7 +905,6 @@ agentPresetEl.onchange = async () => {
 agentIdEl.onchange = async () => {
   rememberLocal();
   await loadAgentPrefs();
-  await loadAdminSettings();
   await loadPerfSummary();
 };
 
@@ -944,13 +914,14 @@ agentLangEl.onchange = async () => {
   if (activeSessionId) connectWs();
 };
 
-backendSelect.onchange = () => rebuildModelSelect();
+backendSelect.onchange = () => { rebuildModelSelect(); rememberLocal(); };
+modelSelect.onchange = () => rememberLocal();
 showDebugPanelEl.onchange = () => { syncPanelToggles(); rememberLocal(); };
 showMetricsPanelEl.onchange = () => { syncPanelToggles(); rememberLocal(); schedulePerfPolling(); };
 autoRefreshEl.onchange = () => { rememberLocal(); startAutoRefresh(); };
 agentVoiceIncomingEl.onchange = () => rememberLocal();
 agentVoiceCustomerOutEl.onchange = () => rememberLocal();
-adminTokenInput.onchange = () => rememberLocal();
+perfMetricsEnabledEl.onchange = () => { rememberLocal(); loadPerfSummary().catch(() => {}); };
 
 helpBtn.onclick = () => openHelp();
 helpCloseBtn.onclick = () => closeHelp();
@@ -970,11 +941,15 @@ async function bootstrap() {
   updateCustomerPreview();
   await loadModelsCatalog();
   await loadAgentPrefs();
-  await loadAdminSettings();
   try {
     const cfg = await fetch('/api/config', {cache:'no-store'}).then(r => r.json());
-    setVersion((cfg?.ui?.version) || 'v9.1.9');
-  } catch (_) { setVersion('v9.1.9'); }
+    setVersion((cfg?.ui?.version) || 'v9.1.11');
+  } catch (_) { setVersion('v9.1.11'); }
+  rebuildModelSelect();
+  const savedModel = localStorage.getItem(AGENT_MODEL_KEY) || '';
+  if (savedModel && [...modelSelect.options].some(o => o.value === savedModel)) {
+    modelSelect.value = savedModel;
+  }
   await loadPerfSummary();
   schedulePerfPolling();
   startAutoRefresh();

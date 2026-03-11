@@ -11,6 +11,8 @@ required_files = [
     web,
     ROOT / "v9/web-agent/index.html",
     ROOT / "v9/web-customer/index.html",
+    ROOT / "v9/docs/customer_guide.de.md",
+    ROOT / "v9/docs/customer_guide.en.md",
     ROOT / "v9/docs/user_guide.de.md",
     ROOT / "v9/docs/user_guide.en.md",
     ROOT / "v9/docs/demo_guide.de.md",
@@ -31,6 +33,7 @@ for p in required_files:
 
 html = web.read_text(encoding="utf-8", errors="ignore")
 agent_html = web_agent.read_text(encoding="utf-8", errors="ignore")
+customer_html = (ROOT / "v9/web-customer/index.html").read_text(encoding="utf-8", errors="ignore")
 
 menu_order_ids = [
     "adminTokenSave",
@@ -74,7 +77,8 @@ for label in ["Admin Token speichern", "Benutzer Handbuch", "Demo Guide", "Admin
 
 checks = [
     (r'id="silenceMs"[^\n]*value="1300"', "silence default must be 1300"),
-    (r"Voice Agent V9\.0\.0", "header/title must show V9.0.0"),
+    (r"Voice Agent Admin Client v9\.1\.11", "header/title must show v9.1.11"),
+    (r'id="adminConversationPanel"', "admin must expose conversation session history panel"),
 ]
 for pattern, msg in checks:
     if re.search(pattern, html) is None:
@@ -91,7 +95,22 @@ for pattern, msg in agent_checks:
         print(f"[V9-DOC-CHECK][FAIL] {msg}")
         sys.exit(1)
 
+customer_checks = [
+    (r'id="helpBtn"', "customer UI must expose help button"),
+    (r"\?<\/button>", "customer UI help button should use ? icon"),
+    (r"/api/docs\?type=customer", "customer UI must load dedicated customer guide"),
+    (r'id="uiLang"', "customer UI must expose UI language dropdown"),
+    (r"/api/i18n\?scope=customer", "customer UI must load DB-backed customer i18n strings"),
+    (r"/api/prefs/ui_lang", "customer UI must persist UI language preference"),
+]
+for pattern, msg in customer_checks:
+    if re.search(pattern, customer_html, flags=re.IGNORECASE) is None:
+        print(f"[V9-DOC-CHECK][FAIL] {msg}")
+        sys.exit(1)
+
 doc_rules = [
+    (ROOT / "v9/docs/customer_guide.de.md", [r"Kunden Handbuch", r"Schritt fuer Schritt: Voice", r"Schritt fuer Schritt: Chat"], "customer_guide.de"),
+    (ROOT / "v9/docs/customer_guide.en.md", [r"Customer Guide", r"Step by step: Voice", r"Step by step: Chat"], "customer_guide.en"),
     (ROOT / "v9/docs/user_guide.de.md", [r"Benutzer Handbuch", r"Listen Mode", r"Beispiel", r"Customer output lang", r"auto"], "user_guide.de"),
     (ROOT / "v9/docs/user_guide.en.md", [r"User Guide", r"Listen Mode", r"Example|Feature", r"Customer output lang", r"auto"], "user_guide.en"),
     (ROOT / "v9/docs/demo_guide.de.md", [r"Story-Flow 1", r"Story-Flow 2", r"Story-Flow 3", r"Admin-Demo", r"Customer output lang"], "demo_guide.de"),

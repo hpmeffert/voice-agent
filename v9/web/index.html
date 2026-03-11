@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent V9.0.0</title>
+  <title>Voice Agent Admin Client</title>
   <style>
     :root {
       --bg:#f4f7fb;
@@ -40,7 +40,17 @@
         radial-gradient(900px 500px at 95% -10%, rgba(59,130,246,.10), transparent 62%),
         var(--bg);
     }
-    .wrap { max-width: 1080px; margin: 24px auto; padding: 0 16px; }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 12px; }
+    .adminTopRow {
+      position: sticky;
+      top: 0;
+      z-index: 60;
+      background: color-mix(in srgb, var(--bg), transparent 8%);
+      backdrop-filter: blur(3px);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+    }
     h1 { margin: 0 0 6px 0; font-size: 24px; }
     .sub { margin: 0 0 14px 0; color: var(--muted); }
     .grid { display:grid; grid-template-columns: 1fr; gap:14px; }
@@ -145,6 +155,49 @@
       white-space: pre-wrap;
       word-break: break-word;
       overflow-wrap: anywhere;
+    }
+    .sessionHistoryPanel {
+      border:1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 120px;
+      max-height: 360px;
+      overflow-y: auto;
+      background: color-mix(in srgb, var(--card), var(--text) 4%);
+    }
+    .sessionHistoryMsg {
+      border:1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      margin-bottom: 8px;
+      background: color-mix(in srgb, var(--card), var(--text) 3%);
+    }
+    .sessionHistoryMsg:last-child { margin-bottom: 0; }
+    .sessionHistoryHead {
+      display:flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .sessionRole {
+      font-weight: 700;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+    .laneBox {
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      margin-top: 6px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .laneBox .muted { display:block; margin-bottom: 4px; }
+    .laneTranslated {
+      border-color: color-mix(in srgb, var(--brand), var(--border) 55%);
+      background: color-mix(in srgb, var(--card), var(--brand) 7%);
     }
     .metaGrid {
       display:grid;
@@ -277,6 +330,57 @@
     }
     .latencyLabel { color: var(--muted); font-size: 11px; }
     .latencyValue { font-weight: 700; font-size: 13px; }
+    #adminMetricsRecent {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      max-height: 280px;
+      overflow: auto;
+    }
+    .drawerBackdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.35);
+      display: none;
+      z-index: 120;
+    }
+    .drawerBackdrop.show { display: block; }
+    #adminSettingsCard.adminDrawer {
+      position: fixed;
+      top: 0;
+      right: -460px;
+      width: min(460px, 96vw);
+      height: 100vh;
+      margin: 0;
+      border-radius: 0;
+      border-left: 1px solid var(--border);
+      border-right: 0;
+      border-top: 0;
+      border-bottom: 0;
+      overflow: auto;
+      z-index: 121;
+      transition: right .2s ease;
+      display: block !important;
+    }
+    #adminSettingsCard.adminDrawer.show { right: 0; }
+    .drawerHead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .sectionTitle {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      margin: 8px 0 2px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    @media (max-width: 980px) {
+      .latencyRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
     details.debugBox {
       margin-top: 10px;
       border: 1px solid var(--border);
@@ -294,10 +398,14 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+    <div class="row adminTopRow" style="justify-content:space-between;">
       <div>
-        <h1>Voice Agent V9.0.0</h1>
+        <h1 id="appTitle">Voice Agent Admin Client v9.1.11</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
+        <div class="row" style="margin-top:6px;">
+          <span id="adminApiStatus" class="pill">API: checking...</span>
+          <span id="menuVersionHeader" class="pill">Version: v9.1.11</span>
+        </div>
       </div>
       <div class="topRight">
         <button id="menuBtn" class="menuBtn" title="Hilfe / Menu">Menu</button>
@@ -315,6 +423,7 @@
           <option value="it">it</option>
           <option value="es">es</option>
         </select>
+        <button id="adminDrawerBtn" class="primary">Admin ⚙︎</button>
         <div id="menuPanel" class="menuPanel">
           <div id="menuVersion" class="menuHeader">Version: -</div>
           <input id="adminTokenInput" type="password" placeholder="Admin token (optional)" />
@@ -323,9 +432,25 @@
           <button id="menuDemoGuide" class="menuItem" data-help-doc="/api/docs?type=demo" data-help-title="Demo Guide" data-i18n="menu.demo_guide">Demo Guide</button>
           <button id="adminGuideItem" class="menuItem" data-help-doc="/api/docs?type=admin" data-help-title="Admin Docs" data-i18n="menu.admin_docs">Admin Docs</button>
           <button id="adminSettingsMenuItem" class="menuItem" data-i18n="menu.admin_settings">Admin Settings</button>
-          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/api/docs?type=release" data-help-title="Release Notes V9.1.9" data-i18n="menu.release_notes">Release Notes</button>
+          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/api/docs?type=release" data-help-title="Release Notes V9.1.11" data-i18n="menu.release_notes">Release Notes</button>
         </div>
       </div>
+    </div>
+
+    <div class="row" style="gap:10px; margin-bottom:10px;">
+      <input id="adminHeaderSearchQuery" style="flex:1; min-width:240px;" placeholder="Search q (supports wildcard *)" />
+      <select id="adminHeaderSearchMode">
+        <option value="auto">auto</option>
+        <option value="session_id">session_id</option>
+        <option value="user_id">user_id</option>
+        <option value="text">text</option>
+      </select>
+      <button id="adminHeaderSearchRun">Search</button>
+      <button id="adminHeaderSearchReset">Reset</button>
+      <span class="pill">STT <b id="adminHdrStt">- / -</b></span>
+      <span class="pill">LLM <b id="adminHdrLlm">- / -</b></span>
+      <span class="pill">TTS <b id="adminHdrTts">- / -</b></span>
+      <span class="pill">Total <b id="adminHdrTotal">- / -</b></span>
     </div>
 
     <div class="grid">
@@ -406,8 +531,12 @@
             </label>
           </div>
 
-          <div id="adminSettingsCard" class="latencyBox" style="display:none;">
-            <div class="muted" style="margin-bottom:6px;">Admin Settings</div>
+          <div id="adminSettingsCard" class="latencyBox adminDrawer" style="display:none;">
+            <div class="drawerHead">
+              <div class="muted"><b>Admin Settings</b></div>
+              <button id="adminSettingsClose">Close</button>
+            </div>
+            <div class="sectionTitle">Runtime</div>
             <div class="controlGrid">
               <label class="muted">Metrics retention (days)
                 <input id="adminRetentionDays" type="number" min="1" max="365" step="1" value="30" />
@@ -427,6 +556,9 @@
               <label class="muted">Allow text regex fallback
                 <input id="adminAllowRegexFallback" type="checkbox" checked />
               </label>
+            </div>
+            <div class="sectionTitle">Translation & TTS</div>
+            <div class="controlGrid">
               <label class="muted">Default silence (ms)
                 <input id="adminDefaultSilence" type="number" min="300" max="5000" step="100" value="1300" />
               </label>
@@ -448,7 +580,13 @@
             </div>
             <div class="row" style="margin-top:8px;">
               <button id="adminSettingsSave">Save Admin Settings</button>
+              <button id="adminSettingsCancel">Cancel</button>
               <span id="adminSettingsStatus" class="muted">-</span>
+            </div>
+            <div class="sectionTitle">Danger Zone</div>
+            <div class="row">
+              <button id="adminClearLocal">Clear local storage</button>
+              <button id="adminClearSessionView">Reset session view</button>
             </div>
           </div>
 
@@ -495,6 +633,10 @@
           <div id="demoGuideBanner" class="muted" style="margin-top:8px;display:none;">
             Demo Mode aktiv: Der Agent hoert automatisch weiter. Tipp: kurze Fragen stellen, dann 1-2 Sekunden Pause machen.
           </div>
+
+          <h3 style="margin-top:12px;">Conversation (Session History)</h3>
+          <div id="adminConversationStatus" class="muted">Open Session from search to load history.</div>
+          <div id="adminConversationPanel" class="sessionHistoryPanel" style="margin-top:8px;">-</div>
         </div>
       </div>
 
@@ -576,6 +718,8 @@
     </div>
   </div>
 
+  <div id="adminDrawerBackdrop" class="drawerBackdrop"></div>
+
   <div id="helpModalBackdrop" class="modalBackdrop">
     <div class="modal" role="dialog" aria-modal="true" aria-label="Help and Demo Guide">
       <div class="modalHeader">
@@ -613,6 +757,7 @@ const MIN_SPEECH_MS = 250;
 const NO_SPEECH_TIMEOUT_MS = 8000;
 
 const el = (id) => document.getElementById(id);
+const appTitleEl = el("appTitle");
 const statusEl = el("status");
 const badgeEl = el("statusBadge");
 const errorBox = el("errorBox");
@@ -654,8 +799,26 @@ const adminSearchRun = el("adminSearchRun");
 const adminSearchClear = el("adminSearchClear");
 const adminSearchStatus = el("adminSearchStatus");
 const adminSearchResult = el("adminSearchResult");
+const adminConversationStatus = el("adminConversationStatus");
+const adminConversationPanel = el("adminConversationPanel");
 const btnMetricsRefresh = el("btnMetricsRefresh");
+const adminHeaderSearchQuery = el("adminHeaderSearchQuery");
+const adminHeaderSearchMode = el("adminHeaderSearchMode");
+const adminHeaderSearchRun = el("adminHeaderSearchRun");
+const adminHeaderSearchReset = el("adminHeaderSearchReset");
+const adminHdrStt = el("adminHdrStt");
+const adminHdrLlm = el("adminHdrLlm");
+const adminHdrTts = el("adminHdrTts");
+const adminHdrTotal = el("adminHdrTotal");
+const adminApiStatus = el("adminApiStatus");
+const menuVersionHeader = el("menuVersionHeader");
 const adminSettingsCard = el("adminSettingsCard");
+const adminDrawerBtn = el("adminDrawerBtn");
+const adminDrawerBackdrop = el("adminDrawerBackdrop");
+const adminSettingsClose = el("adminSettingsClose");
+const adminSettingsCancel = el("adminSettingsCancel");
+const adminClearLocal = el("adminClearLocal");
+const adminClearSessionView = el("adminClearSessionView");
 const adminRetentionDays = el("adminRetentionDays");
 const adminPerfLoggingEnabled = el("adminPerfLoggingEnabled");
 const adminPerfSampleRate = el("adminPerfSampleRate");
@@ -728,7 +891,8 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v9.1.9";
+let uiVersionText = "v9.1.11";
+let adminDrawerInitialized = false;
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 let appState = "idle";
@@ -1049,6 +1213,11 @@ function updateAdminControls() {
   adminMetricsPanel.style.display = showAdmin ? "block" : "none";
   adminConversationSearchPanel.style.display = showAdmin ? "block" : "none";
   adminSettingsMenuItem.style.display = showAdmin ? "block" : "none";
+  adminHeaderSearchQuery.disabled = !showAdmin;
+  adminHeaderSearchMode.disabled = !showAdmin;
+  adminHeaderSearchRun.disabled = !showAdmin;
+  adminHeaderSearchReset.disabled = !showAdmin;
+  adminDrawerBtn.disabled = !showAdmin;
   if (!showAdmin) {
     demoModeEnabled = false;
     localStorage.removeItem(DEMO_MODE_KEY);
@@ -1059,10 +1228,21 @@ function updateAdminControls() {
     applyDebugPanelVisibility();
     adminMetricsSummary.textContent = "-";
     adminMetricsRecent.textContent = "-";
+    adminHdrStt.textContent = "- / -";
+    adminHdrLlm.textContent = "- / -";
+    adminHdrTts.textContent = "- / -";
+    adminHdrTotal.textContent = "- / -";
     adminSearchStatus.textContent = "-";
     adminSearchResult.textContent = "-";
-    adminSettingsCard.style.display = "none";
+    adminConversationStatus.textContent = "Admin mode required";
+    adminConversationPanel.textContent = "-";
+    closeAdminDrawer();
+    adminDrawerInitialized = false;
     adminSettingsStatus.textContent = "-";
+  } else if (!adminDrawerInitialized) {
+    openAdminDrawer();
+    loadAdminSettingsIntoDrawer().catch(() => {});
+    adminDrawerInitialized = true;
   }
   demoGuideBanner.style.display = demoModeEnabled && showAdmin ? "block" : "none";
 }
@@ -1249,8 +1429,31 @@ function closeHelpModal() {
 function updateMenuUi() {
   adminGuideItem.style.display = "block";
   menuVersion.textContent = `Version: ${uiVersionText}`;
+  if (menuVersionHeader) menuVersionHeader.textContent = `Version: ${uiVersionText}`;
+  if (appTitleEl) appTitleEl.textContent = `Voice Agent Admin Client ${uiVersionText}`;
   adminTokenInput.value = adminToken;
   updateAdminControls();
+}
+
+async function refreshAdminApiStatus() {
+  try {
+    const r = await fetch("/api/health", { cache: "no-store" });
+    if (!r.ok) throw new Error(String(r.status));
+    const data = await r.json();
+    if ((data || {}).status === "ok") {
+      adminApiStatus.textContent = "API: healthy";
+      adminApiStatus.style.borderColor = "rgba(34,197,94,.45)";
+      adminApiStatus.style.color = "var(--ok)";
+    } else {
+      adminApiStatus.textContent = "API: degraded";
+      adminApiStatus.style.borderColor = "rgba(245,158,11,.45)";
+      adminApiStatus.style.color = "var(--warn)";
+    }
+  } catch (_) {
+    adminApiStatus.textContent = "API: offline";
+    adminApiStatus.style.borderColor = "rgba(239,68,68,.45)";
+    adminApiStatus.style.color = "var(--err)";
+  }
 }
 
 async function loadAdminMetrics() {
@@ -1261,7 +1464,7 @@ async function loadAdminMetrics() {
         headers: authHeaders(),
         cache: "no-store",
       }),
-      fetch(`/api/admin/metrics/summary?user_id=${encodeURIComponent(userId)}&window=24h`, {
+      fetch(`/api/admin/metrics/summary?user_id=${encodeURIComponent(userId)}&window=10m`, {
         headers: authHeaders(),
         cache: "no-store",
       }),
@@ -1272,13 +1475,186 @@ async function loadAdminMetrics() {
     const recentData = await recentResp.json();
     const summaryData = await summaryResp.json();
     const avg = summaryData?.avg_ms || {};
+    const p95 = summaryData?.p95_ms || {};
     adminMetricsSummary.textContent =
-      `24h count=${summaryData.count || 0}, ok=${summaryData.ok_count || 0}, err=${summaryData.error_count || 0}, ` +
+      `10m count=${summaryData.count || 0}, ok=${summaryData.ok_count || 0}, err=${summaryData.error_count || 0}, ` +
       `avg_total=${avg.total_ms || 0}ms, avg_stt=${avg.stt_ms || 0}ms, avg_llm=${avg.llm_ms || 0}ms, avg_tts=${avg.tts_ms || 0}ms`;
+    adminHdrStt.textContent = `${avg.stt_ms || 0} / ${p95.stt_ms || 0}`;
+    adminHdrLlm.textContent = `${avg.llm_ms || 0} / ${p95.llm_ms || 0}`;
+    adminHdrTts.textContent = `${avg.tts_ms || 0} / ${p95.tts_ms || 0}`;
+    adminHdrTotal.textContent = `${avg.total_ms || 0} / ${p95.total_ms || 0}`;
     adminMetricsRecent.textContent = JSON.stringify(recentData?.items || [], null, 2);
   } catch (err) {
     adminMetricsSummary.textContent = "Metrics unavailable";
     adminMetricsRecent.textContent = String(err);
+    adminHdrStt.textContent = "- / -";
+    adminHdrLlm.textContent = "- / -";
+    adminHdrTts.textContent = "- / -";
+    adminHdrTotal.textContent = "- / -";
+  }
+}
+
+function pickFirstString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
+}
+
+function getMessageRole(msg) {
+  const roleRaw = pickFirstString(
+    msg?.role,
+    msg?.from,
+    msg?.actor,
+    msg?.sender_role,
+  );
+  return roleRaw ? roleRaw.toUpperCase() : "SYSTEM";
+}
+
+function getTimestampLabel(msg) {
+  const ts = pickFirstString(msg?.t, msg?.ts, msg?.created_at, msg?.updated_at);
+  if (!ts) return "";
+  const dt = new Date(ts);
+  if (Number.isNaN(dt.getTime())) return ts;
+  return dt.toLocaleString();
+}
+
+function buildLaneHtml(label, lang, text, translated = false) {
+  const laneClass = translated ? "laneBox laneTranslated" : "laneBox";
+  const body = (text || "").trim() ? renderMarkdown(String(text || "")) : "<p>-</p>";
+  return `<div class="${laneClass}"><span class="muted">${escapeHtml(label)} (${escapeHtml(lang || "-")})</span>${body}</div>`;
+}
+
+function resolveMessageLanes(msg) {
+  const role = getMessageRole(msg);
+  const originalText = pickFirstString(
+    msg?.text_original,
+    msg?.original_text,
+    msg?.original,
+    msg?.source_text,
+    msg?.content,
+    msg?.text,
+  );
+  const originalLang = pickFirstString(
+    msg?.lang_original,
+    msg?.source_lang,
+    msg?.lang,
+  ).toLowerCase();
+
+  const forAgentText = pickFirstString(
+    msg?.text_for_agent,
+    msg?.text_translated,
+    msg?.translated_text,
+    msg?.agent?.text,
+  );
+  const forAgentLang = pickFirstString(
+    msg?.lang_for_agent,
+    msg?.agent?.lang,
+    msg?.agent_lang,
+  ).toLowerCase();
+
+  const forCustomerText = pickFirstString(
+    msg?.text_for_customer,
+    msg?.customer?.text,
+    msg?.answer_translated,
+  );
+  const forCustomerLang = pickFirstString(
+    msg?.lang_for_customer,
+    msg?.customer?.lang,
+    msg?.customer_lang,
+  ).toLowerCase();
+
+  let translatedText = "";
+  let translatedLang = "";
+  if (role === "CUSTOMER") {
+    translatedText = forAgentText;
+    translatedLang = forAgentLang;
+  } else if (role === "AGENT") {
+    translatedText = forCustomerText || forAgentText;
+    translatedLang = forCustomerLang || forAgentLang;
+  } else {
+    translatedText = forAgentText || forCustomerText;
+    translatedLang = forAgentLang || forCustomerLang;
+  }
+
+  const showDualLane = !!(
+    translatedText &&
+    originalText &&
+    (translatedText !== originalText || (translatedLang && translatedLang !== originalLang))
+  );
+
+  return {
+    role,
+    timestamp: getTimestampLabel(msg),
+    originalText: originalText || translatedText || "-",
+    originalLang: originalLang || "-",
+    translatedText,
+    translatedLang: translatedLang || "-",
+    showDualLane,
+  };
+}
+
+function renderAdminSessionHistory(messages) {
+  const rows = Array.isArray(messages) ? messages : [];
+  if (!rows.length) {
+    adminConversationPanel.textContent = "No messages in this session yet.";
+    return;
+  }
+  const html = rows.map((msg) => {
+    const lane = resolveMessageLanes(msg || {});
+    const ts = lane.timestamp ? `<span class="muted">${escapeHtml(lane.timestamp)}</span>` : "";
+    const lanesHtml = lane.showDualLane
+      ? (
+        buildLaneHtml("Original", lane.originalLang, lane.originalText, false) +
+        buildLaneHtml("Translation", lane.translatedLang, lane.translatedText, true)
+      )
+      : buildLaneHtml("Text", lane.originalLang, lane.originalText, false);
+    return `
+      <div class="sessionHistoryMsg">
+        <div class="sessionHistoryHead">
+          <span class="sessionRole">${escapeHtml(lane.role)}</span>
+          ${ts}
+        </div>
+        ${lanesHtml}
+      </div>
+    `;
+  }).join("");
+  adminConversationPanel.innerHTML = html;
+}
+
+async function loadAdminSessionHistory(nextSessionId = "", nextUserId = "") {
+  const sid = (nextSessionId || sessionId || "").trim();
+  const uid = (nextUserId || userId || "").trim();
+  if (!sid) {
+    adminConversationStatus.textContent = "Select a session first.";
+    adminConversationPanel.textContent = "-";
+    return;
+  }
+  if (!uid) {
+    adminConversationStatus.textContent = `Session ${sid}: missing user_id.`;
+    adminConversationPanel.textContent = "-";
+    return;
+  }
+  adminConversationStatus.textContent = `Loading session ${sid}...`;
+  adminConversationPanel.textContent = "Loading...";
+  try {
+    const qs = new URLSearchParams();
+    qs.set("user_id", uid);
+    qs.set("limit", "200");
+    const r = await fetch(`/api/session/${encodeURIComponent(sid)}?${qs.toString()}`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      throw new Error(data?.detail || data?.error || `session load failed: ${r.status}`);
+    }
+    const messages = Array.isArray(data?.messages) ? data.messages : [];
+    renderAdminSessionHistory(messages);
+    adminConversationStatus.textContent = `Loaded ${messages.length} messages from session ${sid}.`;
+  } catch (err) {
+    adminConversationStatus.textContent = "Session load failed";
+    adminConversationPanel.textContent = String(err);
   }
 }
 
@@ -1287,8 +1663,8 @@ async function runAdminConversationSearch() {
   adminSearchStatus.textContent = "Searching...";
   adminSearchResult.innerHTML = "-";
   try {
-    const queryText = (adminSearchQuery.value || "").trim();
-    const mode = (adminSearchMode.value || "auto").trim().toLowerCase();
+    const queryText = (adminHeaderSearchQuery.value || adminSearchQuery.value || "").trim();
+    const mode = (adminHeaderSearchMode.value || adminSearchMode.value || "auto").trim().toLowerCase();
     const sinceDays = Math.max(1, Math.min(365, Number(adminSearchSinceDays.value || 7)));
     const limit = Math.max(1, Math.min(200, Number(adminSearchLimit.value || 50)));
     if (!queryText) {
@@ -1309,6 +1685,10 @@ async function runAdminConversationSearch() {
     if (!r.ok) throw new Error(data?.detail || data?.error || `search failed: ${r.status}`);
     const matches = Array.isArray(data?.matches) ? data.matches : [];
     const meta = data?.meta || {};
+    adminSearchQuery.value = queryText;
+    adminSearchMode.value = mode || "auto";
+    adminHeaderSearchQuery.value = queryText;
+    adminHeaderSearchMode.value = mode || "auto";
     adminSearchStatus.textContent = `Found ${matches.length} matches (${meta.mode_used || "auto"}) in ${meta.took_ms || 0}ms`;
     if (!matches.length) {
       adminSearchResult.textContent = "No matches";
@@ -1332,6 +1712,10 @@ async function runAdminConversationSearch() {
         if (uid) setUserId(uid);
         if (sid) setSessionId(sid);
         adminSearchStatus.textContent = `Opened session ${sid}`;
+        loadAdminSessionHistory(sid, uid).catch((err) => {
+          adminConversationStatus.textContent = "Session load failed";
+          adminConversationPanel.textContent = String(err);
+        });
       });
     }
   } catch (err) {
@@ -1372,7 +1756,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v9.1.9";
+    const ver = cfg?.ui?.version || "v9.1.11";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
     applyAdminSettingsForm(cfg?.admin_settings || {});
@@ -1381,7 +1765,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v9.1.9";
+    uiVersionText = "v9.1.11";
     applyAdminSettingsForm({});
   }
   await loadWhoAmI();
@@ -1537,6 +1921,7 @@ loadModels()
   .then(() => loadConfig())
   .then(() => loadUiI18n())
   .then(() => loadUserProfile())
+  .then(() => refreshAdminApiStatus())
   .then(() => scheduleListenModeAutoStart("init"))
   .catch((err) => {
     console.error(err);
@@ -1573,25 +1958,44 @@ adminTokenSave.onclick = async () => {
   await loadAdminMetrics();
 };
 
+function openAdminDrawer() {
+  adminSettingsCard.style.display = "block";
+  adminSettingsCard.classList.add("show");
+  adminDrawerBackdrop.classList.add("show");
+}
+
+function closeAdminDrawer() {
+  adminSettingsCard.classList.remove("show");
+  adminDrawerBackdrop.classList.remove("show");
+  adminSettingsCard.style.display = "none";
+}
+
+async function loadAdminSettingsIntoDrawer() {
+  if (!uiAdmin) return;
+  adminSettingsStatus.textContent = "Loading...";
+  try {
+    const r = await fetch(`/api/admin/settings?user_id=${encodeURIComponent(userId)}`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    if (!r.ok) throw new Error(`admin settings fetch failed: ${r.status}`);
+    const data = await r.json();
+    applyAdminSettingsForm(data?.settings || {});
+    adminSettingsStatus.textContent = "Loaded";
+  } catch (err) {
+    adminSettingsStatus.textContent = String(err);
+  }
+}
+
 adminSettingsMenuItem.onclick = async () => {
   if (!uiAdmin) return;
   menuPanel.classList.remove("show");
-  adminSettingsCard.style.display = adminSettingsCard.style.display === "none" ? "block" : "none";
-  if (adminSettingsCard.style.display === "block") {
-    adminSettingsStatus.textContent = "Loading...";
-    try {
-      const r = await fetch(`/api/admin/settings?user_id=${encodeURIComponent(userId)}`, {
-        headers: authHeaders(),
-        cache: "no-store",
-      });
-      if (!r.ok) throw new Error(`admin settings fetch failed: ${r.status}`);
-      const data = await r.json();
-      applyAdminSettingsForm(data?.settings || {});
-      adminSettingsStatus.textContent = "Loaded";
-    } catch (err) {
-      adminSettingsStatus.textContent = String(err);
-    }
+  if (adminSettingsCard.classList.contains("show")) {
+    closeAdminDrawer();
+    return;
   }
+  openAdminDrawer();
+  await loadAdminSettingsIntoDrawer();
 };
 
 adminSettingsSave.onclick = async () => {
@@ -1629,6 +2033,31 @@ adminSettingsSave.onclick = async () => {
   } catch (err) {
     adminSettingsStatus.textContent = String(err);
   }
+};
+
+adminDrawerBtn.onclick = async () => {
+  if (!uiAdmin) return;
+  if (adminSettingsCard.classList.contains("show")) {
+    closeAdminDrawer();
+    return;
+  }
+  openAdminDrawer();
+  await loadAdminSettingsIntoDrawer();
+};
+
+adminSettingsClose.onclick = () => closeAdminDrawer();
+adminSettingsCancel.onclick = async () => {
+  await loadAdminSettingsIntoDrawer();
+  closeAdminDrawer();
+};
+adminDrawerBackdrop.onclick = () => closeAdminDrawer();
+adminClearLocal.onclick = () => {
+  localStorage.clear();
+  adminSettingsStatus.textContent = "Local storage cleared";
+};
+adminClearSessionView.onclick = () => {
+  resetSession();
+  adminSettingsStatus.textContent = "Session reset";
 };
 
 adminTokenInput.addEventListener("keydown", async (ev) => {
@@ -1907,6 +2336,8 @@ btnClear.onclick = () => {
   setAppState("idle");
   showError("");
   refreshIdentityPills();
+  adminConversationStatus.textContent = "Open Session from search to load history.";
+  adminConversationPanel.textContent = "-";
   scheduleListenModeAutoStart("clear");
 };
 
@@ -2025,11 +2456,30 @@ adminSearchRun.onclick = async () => {
 
 adminSearchClear.onclick = () => {
   adminSearchQuery.value = "";
+  adminHeaderSearchQuery.value = "";
   adminSearchMode.value = "auto";
+  adminHeaderSearchMode.value = "auto";
   adminSearchSinceDays.value = "7";
   adminSearchLimit.value = "50";
   adminSearchStatus.textContent = "-";
   adminSearchResult.innerHTML = "-";
+  adminConversationStatus.textContent = "Open Session from search to load history.";
+  adminConversationPanel.textContent = "-";
+};
+
+adminHeaderSearchRun.onclick = async () => {
+  await runAdminConversationSearch();
+};
+
+adminHeaderSearchReset.onclick = () => {
+  adminSearchClear.onclick();
+};
+
+adminHeaderSearchQuery.onkeydown = async (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    await runAdminConversationSearch();
+  }
 };
 
 async function sendRecording() {
@@ -2156,6 +2606,9 @@ syncHandsfreeControls();
 updateAdminControls();
 resetOutputView();
 setAppState("idle");
+setInterval(() => {
+  refreshAdminApiStatus().catch(() => {});
+}, 30000);
 </script>
 </body>
 </html>

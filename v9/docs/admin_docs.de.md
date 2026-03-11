@@ -297,4 +297,46 @@ bash v9/scripts/zip_artifacts.sh v9/artifacts/<timestamp>
 ```bash
 bash scripts/run_v9_1_9_ui_smoke.sh
 ```
-- Ergebnis und Artefakte unter: `artifacts/v9.1.9/<run-id>/`
+- Ergebnis und Artefakte unter: `v9/artifacts/<YYYYMMDD-HHMMSS>/`
+
+## Neu in V9.1.11 (Admin): Rollentrennung Agent/Admin
+- Agent-Client:
+  - hat nur noch `Agent Settings` (keine globalen Admin-Parameter mehr)
+  - nutzt fuer Suche den Endpoint `/api/agent/search`
+- Admin-Client:
+  - bleibt zentrale Stelle fuer globale Admin-Settings (`/api/admin/settings`)
+  - zeigt Header-Perf-Badges (`STT/LLM/TTS/Total avg/p95`)
+  - hat zentrale Admin-Suche (`/api/admin/search`) mit `auto|session_id|user_id|text` und Wildcard `*`
+
+### Admin-Kurztest V9.1.11
+1. Admin-Client oeffnen und pruefen:
+   - Header zeigt Version `v9.1.11`
+   - Perf-Badges werden geladen
+2. Suche im Header:
+   - `fe774f*` (Session/User Fragment)
+   - `Wallbox` (Text)
+   - Treffer anklicken -> Session wird geladen
+3. Agent-Client pruefen:
+   - kein Admin-Token / keine globalen Admin-Settings sichtbar
+
+## Neu in V9.1.12 Patch 2: Customer UI Sprache aus DB
+- Neue Collection fuer UI-Texte:
+  - `ui_i18n_strings`
+  - Schema: `scope`, `key`, `lang`, `text`, `updated_at`
+- Neue Collection fuer UI-Praeferenzen:
+  - `user_prefs`
+  - Schema: `user_id`, `scope`, `ui_lang`, `updated_at`
+
+### Wo finde ich die Uebersetzungstabelle?
+- In MongoDB:
+  - DB: `voice_agent` (oder dein `MONGO_DB`)
+  - Collection: `ui_i18n_strings`
+- Scope fuer Kundenoberflaeche:
+  - `scope=customer`
+
+### Wie fuege ich eine neue Sprache hinzu?
+1. Pro UI-Key einen Datensatz in `ui_i18n_strings` mit neuem `lang` anlegen.
+2. API testen:
+   - `GET /api/i18n?scope=customer&lang=<neu>`
+3. Im Kunden-Client die UI-Sprache waehlen.
+4. Falls kein Satz gefunden wird, faellt das System auf Englisch (`en`) zurueck.

@@ -1,4 +1,4 @@
-# Benutzer Handbuch (DE) - V9.0.0
+# Benutzer Handbuch (DE, Agent View) - V9.1.11
 
 ## Was macht der Voice Agent?
 Der Voice Agent verbindet Sprache und Text in einem durchgehenden Ablauf:
@@ -10,8 +10,7 @@ Der Voice Agent verbindet Sprache und Text in einem durchgehenden Ablauf:
 
 Das Ziel: Beide Seiten sprechen in ihrer bevorzugten Sprache, trotzdem versteht sich jeder.
 
-## Oberflaechen (wo was ist)
-- Admin UI: `http://localhost:8085`
+## Oberflaechen (Agent-Flow)
 - Kunden UI: `http://localhost:8086`
 - Agent UI: `http://localhost:8087`
 
@@ -102,7 +101,7 @@ Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-
   - `Kunden-Ausgabe auf Agent sprechen` auf AUS lassen (Standard).
 - Kein Audio:
   - Browser-Autoplay erlauben.
-  - Piper-Health pruefen (Admin).
+  - Bei Ausfall den technischen Support informieren.
 
 ## Neu in V9.1.0: Dual-Lane (Original + Zieltext)
 - Jede eingehende Kundennachricht hat jetzt 2 Ansichten im Agent-Client:
@@ -159,14 +158,17 @@ Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-
   - schnellere Fehleranalyse bei Stoerungen
   - weniger Unterbrechungen im Live-Betrieb.
 
-## Neu in V9.1.9: Agent UI aufgeraeumt
+## Neu in V9.1.11: Agent/Admin sauber getrennt
 - Der Agent hat jetzt oben immer denselben klaren Kopfbereich:
   - Verbindungsstatus + Version
   - Suche (`q` + Modus)
-  - Admin-Button
-- Die Suche ist immer sichtbar und nutzt `/api/admin/search`.
-- Admin-Einstellungen sind in einem Drawer gebuendelt (sichere Dropdowns/Toggles), damit weniger Fehlkonfigurationen passieren.
-- Performance wird kompakt gezeigt:
+  - `Agent Settings ⚙︎`
+- Die Suche ist immer sichtbar und nutzt `/api/agent/search` (kein Admin-Endpoint im Agenten).
+- Der Drawer enthaelt nur agentenspezifische Einstellungen:
+  - Backend/Model (lokal fuer den Agenten)
+  - Agent-Sprache
+  - Incoming-Speak, Customer-Speak-on-Agent, Debug/Metrics, Auto-Refresh
+- Performance wird kompakt gezeigt (lokale Zusammenfassung):
   - `STT avg/p95`
   - `LLM avg/p95`
   - `Total avg/p95`
@@ -175,4 +177,4 @@ Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-
 1. Agent gibt in die Suche `fe774f*` ein und waehlt `auto`.
 2. Trefferliste zeigt Session-ID, Kontext-Snippet und Zeit.
 3. Klick auf Treffer oeffnet direkt die Session.
-4. Bei Bedarf `Admin ⚙︎` oeffnen und Einstellungen speichern.
+4. Bei Bedarf `Agent Settings ⚙︎` oeffnen und Einstellungen speichern.
