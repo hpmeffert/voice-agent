@@ -43,3 +43,9 @@ Reason:
 
 ## No artifacts committed
 - Test artifacts remain local under ignored artifact folders.
+
+## Codex structure update
+- Added `docs/codex/workorders/` for preserved workorders and historical Codex instructions.
+- Added `docs/codex/templates/` for reusable workorder, DoD, and runbook templates.
+- Added `scripts/run_full_regression.sh` as a generic regression wrapper that writes a single summary artifact.
+- No runtime code paths, ports, or compose entrypoints were changed in this step.
