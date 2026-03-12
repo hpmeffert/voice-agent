@@ -218,6 +218,31 @@
       word-break: break-word;
       overflow-wrap: anywhere;
     }
+    .perfCardGrid {
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .perfTable {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .perfTable th,
+    .perfTable td {
+      border-bottom: 1px solid var(--border);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .perfTable th {
+      color: var(--muted);
+      font-weight: 600;
+    }
     audio { width:100%; margin-top:8px; }
 
     .topRight { display:flex; gap:8px; align-items:center; position: relative; }
@@ -400,11 +425,13 @@
   <div class="wrap">
     <div class="row adminTopRow" style="justify-content:space-between;">
       <div>
-        <h1 id="appTitle">Voice Agent Admin Client v9.1.11</h1>
+        <h1 id="appTitle">Voice Agent Admin Client v9.1.15</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
         <div class="row" style="margin-top:6px;">
           <span id="adminApiStatus" class="pill">API: checking...</span>
-          <span id="menuVersionHeader" class="pill">Version: v9.1.11</span>
+          <span id="adminWsState" class="pill">WS: disconnected</span>
+          <span id="adminWsRtt" class="pill">WS RTT: -</span>
+          <span id="menuVersionHeader" class="pill">Version: v9.1.15</span>
         </div>
       </div>
       <div class="topRight">
@@ -548,7 +575,13 @@
                 <input id="adminPerfSampleRate" type="number" min="0" max="1" step="0.05" value="1.00" />
               </label>
               <label class="muted">Perf retention (days)
-                <input id="adminPerfRetentionDays" type="number" min="1" max="365" step="1" value="30" />
+                <input id="adminPerfRetentionDays" type="number" min="1" max="730" step="1" value="30" />
+              </label>
+              <label class="muted">Perf export max days
+                <input id="adminPerfExportMaxDays" type="number" min="1" max="31" step="1" value="7" />
+              </label>
+              <label class="muted">Perf log text enabled
+                <input id="adminPerfLogTextEnabled" type="checkbox" />
               </label>
               <label class="muted">Search max results
                 <input id="adminSearchMaxResults" type="number" min="1" max="200" step="1" value="50" />
@@ -673,11 +706,68 @@
 
           <div id="adminMetricsPanel" class="latencyBox" style="display:none;">
             <div class="row" style="justify-content:space-between;">
-              <div class="muted">Admin Metrics (admin_perf_logs)</div>
+              <div class="muted">Admin Metrics (voice_agent_logs.perf_events)</div>
               <button id="btnMetricsRefresh">Refresh</button>
             </div>
+            <div class="row" style="margin-top:8px;">
+              <label class="muted">Window
+                <select id="adminPerfWindow">
+                  <option value="1h">1h</option>
+                  <option value="24h" selected>24h</option>
+                  <option value="7d">7d</option>
+                  <option value="30d">30d</option>
+                </select>
+              </label>
+              <label class="muted">Search
+                <input id="adminPerfSearchQuery" type="text" placeholder="fe77* / session / error_code" />
+              </label>
+              <button id="adminPerfSearchRun">Find</button>
+            </div>
             <div id="adminMetricsSummary" class="muted" style="margin-top:6px;">-</div>
+            <div id="adminPerfHealth" class="muted" style="margin-top:4px;">-</div>
+            <div id="adminPerfCards" class="perfCardGrid"></div>
+            <div class="muted" style="margin-top:10px;">Worst spikes</div>
+            <div id="adminPerfSpikesWrap" class="textBlock" style="min-height:80px;">
+              <table class="perfTable" id="adminPerfSpikesTable">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>User</th>
+                    <th>Session</th>
+                    <th>Total</th>
+                    <th>Worst stage</th>
+                    <th>Backend/Model</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="muted" style="margin-top:10px;">Perf search results</div>
+            <div id="adminPerfSearchResult" class="textBlock" style="margin-top:6px; max-height:220px; overflow:auto;">-</div>
             <pre id="adminMetricsRecent" style="margin-top:8px; max-height:220px; overflow:auto;">-</pre>
+          </div>
+
+          <div id="adminPerfExportPanel" class="latencyBox" style="display:none;">
+            <div class="muted" style="margin-bottom:6px;">Perf Export (ZIP)</div>
+            <div class="row">
+              <label class="muted">From (ISO)
+                <input id="adminPerfExportFrom" type="text" placeholder="2026-03-11T10:00:00Z" />
+              </label>
+              <label class="muted">To (ISO)
+                <input id="adminPerfExportTo" type="text" placeholder="2026-03-11T10:30:00Z" />
+              </label>
+              <label class="muted">Format
+                <select id="adminPerfExportFormat">
+                  <option value="jsonl" selected>jsonl</option>
+                  <option value="csv">csv</option>
+                  <option value="md">md</option>
+                </select>
+              </label>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button id="adminPerfExportRun">Download ZIP</button>
+              <span id="adminPerfExportStatus" class="muted">-</span>
+            </div>
           </div>
 
           <div id="adminConversationSearchPanel" class="latencyBox" style="display:none;">
@@ -790,6 +880,19 @@ const autoplayBanner = el("autoplayBanner");
 const adminMetricsPanel = el("adminMetricsPanel");
 const adminMetricsSummary = el("adminMetricsSummary");
 const adminMetricsRecent = el("adminMetricsRecent");
+const adminPerfHealth = el("adminPerfHealth");
+const adminPerfWindow = el("adminPerfWindow");
+const adminPerfCards = el("adminPerfCards");
+const adminPerfSpikesTable = el("adminPerfSpikesTable");
+const adminPerfSearchQuery = el("adminPerfSearchQuery");
+const adminPerfSearchRun = el("adminPerfSearchRun");
+const adminPerfSearchResult = el("adminPerfSearchResult");
+const adminPerfExportPanel = el("adminPerfExportPanel");
+const adminPerfExportFrom = el("adminPerfExportFrom");
+const adminPerfExportTo = el("adminPerfExportTo");
+const adminPerfExportFormat = el("adminPerfExportFormat");
+const adminPerfExportRun = el("adminPerfExportRun");
+const adminPerfExportStatus = el("adminPerfExportStatus");
 const adminConversationSearchPanel = el("adminConversationSearchPanel");
 const adminSearchQuery = el("adminSearchQuery");
 const adminSearchMode = el("adminSearchMode");
@@ -811,6 +914,8 @@ const adminHdrLlm = el("adminHdrLlm");
 const adminHdrTts = el("adminHdrTts");
 const adminHdrTotal = el("adminHdrTotal");
 const adminApiStatus = el("adminApiStatus");
+const adminWsState = el("adminWsState");
+const adminWsRtt = el("adminWsRtt");
 const menuVersionHeader = el("menuVersionHeader");
 const adminSettingsCard = el("adminSettingsCard");
 const adminDrawerBtn = el("adminDrawerBtn");
@@ -823,6 +928,8 @@ const adminRetentionDays = el("adminRetentionDays");
 const adminPerfLoggingEnabled = el("adminPerfLoggingEnabled");
 const adminPerfSampleRate = el("adminPerfSampleRate");
 const adminPerfRetentionDays = el("adminPerfRetentionDays");
+const adminPerfExportMaxDays = el("adminPerfExportMaxDays");
+const adminPerfLogTextEnabled = el("adminPerfLogTextEnabled");
 const adminSearchMaxResults = el("adminSearchMaxResults");
 const adminAllowRegexFallback = el("adminAllowRegexFallback");
 const adminDefaultSilence = el("adminDefaultSilence");
@@ -891,13 +998,19 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v9.1.11";
+let uiVersionText = "v9.1.15";
 let adminDrawerInitialized = false;
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 let appState = "idle";
 let currentUiLang = "de";
 let uiTranslations = {};
+let adminWs = null;
+let adminWsPingTimer = null;
+let adminWsReconnectTimer = null;
+let adminWsRttSamples = [];
+const WS_RTT_INTERVAL_MS = 5000;
+const WS_RTT_SAMPLE_LIMIT = 10;
 
 demoModeEnabled = localStorage.getItem(DEMO_MODE_KEY) === "1";
 debugPanelEnabled = localStorage.getItem(DEBUG_PANEL_KEY) !== "0";
@@ -919,6 +1032,97 @@ function applyI18n() {
 function shortId(value) {
   if (!value) return "-";
   return value.length > 8 ? value.slice(0, 8) : value;
+}
+
+function wsUrl(path) {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.host}${path}`;
+}
+
+function setAdminWsState(isOnline) {
+  if (!adminWsState || !adminWsRtt) return;
+  adminWsState.textContent = isOnline ? "WS: connected" : "WS: disconnected";
+  adminWsState.style.borderColor = isOnline ? "rgba(34,197,94,.45)" : "rgba(239,68,68,.45)";
+  adminWsState.style.color = isOnline ? "var(--ok)" : "var(--err)";
+  if (!isOnline) {
+    adminWsRttSamples = [];
+    adminWsRtt.textContent = "WS RTT: -";
+  }
+}
+
+function updateAdminWsRtt(ms) {
+  if (!adminWsRtt) return;
+  if (!Number.isFinite(ms) || ms < 0) return;
+  adminWsRttSamples.push(ms);
+  if (adminWsRttSamples.length > WS_RTT_SAMPLE_LIMIT) {
+    adminWsRttSamples.shift();
+  }
+  const avg = Math.round(adminWsRttSamples.reduce((sum, value) => sum + value, 0) / adminWsRttSamples.length);
+  adminWsRtt.textContent = `WS RTT: ${avg}ms`;
+}
+
+function stopAdminWsPingLoop() {
+  if (adminWsPingTimer) {
+    clearInterval(adminWsPingTimer);
+    adminWsPingTimer = null;
+  }
+}
+
+function startAdminWsPingLoop() {
+  stopAdminWsPingLoop();
+  adminWsPingTimer = setInterval(() => {
+    if (!adminWs || adminWs.readyState !== WebSocket.OPEN) return;
+    try {
+      adminWs.send(JSON.stringify({ type: "ping", t: Date.now() }));
+    } catch (_) {}
+  }, WS_RTT_INTERVAL_MS);
+}
+
+function scheduleAdminWsReconnect() {
+  if (adminWsReconnectTimer) return;
+  adminWsReconnectTimer = setTimeout(() => {
+    adminWsReconnectTimer = null;
+    connectAdminWsPing();
+  }, 1500);
+}
+
+function connectAdminWsPing() {
+  if (adminWs && (adminWs.readyState === WebSocket.OPEN || adminWs.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+  if (adminWsReconnectTimer) {
+    clearTimeout(adminWsReconnectTimer);
+    adminWsReconnectTimer = null;
+  }
+  try {
+    adminWs = new WebSocket(wsUrl("/api/ws/ping"));
+  } catch (_) {
+    setAdminWsState(false);
+    scheduleAdminWsReconnect();
+    return;
+  }
+  adminWs.onopen = () => {
+    setAdminWsState(true);
+    startAdminWsPingLoop();
+  };
+  adminWs.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg && msg.type === "pong" && Number.isFinite(msg.t)) {
+        updateAdminWsRtt(Date.now() - Number(msg.t));
+      }
+    } catch (_) {}
+  };
+  adminWs.onerror = () => {
+    stopAdminWsPingLoop();
+    setAdminWsState(false);
+  };
+  adminWs.onclose = () => {
+    stopAdminWsPingLoop();
+    setAdminWsState(false);
+    adminWs = null;
+    scheduleAdminWsReconnect();
+  };
 }
 
 function refreshIdentityPills() {
@@ -1053,6 +1257,15 @@ function setBusy(isBusy) {
   adminPerfLoggingEnabled.disabled = isBusy || !uiAdmin;
   adminPerfSampleRate.disabled = isBusy || !uiAdmin;
   adminPerfRetentionDays.disabled = isBusy || !uiAdmin;
+  adminPerfExportMaxDays.disabled = isBusy || !uiAdmin;
+  adminPerfLogTextEnabled.disabled = isBusy || !uiAdmin;
+  adminPerfExportFrom.disabled = isBusy || !uiAdmin;
+  adminPerfExportTo.disabled = isBusy || !uiAdmin;
+  adminPerfExportFormat.disabled = isBusy || !uiAdmin;
+  adminPerfExportRun.disabled = isBusy || !uiAdmin;
+  adminPerfWindow.disabled = isBusy || !uiAdmin;
+  adminPerfSearchQuery.disabled = isBusy || !uiAdmin;
+  adminPerfSearchRun.disabled = isBusy || !uiAdmin;
   adminSearchMaxResults.disabled = isBusy || !uiAdmin;
   adminAllowRegexFallback.disabled = isBusy || !uiAdmin;
   adminSearchRun.disabled = isBusy || !uiAdmin;
@@ -1211,6 +1424,7 @@ function updateAdminControls() {
   demoModeHint.style.display = showAdmin ? "inline" : "none";
   debugPanelLabel.style.display = showAdmin ? "inline-flex" : "none";
   adminMetricsPanel.style.display = showAdmin ? "block" : "none";
+  adminPerfExportPanel.style.display = showAdmin ? "block" : "none";
   adminConversationSearchPanel.style.display = showAdmin ? "block" : "none";
   adminSettingsMenuItem.style.display = showAdmin ? "block" : "none";
   adminHeaderSearchQuery.disabled = !showAdmin;
@@ -1228,6 +1442,8 @@ function updateAdminControls() {
     applyDebugPanelVisibility();
     adminMetricsSummary.textContent = "-";
     adminMetricsRecent.textContent = "-";
+    adminPerfHealth.textContent = "-";
+    adminPerfExportStatus.textContent = "-";
     adminHdrStt.textContent = "- / -";
     adminHdrLlm.textContent = "- / -";
     adminHdrTts.textContent = "- / -";
@@ -1256,6 +1472,8 @@ function applyAdminSettingsForm(settings) {
   adminPerfLoggingEnabled.checked = !!src.perf_logging_enabled;
   adminPerfSampleRate.value = Number(src.perf_logging_sample_rate ?? 1).toFixed(2);
   adminPerfRetentionDays.value = String(Number(src.perf_logging_retention_days || src.retention_days || 30));
+  adminPerfExportMaxDays.value = String(Number(src.perf_export_max_days || 7));
+  adminPerfLogTextEnabled.checked = !!src.perf_log_text_enabled;
   adminSearchMaxResults.value = String(Number(src.search_max_results || 50));
   adminAllowRegexFallback.checked = src.allow_text_regex_fallback !== false;
   adminSearchLimit.value = String(Number(src.search_max_results || 50));
@@ -1459,7 +1677,8 @@ async function refreshAdminApiStatus() {
 async function loadAdminMetrics() {
   if (!uiAdmin || !userId) return;
   try {
-    const [recentResp, summaryResp] = await Promise.all([
+    const perfWindow = String(adminPerfWindow.value || "24h").trim().toLowerCase();
+    const [recentResp, summaryResp, perfHealthResp, perfSummaryResp] = await Promise.all([
       fetch(`/api/admin/metrics/recent?user_id=${encodeURIComponent(userId)}&limit=20`, {
         headers: authHeaders(),
         cache: "no-store",
@@ -1468,12 +1687,22 @@ async function loadAdminMetrics() {
         headers: authHeaders(),
         cache: "no-store",
       }),
+      fetch(`/api/admin/perf/health?user_id=${encodeURIComponent(userId)}`, {
+        headers: authHeaders(),
+        cache: "no-store",
+      }),
+      fetch(`/api/admin/perf/summary?user_id=${encodeURIComponent(userId)}&window=${encodeURIComponent(perfWindow)}`, {
+        headers: authHeaders(),
+        cache: "no-store",
+      }),
     ]);
-    if (!recentResp.ok || !summaryResp.ok) {
-      throw new Error(`metrics fetch failed: ${recentResp.status}/${summaryResp.status}`);
+    if (!recentResp.ok || !summaryResp.ok || !perfHealthResp.ok || !perfSummaryResp.ok) {
+      throw new Error(`metrics fetch failed: ${recentResp.status}/${summaryResp.status}/${perfHealthResp.status}/${perfSummaryResp.status}`);
     }
     const recentData = await recentResp.json();
     const summaryData = await summaryResp.json();
+    const perfHealthData = await perfHealthResp.json();
+    const perfSummaryData = await perfSummaryResp.json();
     const avg = summaryData?.avg_ms || {};
     const p95 = summaryData?.p95_ms || {};
     adminMetricsSummary.textContent =
@@ -1483,14 +1712,21 @@ async function loadAdminMetrics() {
     adminHdrLlm.textContent = `${avg.llm_ms || 0} / ${p95.llm_ms || 0}`;
     adminHdrTts.textContent = `${avg.tts_ms || 0} / ${p95.tts_ms || 0}`;
     adminHdrTotal.textContent = `${avg.total_ms || 0} / ${p95.total_ms || 0}`;
+    adminPerfHealth.textContent =
+      `queue=${perfHealthData.queue_depth || 0}/${perfHealthData.queue_max || 0}, dropped=${perfHealthData.dropped_events_count || 0}, ttl_index=${perfHealthData.has_ttl_index ? "yes" : "no"}, db=${perfHealthData.log_db || "-"}`;
     adminMetricsRecent.textContent = JSON.stringify(recentData?.items || [], null, 2);
+    renderPerfCards(perfSummaryData);
+    renderPerfSpikes(perfSummaryData?.worst_spikes || []);
   } catch (err) {
     adminMetricsSummary.textContent = "Metrics unavailable";
     adminMetricsRecent.textContent = String(err);
+    adminPerfHealth.textContent = "Perf health unavailable";
     adminHdrStt.textContent = "- / -";
     adminHdrLlm.textContent = "- / -";
     adminHdrTts.textContent = "- / -";
     adminHdrTotal.textContent = "- / -";
+    adminPerfCards.innerHTML = `<div class="metaCell"><div class="metaLabel">Performance</div><div class="metaValue">Unavailable</div></div>`;
+    renderPerfSpikes([]);
   }
 }
 
@@ -1620,6 +1856,85 @@ function renderAdminSessionHistory(messages) {
     `;
   }).join("");
   adminConversationPanel.innerHTML = html;
+}
+
+function shortId(value) {
+  const text = String(value || "");
+  if (text.length <= 12) return text;
+  return `${text.slice(0, 6)}...${text.slice(-4)}`;
+}
+
+function renderPerfCards(summaryData) {
+  const avg = summaryData?.avg_ms || {};
+  const p95 = summaryData?.p95_ms || {};
+  const cards = [
+    ["Interactions", String(summaryData?.count || 0)],
+    ["Error rate", `${Math.round((summaryData?.error_rate || 0) * 1000) / 10}%`],
+    ["Dropped logs", String(summaryData?.dropped_events_count || 0)],
+    ["STT avg/p95", `${avg.stt_ms || 0} / ${p95.stt_ms || 0} ms`],
+    ["LLM avg/p95", `${avg.llm_ms || 0} / ${p95.llm_ms || 0} ms`],
+    ["Translate avg/p95", `${avg.translate_ms_total || 0} / ${p95.translate_ms_total || 0} ms`],
+    ["TTS avg/p95", `${avg.tts_ms || 0} / ${p95.tts_ms || 0} ms`],
+    ["Total avg/p95", `${avg.total_ms || 0} / ${p95.total_ms || 0} ms`],
+  ];
+  adminPerfCards.innerHTML = cards.map(([label, value]) => (
+    `<div class="metaCell"><div class="metaLabel">${escapeHtml(label)}</div><div class="metaValue">${escapeHtml(value)}</div></div>`
+  )).join("");
+}
+
+function renderPerfSpikes(rows) {
+  const tbody = adminPerfSpikesTable.querySelector("tbody");
+  if (!tbody) return;
+  const spikes = Array.isArray(rows) ? rows : [];
+  if (!spikes.length) {
+    tbody.innerHTML = `<tr><td colspan="6">No spikes in this window.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = spikes.map((row) => `
+    <tr>
+      <td>${escapeHtml(String(row.ts || "-"))}</td>
+      <td>${escapeHtml(shortId(row.user_id || "-"))}</td>
+      <td>${escapeHtml(shortId(row.session_id || "-"))}</td>
+      <td>${escapeHtml(String(row.total_ms || 0))} ms</td>
+      <td>${escapeHtml(String(row.stage_max || "-"))} (${escapeHtml(String(row.stage_max_ms || 0))} ms)</td>
+      <td>${escapeHtml(String(row.backend || "-"))} / ${escapeHtml(String(row.model || "-"))}</td>
+    </tr>
+  `).join("");
+}
+
+async function runAdminPerfSearch() {
+  if (!uiAdmin || !userId) return;
+  const q = String(adminPerfSearchQuery.value || "").trim();
+  const now = new Date();
+  const from = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
+  const qs = new URLSearchParams();
+  qs.set("user_id", userId);
+  qs.set("from", from.toISOString());
+  qs.set("to", now.toISOString());
+  qs.set("limit", "50");
+  if (q) qs.set("q", q);
+  try {
+    const r = await fetch(`/api/admin/perf/search?${qs.toString()}`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    if (!r.ok) throw new Error(`perf search failed: ${r.status}`);
+    const data = await r.json();
+    const items = Array.isArray(data?.items) ? data.items : [];
+    if (!items.length) {
+      adminPerfSearchResult.textContent = "No matching perf events.";
+      return;
+    }
+    adminPerfSearchResult.innerHTML = items.map((row, idx) => {
+      const metrics = row.metrics || {};
+      return `<div style="border-bottom:1px solid #d9e1ee; padding:8px 0;">
+        <div><b>${idx + 1}.</b> ts=${escapeHtml(String(row.ts || "-"))} user=<code>${escapeHtml(String(row.user_id || "-"))}</code> session=<code>${escapeHtml(String(row.session_id || "-"))}</code></div>
+        <div class="muted">total=${escapeHtml(String(metrics.total_ms || row.total_ms || 0))}ms stt=${escapeHtml(String(metrics.stt_ms || 0))}ms llm=${escapeHtml(String(metrics.llm_ms || 0))}ms tts=${escapeHtml(String(metrics.tts_ms || 0))}ms error=${escapeHtml(String(row.error_code || "-"))}</div>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    adminPerfSearchResult.textContent = String(err);
+  }
 }
 
 async function loadAdminSessionHistory(nextSessionId = "", nextUserId = "") {
@@ -1756,7 +2071,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v9.1.11";
+    const ver = cfg?.ui?.version || "v9.1.15";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
     applyAdminSettingsForm(cfg?.admin_settings || {});
@@ -1765,7 +2080,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v9.1.11";
+    uiVersionText = "v9.1.15";
     applyAdminSettingsForm({});
   }
   await loadWhoAmI();
@@ -1774,6 +2089,14 @@ async function loadConfig() {
   updateProtocolUi();
   updateMenuUi();
   await loadAdminMetrics();
+  initPerfExportDefaults();
+}
+
+function initPerfExportDefaults() {
+  const now = new Date();
+  const from = new Date(now.getTime() - (5 * 60 * 1000));
+  if (!adminPerfExportFrom.value) adminPerfExportFrom.value = from.toISOString();
+  if (!adminPerfExportTo.value) adminPerfExportTo.value = now.toISOString();
 }
 
 async function loadUiI18n(langOverride = "") {
@@ -1922,6 +2245,7 @@ loadModels()
   .then(() => loadUiI18n())
   .then(() => loadUserProfile())
   .then(() => refreshAdminApiStatus())
+  .then(() => connectAdminWsPing())
   .then(() => scheduleListenModeAutoStart("init"))
   .catch((err) => {
     console.error(err);
@@ -2006,8 +2330,10 @@ adminSettingsSave.onclick = async () => {
       user_id: userId,
       retention_days: Math.max(1, Math.min(365, Number(adminRetentionDays.value || 30))),
       perf_logging_enabled: !!adminPerfLoggingEnabled.checked,
+      perf_log_text_enabled: !!adminPerfLogTextEnabled.checked,
       perf_logging_sample_rate: Math.max(0, Math.min(1, Number(adminPerfSampleRate.value || 1))),
-      perf_logging_retention_days: Math.max(1, Math.min(365, Number(adminPerfRetentionDays.value || 30))),
+      perf_logging_retention_days: Math.max(1, Math.min(730, Number(adminPerfRetentionDays.value || 30))),
+      perf_export_max_days: Math.max(1, Math.min(31, Number(adminPerfExportMaxDays.value || 7))),
       search_max_results: Math.max(1, Math.min(200, Number(adminSearchMaxResults.value || 50))),
       allow_text_regex_fallback: !!adminAllowRegexFallback.checked,
       listen_silence_ms_default: Math.max(300, Math.min(5000, Number(adminDefaultSilence.value || 1300))),
@@ -2450,6 +2776,58 @@ btnMetricsRefresh.onclick = async () => {
   await loadAdminMetrics();
 };
 
+adminPerfExportRun.onclick = async () => {
+  if (!uiAdmin) return;
+  const fromVal = String(adminPerfExportFrom.value || "").trim();
+  const toVal = String(adminPerfExportTo.value || "").trim();
+  const fmt = String(adminPerfExportFormat.value || "jsonl").trim().toLowerCase();
+  if (!fromVal || !toVal) {
+    adminPerfExportStatus.textContent = "Please provide from/to ISO timestamps";
+    return;
+  }
+  adminPerfExportStatus.textContent = "Exporting...";
+  try {
+    const qs = new URLSearchParams();
+    qs.set("user_id", userId);
+    qs.set("from", fromVal);
+    qs.set("to", toVal);
+    qs.set("format", fmt);
+    const r = await fetch(`/api/admin/perf/export?${qs.toString()}`, {
+      headers: authHeaders(),
+      cache: "no-store",
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`Export failed: ${r.status} ${txt}`);
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `perf_export_${new Date().toISOString().replace(/[:.]/g, "-")}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+    adminPerfExportStatus.textContent = "Export downloaded";
+  } catch (err) {
+    adminPerfExportStatus.textContent = String(err);
+  }
+};
+
+adminPerfSearchRun.onclick = async () => {
+  await runAdminPerfSearch();
+};
+
+adminPerfSearchQuery.onkeydown = async (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    await runAdminPerfSearch();
+  }
+};
+
+adminPerfWindow.onchange = async () => {
+  await loadAdminMetrics();
+};
+
 adminSearchRun.onclick = async () => {
   await runAdminConversationSearch();
 };
@@ -2605,6 +2983,7 @@ applyDebugPanelVisibility();
 syncHandsfreeControls();
 updateAdminControls();
 resetOutputView();
+setAdminWsState(false);
 setAppState("idle");
 setInterval(() => {
   refreshAdminApiStatus().catch(() => {});

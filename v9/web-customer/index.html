@@ -49,7 +49,9 @@
       <div class="hd">
         <div>
           <b id="headerTitle">Voice Agent Customer</b>
-          <div class="status" id="headerVersion">Version: v9.1.11</div>
+          <div class="status" id="headerWsState">WS: disconnected</div>
+          <div class="status" id="headerWsRtt">WS RTT: -</div>
+          <div class="status" id="headerVersion">Version: v9.1.15</div>
           <div class="status" id="status">idle</div>
         </div>
         <div class="row">
@@ -95,7 +97,7 @@
 
   <div id="helpModal" class="helpModal">
     <div class="helpCard">
-      <div class="helpHd"><b id="helpTitleText">Kunden-Hilfe</b><span id="helpVersion" class="status">Version: v9.1.11</span><button id="helpCloseBtn">Schliessen</button></div>
+      <div class="helpHd"><b id="helpTitleText">Kunden-Hilfe</b><span id="helpVersion" class="status">Version: v9.1.15</span><button id="helpCloseBtn">Schliessen</button></div>
       <div id="helpBody" class="helpBd">Lade Hilfe...</div>
     </div>
   </div>
@@ -132,6 +134,8 @@ const listenModeEl = document.getElementById("listenMode");
 const handoffStatusEl = document.getElementById("handoffStatus");
 const autoSendAfterRecordEl = document.getElementById("autoSendAfterRecord");
 const headerTitleEl = document.getElementById("headerTitle");
+const headerWsStateEl = document.getElementById("headerWsState");
+const headerWsRttEl = document.getElementById("headerWsRtt");
 const headerVersionEl = document.getElementById("headerVersion");
 const uiLangEl = document.getElementById("uiLang");
 const uiLangLabelEl = document.getElementById("uiLangLabel");
@@ -153,6 +157,7 @@ let mediaRecorder = null;
 let chunks = [];
 let lastBlob = null;
 let ws = null;
+let wsPingTimer = null;
 let loopActive = false;
 let audioCtx = null;
 let analyser = null;
@@ -165,6 +170,10 @@ let handoffRequested = false;
 let handoffState = "none";
 let uiStrings = {};
 let uiLangCurrent = "en";
+let wsRttSamples = [];
+
+const WS_RTT_INTERVAL_MS = 5000;
+const WS_RTT_SAMPLE_LIMIT = 10;
 
 const BUILTIN_UI_STRINGS = {
   en: {
@@ -237,8 +246,36 @@ function setStatus(s){
   const key = `status.${String(s || "").toLowerCase()}`;
   statusEl.textContent = t(key, String(s || ""));
 }
+function setWsState(isOnline){
+  headerWsStateEl.textContent = isOnline ? "WS: connected" : "WS: disconnected";
+  if (!isOnline) {
+    wsRttSamples = [];
+    headerWsRttEl.textContent = "WS RTT: -";
+  }
+}
+function updateWsRtt(ms){
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value < 0) return;
+  wsRttSamples.push(value);
+  wsRttSamples = wsRttSamples.slice(-WS_RTT_SAMPLE_LIMIT);
+  const avg = Math.round(wsRttSamples.reduce((sum, cur) => sum + cur, 0) / wsRttSamples.length);
+  headerWsRttEl.textContent = `WS RTT: ${avg}ms`;
+}
+function startWsPingLoop(){
+  if (wsPingTimer) clearInterval(wsPingTimer);
+  wsPingTimer = setInterval(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    try {
+      ws.send(JSON.stringify({ type: "ping", t: Date.now() }));
+    } catch (_) {}
+  }, WS_RTT_INTERVAL_MS);
+}
+function stopWsPingLoop(){
+  if (wsPingTimer) clearInterval(wsPingTimer);
+  wsPingTimer = null;
+}
 function setVersion(v){
-  const ver = v || "v9.1.11";
+  const ver = v || "v9.1.15";
   document.title = `${t("customer.title", "Voice Agent Customer")} ${ver}`;
   headerTitleEl.textContent = `${t("customer.title", "Voice Agent Customer")} ${ver}`;
   headerVersionEl.textContent = `Version: ${ver}`;
@@ -300,7 +337,7 @@ async function loadUiI18n(lang) {
     }
   } catch (_) {}
   applyUiStrings();
-  setVersion(headerVersionEl.textContent.replace(/^Version:\s*/, "") || "v9.1.11");
+  setVersion(headerVersionEl.textContent.replace(/^Version:\s*/, "") || "v9.1.15");
   setStatus(loopActive ? "listening" : "idle");
   setHandoff(handoffState, handoffRequested);
 }
@@ -397,6 +434,7 @@ async function playAgentTts(text, lang){
   } catch(_) {}
 }
 function connectSessionWs(){
+  stopWsPingLoop();
   closeWs();
   const sid = (sessionIdEl.value || '').trim();
   if (!sid) return;
@@ -404,13 +442,18 @@ function connectSessionWs(){
   const selectedLang = selectedCustomerLang();
   const laneQuery = selectedLang ? `&customer_lang=${encodeURIComponent(selectedLang)}` : '';
   ws = new WebSocket(wsUrl(`/api/ws/session/${encodeURIComponent(sid)}?client=customer&user_id=${encodeURIComponent(uid)}${laneQuery}`));
-  ws.onopen = () => stateIdle();
-  ws.onclose = () => stateIdle();
-  ws.onerror = () => setStatus('ws-error');
+  ws.onopen = () => { setWsState(true); startWsPingLoop(); stateIdle(); };
+  ws.onclose = () => { stopWsPingLoop(); setWsState(false); stateIdle(); };
+  ws.onerror = () => { stopWsPingLoop(); setWsState(false); setStatus('ws-error'); };
   ws.onmessage = async (ev) => {
     try {
       const e = JSON.parse(ev.data);
       if (e.type === 'session.keepalive') return;
+      if (e.type === 'pong') {
+        const sentAt = Number(e.t || 0);
+        if (sentAt > 0) updateWsRtt(Date.now() - sentAt);
+        return;
+      }
       if (e.type === 'session.connected') {
         const h = (e.payload && e.payload.handoff) || {};
         setHandoff(h.state || "none", !!h.requested);
@@ -598,9 +641,9 @@ connectSessionWs();
   try {
     const cfg = await fetch('/api/config', { cache: 'no-store' }).then(r => r.json());
     cfgDefaultLang = resolveUiLang((cfg && cfg.ui_lang_default) || "en");
-    setVersion((cfg?.ui?.version) || "v9.1.11");
+    setVersion((cfg?.ui?.version) || "v9.1.15");
   } catch (_) {
-    setVersion("v9.1.11");
+    setVersion("v9.1.15");
   }
   const dbLang = await loadUiLangPreferenceFromDb();
   const preferred = resolveUiLang(dbLang || localStorage.getItem(CUSTOMER_UI_LANG_KEY) || cfgDefaultLang || "en");
@@ -741,6 +784,7 @@ helpModal.onclick = (ev) => {
 if (loopActive) {
   startRecording({ autoSend: true });
 }
+setWsState(false);
 </script>
 </body>
 </html>

@@ -118,9 +118,10 @@
   <div class="wrap">
     <div class="headerBar">
       <div class="headerLeft">
-        <span id="agentHeaderTitle" class="pill">Voice Agent Agent Client v9.1.11</span>
+        <span id="agentHeaderTitle" class="pill">Voice Agent Agent Client v9.1.15</span>
         <span id="wsState" class="pill off">WS: offline</span>
-        <span id="versionBadge" class="pill">Version: v9.1.11</span>
+        <span id="wsRtt" class="pill">WS RTT: -</span>
+        <span id="versionBadge" class="pill">Version: v9.1.15</span>
       </div>
       <div class="headerCenter">
         <input id="searchInput" placeholder="Search q (supports wildcard *)" />
@@ -205,13 +206,10 @@
       </div>
 
       <div class="group">
-        <div class="groupTitle">Agent Runtime</div>
-        <label>Backend
-          <select id="backendSelect"><option value="ollama">ollama</option><option value="openai">openai</option></select>
-        </label>
-        <label>Model
-          <select id="modelSelect"></select>
-        </label>
+        <div class="groupTitle">Agent Runtime (Admin-controlled)</div>
+        <div class="muted">Backend/Model are managed in Admin settings. Agent view is read-only here.</div>
+        <div class="muted">Backend: <span id="runtimeBackend" class="mono">admin-controlled</span></div>
+        <div class="muted">Model: <span id="runtimeModel" class="mono">admin-controlled</span></div>
       </div>
 
       <div class="group">
@@ -239,7 +237,7 @@
 
   <div id="helpModal" class="helpModal">
     <div class="helpCard">
-      <div class="helpHd"><b>Benutzer Handbuch</b><span id="helpVersion" class="muted">Version: v9.1.11</span><button id="helpCloseBtn">Schliessen</button></div>
+      <div class="helpHd"><b>Benutzer Handbuch</b><span id="helpVersion" class="muted">Version: v9.1.15</span><button id="helpCloseBtn">Schliessen</button></div>
       <div id="helpBody" class="helpBd">Lade Benutzer Handbuch...</div>
     </div>
   </div>
@@ -252,8 +250,6 @@ const AGENT_VOICE_CUSTOMER_OUT_KEY = 'v9_agent_voice_customer_out';
 const AGENT_AUTO_REFRESH_KEY = 'v9_agent_auto_refresh';
 const AGENT_SHOW_DEBUG_KEY = 'v9_agent_show_debug';
 const AGENT_SHOW_METRICS_KEY = 'v9_agent_show_metrics';
-const AGENT_BACKEND_KEY = 'v9_agent_backend';
-const AGENT_MODEL_KEY = 'v9_agent_model';
 const AGENT_PERF_ENABLED_KEY = 'v9_agent_perf_enabled';
 
 const sessionsEl = document.getElementById('sessions');
@@ -266,6 +262,7 @@ const chatMetaEl = document.getElementById('chatMeta');
 const customerLangMetaEl = document.getElementById('customerLangMeta');
 const customerLangPreviewEl = document.getElementById('customerLangPreview');
 const wsStateEl = document.getElementById('wsState');
+const wsRttEl = document.getElementById('wsRtt');
 const agentHeaderTitleEl = document.getElementById('agentHeaderTitle');
 const versionBadge = document.getElementById('versionBadge');
 const helpVersion = document.getElementById('helpVersion');
@@ -279,8 +276,8 @@ const autoRefreshEl = document.getElementById('autoRefresh');
 const showDebugPanelEl = document.getElementById('showDebugPanel');
 const showMetricsPanelEl = document.getElementById('showMetricsPanel');
 const perfMetricsEnabledEl = document.getElementById('perfMetricsEnabled');
-const backendSelect = document.getElementById('backendSelect');
-const modelSelect = document.getElementById('modelSelect');
+const runtimeBackendEl = document.getElementById('runtimeBackend');
+const runtimeModelEl = document.getElementById('runtimeModel');
 
 const searchInputEl = document.getElementById('searchInput');
 const searchModeEl = document.getElementById('searchMode');
@@ -324,12 +321,16 @@ let activeHandoffState = 'none';
 let ws = null;
 let wsSeq = 0;
 let wsReconnectTimer = null;
+let wsPingTimer = null;
 let autoRefreshTimer = null;
 let perfTimer = null;
 let searchCache = [];
-let modelsCatalog = {};
 let agentSettingsSnapshot = null;
 let recentDebugEvents = [];
+let wsRttSamples = [];
+
+const WS_RTT_INTERVAL_MS = 5000;
+const WS_RTT_SAMPLE_LIMIT = 10;
 
 function wsUrl(path){
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -339,10 +340,38 @@ function wsUrl(path){
 function setWsState(isOnline) {
   wsStateEl.textContent = isOnline ? 'WS: connected' : 'WS: disconnected';
   wsStateEl.className = `pill ${isOnline ? 'ok' : 'off'}`;
+  if (!isOnline) {
+    wsRttSamples = [];
+    wsRttEl.textContent = 'WS RTT: -';
+  }
+}
+
+function updateWsRtt(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value < 0) return;
+  wsRttSamples.push(value);
+  wsRttSamples = wsRttSamples.slice(-WS_RTT_SAMPLE_LIMIT);
+  const avg = Math.round(wsRttSamples.reduce((sum, cur) => sum + cur, 0) / wsRttSamples.length);
+  wsRttEl.textContent = `WS RTT: ${avg}ms`;
+}
+
+function startWsPingLoop(seq) {
+  if (wsPingTimer) clearInterval(wsPingTimer);
+  wsPingTimer = setInterval(() => {
+    if (seq !== wsSeq || !ws || ws.readyState !== WebSocket.OPEN) return;
+    try {
+      ws.send(JSON.stringify({ type: 'ping', t: Date.now() }));
+    } catch (_) {}
+  }, WS_RTT_INTERVAL_MS);
+}
+
+function stopWsPingLoop() {
+  if (wsPingTimer) clearInterval(wsPingTimer);
+  wsPingTimer = null;
 }
 
 function setVersion(v) {
-  const val = v || 'v9.1.11';
+  const val = v || 'v9.1.15';
   agentHeaderTitleEl.textContent = `Voice Agent Agent Client ${val}`;
   versionBadge.textContent = `Version: ${val}`;
   helpVersion.textContent = `Version: ${val}`;
@@ -363,8 +392,6 @@ function rememberLocal() {
   localStorage.setItem(AGENT_AUTO_REFRESH_KEY, autoRefreshEl.checked ? '1' : '0');
   localStorage.setItem(AGENT_SHOW_DEBUG_KEY, showDebugPanelEl.checked ? '1' : '0');
   localStorage.setItem(AGENT_SHOW_METRICS_KEY, showMetricsPanelEl.checked ? '1' : '0');
-  localStorage.setItem(AGENT_BACKEND_KEY, backendSelect.value || 'ollama');
-  localStorage.setItem(AGENT_MODEL_KEY, modelSelect.value || '');
   localStorage.setItem(AGENT_PERF_ENABLED_KEY, perfMetricsEnabledEl.checked ? '1' : '0');
 }
 
@@ -378,10 +405,6 @@ function restoreLocal() {
   showDebugPanelEl.checked = localStorage.getItem(AGENT_SHOW_DEBUG_KEY) === '1';
   showMetricsPanelEl.checked = localStorage.getItem(AGENT_SHOW_METRICS_KEY) !== '0';
   perfMetricsEnabledEl.checked = localStorage.getItem(AGENT_PERF_ENABLED_KEY) !== '0';
-  const localBackend = localStorage.getItem(AGENT_BACKEND_KEY) || '';
-  if (localBackend && [...backendSelect.options].some(o => o.value === localBackend)) {
-    backendSelect.value = localBackend;
-  }
   syncPanelToggles();
 }
 
@@ -396,40 +419,27 @@ function addDebugEvent(evt) {
   debugBox.textContent = recentDebugEvents.map(e => JSON.stringify(e)).join('\n');
 }
 
-async function loadModelsCatalog() {
+async function loadRuntimeInfo() {
   try {
     const r = await fetch('/api/models', {cache: 'no-store'});
     if (!r.ok) return;
     const data = await r.json();
-    modelsCatalog = {};
-    for (const p of (data.providers || [])) {
-      modelsCatalog[p.backend] = { models: p.models || [], default_model: p.default_model || '' };
+    runtimeBackendEl.textContent = 'admin-controlled';
+    runtimeModelEl.textContent = 'admin-controlled';
+    const ollamaDefault = data?.ollama?.default_model || '';
+    const openaiDefault = data?.openai?.default_model || '';
+    if (ollamaDefault) {
+      runtimeBackendEl.textContent = data?.openai?.available ? 'admin-controlled (ollama/openai)' : 'admin-controlled (ollama)';
+      runtimeModelEl.textContent = ollamaDefault;
+    } else if (openaiDefault) {
+      runtimeBackendEl.textContent = 'admin-controlled (openai)';
+      runtimeModelEl.textContent = openaiDefault;
     }
-    rebuildModelSelect();
   } catch (_) {}
-}
-
-function rebuildModelSelect() {
-  const backend = backendSelect.value || 'ollama';
-  const cfg = modelsCatalog[backend] || {models: [], default_model: ''};
-  const current = modelSelect.value;
-  modelSelect.innerHTML = '';
-  const source = cfg.models.length ? cfg.models : [cfg.default_model || 'qwen2.5:3b'];
-  for (const m of source) {
-    if (!m) continue;
-    const opt = document.createElement('option');
-    opt.value = m;
-    opt.textContent = m;
-    modelSelect.appendChild(opt);
-  }
-  if ([...modelSelect.options].some(o => o.value === current)) modelSelect.value = current;
-  else if (cfg.default_model && [...modelSelect.options].some(o => o.value === cfg.default_model)) modelSelect.value = cfg.default_model;
 }
 
 function captureAgentSettingsSnapshot() {
   agentSettingsSnapshot = {
-    backend: backendSelect.value || 'ollama',
-    model: modelSelect.value || '',
     agentLang: agentLangEl.value || 'de',
     incoming: !!agentVoiceIncomingEl.checked,
     customerOut: !!agentVoiceCustomerOutEl.checked,
@@ -442,11 +452,6 @@ function captureAgentSettingsSnapshot() {
 
 function resetDrawerChanges() {
   if (!agentSettingsSnapshot) return;
-  backendSelect.value = agentSettingsSnapshot.backend;
-  rebuildModelSelect();
-  if ([...modelSelect.options].some(o => o.value === agentSettingsSnapshot.model)) {
-    modelSelect.value = agentSettingsSnapshot.model;
-  }
   agentLangEl.value = agentSettingsSnapshot.agentLang;
   agentVoiceIncomingEl.checked = agentSettingsSnapshot.incoming;
   agentVoiceCustomerOutEl.checked = agentSettingsSnapshot.customerOut;
@@ -622,7 +627,7 @@ async function joinSession(s) {
 async function loadRecentMessages() {
   if (!activeSessionId || !activeSessionUserId) return;
   try {
-    const q = new URLSearchParams({ user_id: activeSessionUserId, limit: '50' });
+    const q = new URLSearchParams({ user_id: activeSessionUserId, limit: '50', agent_lang: agentLangEl.value || 'de' });
     const r = await fetch(`/api/session/${encodeURIComponent(activeSessionId)}?${q.toString()}`);
     if (!r.ok) return;
     const data = await r.json();
@@ -652,19 +657,31 @@ function connectWs() {
   wsSeq += 1;
   const seq = wsSeq;
   if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+  stopWsPingLoop();
   if (ws) { try { ws.close(); } catch (_) {} }
 
   const url = wsUrl(`/api/ws/session/${encodeURIComponent(activeSessionId)}?client=agent&user_id=${encodeURIComponent(agentIdEl.value || 'agenten-02')}&agent_lang=${encodeURIComponent(agentLangEl.value || 'de')}`);
   ws = new WebSocket(url);
 
-  ws.onopen = () => { if (seq === wsSeq) setWsState(true); };
+  ws.onopen = () => {
+    if (seq === wsSeq) {
+      setWsState(true);
+      startWsPingLoop(seq);
+    }
+  };
   ws.onclose = () => {
     if (seq !== wsSeq) return;
+    stopWsPingLoop();
     setWsState(false);
     if (!activeSessionId) return;
     wsReconnectTimer = setTimeout(() => { if (seq === wsSeq) connectWs(); }, 1500);
   };
-  ws.onerror = () => { if (seq === wsSeq) setWsState(false); };
+  ws.onerror = () => {
+    if (seq === wsSeq) {
+      stopWsPingLoop();
+      setWsState(false);
+    }
+  };
 
   ws.onmessage = (ev) => {
     try {
@@ -672,6 +689,11 @@ function connectWs() {
       const e = JSON.parse(ev.data);
       addDebugEvent(e);
       if (e.type === 'session.keepalive') return;
+      if (e.type === 'pong') {
+        const sentAt = Number(e.t || 0);
+        if (sentAt > 0) updateWsRtt(Date.now() - sentAt);
+        return;
+      }
       if (e.type === 'session.connected') {
         const h = (e.payload && e.payload.handoff) || {};
         activeHandoffState = String(h.state || 'none');
@@ -792,7 +814,7 @@ function renderMarkdown(md) {
 function openDrawer() {
   drawer.classList.add('show');
   drawerBackdrop.classList.add('show');
-  loadModelsCatalog().catch(() => {});
+  loadRuntimeInfo().catch(() => {});
   captureAgentSettingsSnapshot();
   schedulePerfPolling();
 }
@@ -888,8 +910,6 @@ btnClearLocal.onclick = () => {
   localStorage.removeItem(AGENT_AUTO_REFRESH_KEY);
   localStorage.removeItem(AGENT_SHOW_DEBUG_KEY);
   localStorage.removeItem(AGENT_SHOW_METRICS_KEY);
-  localStorage.removeItem(AGENT_BACKEND_KEY);
-  localStorage.removeItem(AGENT_MODEL_KEY);
   localStorage.removeItem(AGENT_PERF_ENABLED_KEY);
   alert('Local storage cleared.');
 };
@@ -914,8 +934,6 @@ agentLangEl.onchange = async () => {
   if (activeSessionId) connectWs();
 };
 
-backendSelect.onchange = () => { rebuildModelSelect(); rememberLocal(); };
-modelSelect.onchange = () => rememberLocal();
 showDebugPanelEl.onchange = () => { syncPanelToggles(); rememberLocal(); };
 showMetricsPanelEl.onchange = () => { syncPanelToggles(); rememberLocal(); schedulePerfPolling(); };
 autoRefreshEl.onchange = () => { rememberLocal(); startAutoRefresh(); };
@@ -939,17 +957,12 @@ async function bootstrap() {
   restoreLocal();
   setWsState(false);
   updateCustomerPreview();
-  await loadModelsCatalog();
+  await loadRuntimeInfo();
   await loadAgentPrefs();
   try {
     const cfg = await fetch('/api/config', {cache:'no-store'}).then(r => r.json());
-    setVersion((cfg?.ui?.version) || 'v9.1.11');
-  } catch (_) { setVersion('v9.1.11'); }
-  rebuildModelSelect();
-  const savedModel = localStorage.getItem(AGENT_MODEL_KEY) || '';
-  if (savedModel && [...modelSelect.options].some(o => o.value === savedModel)) {
-    modelSelect.value = savedModel;
-  }
+    setVersion((cfg?.ui?.version) || 'v9.1.15');
+  } catch (_) { setVersion('v9.1.15'); }
   await loadPerfSummary();
   schedulePerfPolling();
   startAutoRefresh();
