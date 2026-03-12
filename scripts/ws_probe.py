@@ -20,6 +20,8 @@ class ProbeStats:
     last_event_ts: float = 0.0
     bad_events: int = 0
     connect_error: str = ""
+    connected: bool = False
+    connected_at: float = 0.0
 
     def __post_init__(self) -> None:
         if self.events_by_type is None:
@@ -125,6 +127,9 @@ class SimpleWSClient:
         masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
         self.sock.sendall(bytes(header) + masked)
 
+    def send_json(self, payload: Dict[str, Any]) -> None:
+        self._send_frame(0x1, json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
     def recv_text(self) -> Optional[str]:
         assert self.sock is not None
         first = self._recv_exact(1)[0]
@@ -149,7 +154,6 @@ class SimpleWSClient:
             self._connected = False
             return None
         if opcode == 0x9:
-            # ping -> pong
             self._send_frame(0xA, payload)
             return ""
         return ""
@@ -164,24 +168,33 @@ def validate_required_fields(event: dict[str, Any], strict: bool = True) -> list
             if f not in event:
                 errs.append(f"missing:{f}")
     payload = event.get("payload")
-    if isinstance(payload, dict):
-        if event.get("type") == "message.created":
-            for f in ("text_original", "agent", "customer", "tts", "text_for_agent", "lang_for_agent", "text_for_customer", "lang_for_customer", "lane"):
-                if f not in payload:
-                    errs.append(f"missing:{f}")
-            lane = payload.get("lane")
-            if isinstance(lane, dict):
-                lane_agent = lane.get("agent")
-                lane_customer = lane.get("customer")
-                for lane_name, lane_obj in (("lane.agent", lane_agent), ("lane.customer", lane_customer)):
-                    if not isinstance(lane_obj, dict):
-                        errs.append(f"missing:{lane_name}")
-                        continue
-                    for key in ("lang", "has_translation", "text_preview"):
-                        if key not in lane_obj:
-                            errs.append(f"missing:{lane_name}.{key}")
-            else:
-                errs.append("missing:lane")
+    if isinstance(payload, dict) and event.get("type") == "message.created":
+        for f in (
+            "text_original",
+            "agent",
+            "customer",
+            "tts",
+            "text_for_agent",
+            "lang_for_agent",
+            "text_for_customer",
+            "lang_for_customer",
+            "lane",
+        ):
+            if f not in payload:
+                errs.append(f"missing:{f}")
+        lane = payload.get("lane")
+        if isinstance(lane, dict):
+            lane_agent = lane.get("agent")
+            lane_customer = lane.get("customer")
+            for lane_name, lane_obj in (("lane.agent", lane_agent), ("lane.customer", lane_customer)):
+                if not isinstance(lane_obj, dict):
+                    errs.append(f"missing:{lane_name}")
+                    continue
+                for key in ("lang", "has_translation", "text_preview"):
+                    if key not in lane_obj:
+                        errs.append(f"missing:{lane_name}.{key}")
+        else:
+            errs.append("missing:lane")
     return errs
 
 
@@ -190,9 +203,13 @@ def run_probe(name: str, ws_url: str, out_file: str, stats: ProbeStats, stop_evt
         client = SimpleWSClient(ws_url)
         try:
             client.connect()
+            stats.connected = True
+            stats.connected_at = time.time()
+            fh.write(json.dumps({"recv_ts": stats.connected_at, "probe_status": "connected", "ws_url": ws_url}, ensure_ascii=False) + "\n")
+            fh.flush()
         except Exception as exc:
             stats.connect_error = str(exc)
-            fh.write(json.dumps({"recv_ts": time.time(), "probe_error": str(exc), "ws_url": ws_url}, ensure_ascii=False) + "\\n")
+            fh.write(json.dumps({"recv_ts": time.time(), "probe_error": str(exc), "ws_url": ws_url}, ensure_ascii=False) + "\n")
             fh.flush()
             return
 
@@ -276,8 +293,10 @@ def main() -> int:
         return 2
     if agent_stats.bad_events > 0 or customer_stats.bad_events > 0:
         return 3
-    if agent_stats.events_received_total == 0 and customer_stats.events_received_total == 0:
+    if not (agent_stats.connected and customer_stats.connected):
         return 4
+    if agent_stats.events_received_total == 0 and customer_stats.events_received_total == 0:
+        return 0
     if (
         agent_stats.last_event_ts > 0
         and now - agent_stats.last_event_ts > args.quiet_timeout_sec
