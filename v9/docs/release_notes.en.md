@@ -1,4 +1,4 @@
-# Release Notes (EN) - V7.0.0 through V9.1.16
+# Release Notes (EN) - V7.0.0 through V9.1.17
 
 ## History
 - V7.0.0: isolated V7 scaffold, dedicated ports, admin demo defaults.
@@ -31,6 +31,7 @@
 - V9.1.15: Admin performance dashboard with summary cards, worst-spikes table, prefix search, and export/delete workflow.
 - V9.1.16: Search fixes + better tests with reliable wildcard search, context snippets, and a dedicated seeded search regression test.
 - V9.1.16 Patch: UI voice/chat parity restored: customer sees transcript + answer again after voice, and agent sees `Original + Translation` again for generated answers, including reload.
+- V9.1.17: Formalized `qwen2.5:3b` as the project default model, hardened WS regression deterministically, and added a full regression runner with one consolidated `SUMMARY.md`.
 
 ## Why V9.1.0 matters
 - Prevents wrong-language speech on both Agent and Customer clients.
@@ -133,3 +134,8 @@
 - Search is now more deterministic for exact ids, prefix/suffix/contains wildcards, and text fragments.
 - Results provide multiple snippets and can open the full conversation directly in Admin and Agent clients.
 - The new search regression test seeds its own data, so empty or flaky search results are caught earlier.
+
+## Why V9.1.17 matters
+- `qwen2.5:3b` remains the clear default model for fresh or empty UI states and keeps demo/test runs faster.
+- The WS regression suite now uses explicit `RUN_ID` markers, real probe-connect waiting, and `WARN` reporting instead of timing flakes.
+- One command `bash scripts/run_v9_1_17_full_regression.sh` now produces a consolidated `SUMMARY.md` for artifact guard, docs, syntax, search, WS, and UI smoke.

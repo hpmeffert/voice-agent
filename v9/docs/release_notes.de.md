@@ -1,4 +1,4 @@
-# Release Notes (DE) - V7.0.0 bis V9.1.16
+# Release Notes (DE) - V7.0.0 bis V9.1.17
 
 ## Historie
 - V7.0.0: V7-Scaffold isoliert, eigene Ports, Admin-Demo-Defaults.
@@ -31,6 +31,7 @@
 - V9.1.15: Admin Performance Dashboard mit Summary Cards, Worst-Spikes-Tabelle, Prefix-Suche und Export-/Delete-Workflow.
 - V9.1.16: Search Fixes + Better Tests mit zuverlaessiger Wildcard-Suche, Kontext-Snippets und eigenem Search-Regressionstest.
 - V9.1.16 Patch: Voice/Chat-Paritaet in der UI wiederhergestellt: Customer sieht nach Voice Transcript + Antwort, Agent sieht fuer generierte Antworten wieder `Original + Uebersetzung`, auch nach Reload.
+- V9.1.17: Default-Modell `qwen2.5:3b` als Projektstandard gefestigt, WS-Regressionssuite deterministisch gehaertet und Full-Regression-Runner mit konsolidierter `SUMMARY.md` ergaenzt.
 
 ## Nutzen von V9.1.0
 - Keine falsche Sprache mehr im Agenten- und Kunden-TTS-Pfad.
@@ -133,3 +134,8 @@
 - Suche ist jetzt deterministischer: exakte IDs, Prefix/Suffix/Contains-Wildcards und Textfragmente verhalten sich klarer.
 - Treffer liefern mehrere Snippets und lassen sich im Admin- und Agent-Client direkt in den kompletten Verlauf oeffnen.
 - Der neue Suchtest erzeugt eigene Seed-Daten und faengt leere oder instabile Suchergebnisse frueher ab.
+
+## Nutzen von V9.1.17
+- `qwen2.5:3b` bleibt das klare Default-Modell fuer neue oder leere UI-Zustaende und beschleunigt Demo- und Testlaeufe.
+- Die WS-Regressionssuite arbeitet jetzt mit eindeutigen `RUN_ID`-Markern, echtem Probe-Connect-Warten und `WARN` statt Timing-Flakes.
+- Ein Gesamtkommando `bash scripts/run_v9_1_17_full_regression.sh` schreibt eine konsolidierte `SUMMARY.md` fuer Artifact-Guard, Doku, Syntax, Search, WS und UI-Smoke.

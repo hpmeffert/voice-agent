@@ -1,4 +1,4 @@
-# Demo Guide (EN) - V9.1.16
+# Demo Guide (EN) - V9.1.17
 
 ## Demo goal
 Show how international support works when customers and agents keep their own language while the platform handles translation and voice routing.
@@ -117,6 +117,21 @@ Imagine: supervisor wants to force a specific output language for verification.
   - then text fragment search.
 - Open a hit using `Open Session` and show direct navigation.
 - Turn logging OFF again after the demo.
+
+## V9.1.17 Demo Focus
+- Show the difference between default behavior and override:
+  1. Start with fresh local storage.
+  2. Check `/api/models` or the model field.
+  3. Expected default: `qwen2.5:3b`.
+- Then run the full regression:
+  - `bash scripts/run_v9_1_17_full_regression.sh`
+- Show the audience the generated `SUMMARY.md`:
+  - Search = PASS
+  - WS regression = PASS
+  - UI smoke = PASS
+- Explain the value:
+  - the system is not only functional,
+  - it is also repeatable and measurable.
 
 ## V9.1.9 Demo Focus: Clean Agent Desk
 1. Show the new Agent layout with always-visible sticky header.

@@ -1,4 +1,4 @@
-# Admin Docs (EN) - V9.1.16
+# Admin Docs (EN) - V9.1.17
 
 ## Purpose
 This admin guide explains:
@@ -435,7 +435,7 @@ bash scripts/run_v9_1_9_ui_smoke.sh
   - live WebSocket events
   - reload / session history
 
-## New in V9.1.16: Search modes, wildcards, and repeatable proof
+## New in V9.1.17: Search modes, wildcards, and repeatable proof
 ### Search modes in the Admin client
 - `auto`: detects identifier-like queries, otherwise falls back to text search.
 - `session_id`: exact or wildcard search on session ids.
@@ -453,8 +453,8 @@ bash scripts/run_v9_1_9_ui_smoke.sh
 - If search unexpectedly returns nothing:
   1. check `curl -s http://localhost:8085/api/health`
   2. run `python3 v9/scripts/check_docs.py`
-  3. run `bash v9/scripts/run_v9_1_16_search_tests.sh`
-  4. inspect `v9/artifacts/runs/v9.1.16-search-.../SUMMARY.md`
+  3. run `bash v9/scripts/run_v9_1_17_search_tests.sh`
+  4. inspect `v9/artifacts/runs/v9.1.17-search-.../SUMMARY.md`
 
 ### 2-minute proof for search
 1. Open the Admin client.
@@ -463,7 +463,7 @@ bash scripts/run_v9_1_9_ui_smoke.sh
 4. Click `Open Session`.
 5. Verify the full history shows `Original + Translation`.
 
-## Patch V9.1.16: Voice/chat parity in the UI
+## Patch V9.1.17: Voice/chat parity in the UI
 - Customer client:
   - shows the customer's own transcript again after voice input
   - shows the answer in the same chat history
@@ -481,3 +481,50 @@ bash scripts/run_v9_1_9_ui_smoke.sh
    - customer text: `Original (de) + Translation (en)`
    - generated answer: `Original + Translation (en)`
 5. Reload the history and verify again.
+
+## Regression suite for V9.1.17
+Use this sequence for a full technical regression run:
+1. `bash scripts/check_no_artifacts_tracked.sh`
+2. `python3 v9/scripts/check_docs.py`
+3. `PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v9/docker/api/app.py`
+4. `bash v9/scripts/run_v9_1_17_search_tests.sh`
+5. `API_BASE_OVERRIDE=http://localhost:8003 PROBE_DURATION_SEC=35 bash scripts/run_v9_ws_duallane_tests.sh`
+6. `bash scripts/run_v9_1_17_ui_smoke.sh`
+
+Or run everything in one step:
+- `bash scripts/run_v9_1_17_full_regression.sh`
+
+### What the WS regression now validates
+- unique `RUN_ID` per run
+- unique `session_id` and `user_id` per scenario
+- event correlation via markers in the message text, not only by role
+- `WARN` if live latency is above `2000 ms`
+- `WARN` if an event arrives later than `8 s` but still within the probe window
+- `FAIL` only if the expected event is missing completely
+
+### Where results are written
+- `v9/artifacts/runs/v9.1.17-ws-hardening-<timestamp>/`
+- `v9/artifacts/runs/v9.1.17-full-regression-<timestamp>/`
+
+Important:
+- these artifacts stay local
+- they are never committed to git
+
+## New in V9.1.17: Default model and full regression
+- The Ollama default stays at `qwen2.5:3b`.
+- This keeps demo setups biased toward speed.
+- If another model is already stored on purpose, that user choice stays unchanged.
+
+### Full regression for V9.1.17
+1. `bash scripts/check_no_artifacts_tracked.sh`
+2. `python3 v9/scripts/check_docs.py`
+3. `PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v9/docker/api/app.py`
+4. `bash v9/scripts/run_v9_1_17_search_tests.sh`
+5. `API_BASE_OVERRIDE=http://localhost:8003 PROBE_DURATION_SEC=35 bash scripts/run_v9_ws_duallane_tests.sh`
+6. `bash scripts/run_v9_1_17_ui_smoke.sh`
+7. Or run everything directly: `bash scripts/run_v9_1_17_full_regression.sh`
+
+### Artifact folders
+- `v9/artifacts/runs/v9.1.17-search-<timestamp>/`
+- `v9/artifacts/runs/v9.1.17-ws-hardening-<timestamp>/`
+- `v9/artifacts/runs/v9.1.17-full-regression-<timestamp>/`
