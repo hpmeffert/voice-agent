@@ -1,4 +1,6 @@
 import asyncio
+import csv
+import hashlib
 import io
 import os
 import json
@@ -10,6 +12,7 @@ import threading
 import time
 import uuid
 import wave
+import zipfile
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -30,7 +33,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v9.1.11"
+APP_VERSION = "v9.1.15"
 
 app = FastAPI(
     title=f"Voice Agent API {APP_VERSION}",
@@ -58,6 +61,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5").strip()
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://mongo:27017/voice_agent").strip()
 MONGO_DB = os.getenv("MONGO_DB", "voice_agent").strip() or "voice_agent"
+MONGO_LOG_DB = os.getenv("MONGO_LOG_DB", "voice_agent_logs").strip() or "voice_agent_logs"
 MESSAGE_RETENTION_DAYS = int(os.getenv("MESSAGE_RETENTION_DAYS", "30"))
 SESSION_RETENTION_DAYS = int(os.getenv("SESSION_RETENTION_DAYS", "90"))
 MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
@@ -71,6 +75,9 @@ METRICS_RETENTION_DAYS = int(
         os.getenv("TELEMETRY_RETENTION_DAYS", "30"),
     )
 )
+PERF_RETENTION_DAYS = int(os.getenv("PERF_RETENTION_DAYS", str(METRICS_RETENTION_DAYS)))
+PERF_EXPORT_MAX_DAYS = int(os.getenv("PERF_EXPORT_MAX_DAYS", "7"))
+PERF_LOG_QUEUE_MAX = int(os.getenv("PERF_LOG_QUEUE_MAX", "2000"))
 CRM_EXPORT_ENABLED = os.getenv("CRM_EXPORT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
 CRM_EXPORT_DEFAULT_ENABLED = os.getenv("CRM_EXPORT_DEFAULT_ENABLED", "true").strip().lower() in {
     "1",
@@ -145,12 +152,14 @@ SYSTEM_PROMPT = (
 whisper: WhisperModel | None = None
 mongo_client: MongoClient | None = None
 mongo_db = None
+mongo_log_db = None
 users_col: Collection | None = None
 sessions_col: Collection | None = None
 messages_col: Collection | None = None
 telemetry_col: Collection | None = None
 metrics_logs_col: Collection | None = None
 admin_perf_logs_col: Collection | None = None
+perf_events_col: Collection | None = None
 admin_settings_col: Collection | None = None
 ui_translations_col: Collection | None = None
 ui_i18n_strings_col: Collection | None = None
@@ -165,6 +174,11 @@ ADMIN_SETTINGS_CACHE_TTL_SEC = 5.0
 UI_I18N_CACHE_TTL_SEC = 60.0
 ui_i18n_cache_lock = threading.Lock()
 ui_i18n_cache: dict[tuple[str, str], tuple[float, dict[str, str]]] = {}
+perf_log_queue_lock = threading.Lock()
+perf_log_queue: deque[dict[str, Any]] = deque(maxlen=max(200, PERF_LOG_QUEUE_MAX))
+perf_dropped_events_count = 0
+perf_worker_stop = threading.Event()
+perf_worker_thread: threading.Thread | None = None
 
 
 # ----------------------------
@@ -202,13 +216,18 @@ def session_expiry() -> datetime:
 
 
 def telemetry_expiry() -> datetime:
-    retention_days = METRICS_RETENTION_DAYS
+    retention_days = max(1, min(730, PERF_RETENTION_DAYS))
     try:
         settings = get_admin_settings()
-        retention_days = int(settings.get("perf_logging_retention_days", settings.get("retention_days", METRICS_RETENTION_DAYS)))
+        retention_days = int(
+            settings.get(
+                "perf_logging_retention_days",
+                settings.get("retention_days", PERF_RETENTION_DAYS),
+            )
+        )
     except Exception:
         pass
-    retention_days = max(1, min(365, retention_days))
+    retention_days = max(1, min(730, retention_days))
     return now_utc() + timedelta(days=retention_days)
 
 
@@ -263,6 +282,32 @@ def detect_lang_from_text(text: str) -> str:
     # Default to English for ASCII-like answers if no explicit signal is found.
     candidate = "en"
     return candidate if candidate in SUPPORTED_UI_LANGS else DEFAULT_UI_LANG
+
+
+def resolve_customer_chat_source_lang(
+    *,
+    text: str,
+    explicit_customer_lang: str | None,
+    customer_lang_ui: str,
+    persisted_customer_lang: str | None,
+    user_lang_pref: str | None,
+) -> str:
+    if explicit_customer_lang:
+        return explicit_customer_lang.strip().lower()
+
+    detected = (detect_lang_from_text(text) or "").strip().lower()
+    customer_lang_ui = (customer_lang_ui or "").strip().lower()
+    persisted_customer_lang = (persisted_customer_lang or "").strip().lower()
+    user_lang_pref = (user_lang_pref or "").strip().lower()
+
+    # The lightweight detector falls back to English for generic ASCII text.
+    # For chat we prefer a stable customer/session language over that fallback.
+    if detected == "en":
+        for fallback in (persisted_customer_lang, customer_lang_ui, user_lang_pref):
+            if fallback and fallback != "en":
+                return fallback
+
+    return detected or customer_lang_ui or persisted_customer_lang or user_lang_pref or DEFAULT_UI_LANG
 
 
 def normalize_role_for_history(role: str | None) -> str:
@@ -610,11 +655,14 @@ def default_listen_settings() -> dict[str, Any]:
 
 def default_admin_settings() -> dict[str, Any]:
     return {
+        "schema_version": 2,
         "retention_days": int(METRICS_RETENTION_DAYS),
         "perf_logging_enabled": False,
         "perf_metrics_enabled": False,
+        "perf_log_text_enabled": False,
         "perf_logging_sample_rate": 1.0,
-        "perf_logging_retention_days": int(METRICS_RETENTION_DAYS),
+        "perf_logging_retention_days": int(PERF_RETENTION_DAYS),
+        "perf_export_max_days": int(PERF_EXPORT_MAX_DAYS),
         "search_max_results": 50,
         "allow_text_regex_fallback": True,
         "default_backend": "ollama",
@@ -647,7 +695,12 @@ def normalized_admin_settings(raw: Any) -> dict[str, Any]:
         perf_retention_days = int(src.get("perf_logging_retention_days", defaults["perf_logging_retention_days"]))
     except Exception:
         perf_retention_days = defaults["perf_logging_retention_days"]
-    perf_retention_days = max(1, min(365, perf_retention_days))
+    perf_retention_days = max(1, min(730, perf_retention_days))
+    try:
+        perf_export_max_days = int(src.get("perf_export_max_days", defaults["perf_export_max_days"]))
+    except Exception:
+        perf_export_max_days = defaults["perf_export_max_days"]
+    perf_export_max_days = max(1, min(31, perf_export_max_days))
     try:
         perf_sample_rate = float(src.get("perf_logging_sample_rate", defaults["perf_logging_sample_rate"]))
     except Exception:
@@ -676,6 +729,7 @@ def normalized_admin_settings(raw: Any) -> dict[str, Any]:
 
     toggles_src = src.get("feature_toggles") if isinstance(src.get("feature_toggles"), dict) else {}
     return {
+        "schema_version": int(src.get("schema_version") or defaults["schema_version"]),
         "retention_days": retention_days,
         "perf_logging_enabled": bool(src.get("perf_logging_enabled", defaults["perf_logging_enabled"])),
         "perf_metrics_enabled": bool(
@@ -684,8 +738,10 @@ def normalized_admin_settings(raw: Any) -> dict[str, Any]:
                 src.get("perf_logging_enabled", defaults["perf_metrics_enabled"]),
             )
         ),
+        "perf_log_text_enabled": bool(src.get("perf_log_text_enabled", defaults["perf_log_text_enabled"])),
         "perf_logging_sample_rate": perf_sample_rate,
         "perf_logging_retention_days": perf_retention_days,
+        "perf_export_max_days": perf_export_max_days,
         "search_max_results": search_max_results,
         "allow_text_regex_fallback": bool(src.get("allow_text_regex_fallback", defaults["allow_text_regex_fallback"])),
         "default_backend": str(src.get("default_backend", defaults["default_backend"]) or defaults["default_backend"]).strip().lower(),
@@ -756,10 +812,14 @@ def set_admin_settings(patch: dict[str, Any]) -> dict[str, Any]:
     if "perf_metrics_enabled" in patch:
         next_settings["perf_metrics_enabled"] = patch["perf_metrics_enabled"]
         next_settings["perf_logging_enabled"] = patch["perf_metrics_enabled"]
+    if "perf_log_text_enabled" in patch:
+        next_settings["perf_log_text_enabled"] = patch["perf_log_text_enabled"]
     if "perf_logging_sample_rate" in patch:
         next_settings["perf_logging_sample_rate"] = patch["perf_logging_sample_rate"]
     if "perf_logging_retention_days" in patch:
         next_settings["perf_logging_retention_days"] = patch["perf_logging_retention_days"]
+    if "perf_export_max_days" in patch:
+        next_settings["perf_export_max_days"] = patch["perf_export_max_days"]
     if "search_max_results" in patch:
         next_settings["search_max_results"] = patch["search_max_results"]
     if "allow_text_regex_fallback" in patch:
@@ -829,25 +889,74 @@ def normalized_listen_settings(raw: Any) -> dict[str, Any]:
     }
 
 
+def _perf_enqueue_event(doc: dict[str, Any]) -> None:
+    global perf_dropped_events_count
+    with perf_log_queue_lock:
+        if len(perf_log_queue) >= perf_log_queue.maxlen:
+            perf_dropped_events_count += 1
+            return
+        perf_log_queue.append(doc)
+
+
+def _perf_dequeue_batch(max_items: int = 100) -> list[dict[str, Any]]:
+    batch: list[dict[str, Any]] = []
+    with perf_log_queue_lock:
+        while perf_log_queue and len(batch) < max_items:
+            batch.append(perf_log_queue.popleft())
+    return batch
+
+
+def _perf_queue_depth() -> int:
+    with perf_log_queue_lock:
+        return len(perf_log_queue)
+
+
+def perf_worker_loop() -> None:
+    while not perf_worker_stop.is_set():
+        batch = _perf_dequeue_batch(100)
+        if not batch:
+            perf_worker_stop.wait(0.15)
+            continue
+        try:
+            if telemetry_col is not None:
+                telemetry_col.insert_many(batch, ordered=False)
+        except Exception:
+            # Perf logging must never crash runtime flow.
+            continue
+
+    # best-effort drain on shutdown
+    for _ in range(5):
+        batch = _perf_dequeue_batch(200)
+        if not batch:
+            break
+        try:
+            if telemetry_col is not None:
+                telemetry_col.insert_many(batch, ordered=False)
+        except Exception:
+            pass
+
+
 # ----------------------------
 # Startup / Shutdown
 # ----------------------------
 @app.on_event("startup")
 def on_startup() -> None:
-    global whisper, mongo_client, mongo_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col, admin_perf_logs_col, admin_settings_col, ui_translations_col, ui_i18n_strings_col, user_prefs_col, event_bus
+    global whisper, mongo_client, mongo_db, mongo_log_db, users_col, sessions_col, messages_col, telemetry_col, metrics_logs_col, admin_perf_logs_col, perf_events_col, admin_settings_col, ui_translations_col, ui_i18n_strings_col, user_prefs_col, event_bus, perf_worker_thread
 
     whisper = WhisperModel(WHISPER_MODEL_NAME, device="cpu", compute_type=WHISPER_COMPUTE)
 
     mongo_client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=5000)
     mongo_client.admin.command("ping")
     mongo_db = mongo_client[resolve_mongo_db_name(MONGO_URL)]
+    mongo_log_db = mongo_client[MONGO_LOG_DB]
 
     users_col = mongo_db["users"]
     sessions_col = mongo_db["sessions"]
     messages_col = mongo_db["messages"]
     metrics_logs_col = mongo_db["metrics_logs"]
     admin_perf_logs_col = mongo_db["admin_perf_logs"]
-    telemetry_col = admin_perf_logs_col
+    perf_events_col = mongo_log_db["perf_events"]
+    telemetry_col = perf_events_col
     admin_settings_col = mongo_db["admin_settings"]
     ui_translations_col = mongo_db["ui_translations"]
     ui_i18n_strings_col = mongo_db["ui_i18n_strings"]
@@ -873,11 +982,11 @@ def on_startup() -> None:
     metrics_logs_col.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
     metrics_logs_col.create_index([("status", ASCENDING), ("created_at", DESCENDING)])
 
-    admin_perf_logs_col.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
-    admin_perf_logs_col.create_index([("ts", DESCENDING)])
-    admin_perf_logs_col.create_index([("session_id", ASCENDING), ("ts", DESCENDING)])
-    admin_perf_logs_col.create_index([("user_id", ASCENDING), ("ts", DESCENDING)])
-    admin_perf_logs_col.create_index([("direction", ASCENDING), ("ts", DESCENDING)])
+    perf_events_col.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
+    perf_events_col.create_index([("ts", DESCENDING)])
+    perf_events_col.create_index([("session_id", ASCENDING), ("ts", DESCENDING)])
+    perf_events_col.create_index([("user_id", ASCENDING), ("ts", DESCENDING)])
+    perf_events_col.create_index([("direction", ASCENDING), ("ts", DESCENDING)])
     admin_settings_col.create_index([("updated_at", DESCENDING)])
     ui_translations_col.create_index([("updated_at", DESCENDING)])
     ui_i18n_strings_col.create_index([("scope", ASCENDING), ("key", ASCENDING), ("lang", ASCENDING)], unique=True)
@@ -888,10 +997,16 @@ def on_startup() -> None:
     seed_ui_translations()
     seed_customer_ui_i18n_strings()
     event_bus = EventBus(url=VALKEY_URL, channel_prefix=VALKEY_CHANNEL_PREFIX)
+    perf_worker_stop.clear()
+    perf_worker_thread = threading.Thread(target=perf_worker_loop, daemon=True, name="perf-log-writer")
+    perf_worker_thread.start()
 
 
 @app.on_event("shutdown")
 def on_shutdown() -> None:
+    perf_worker_stop.set()
+    if perf_worker_thread is not None:
+        perf_worker_thread.join(timeout=2.0)
     if event_bus is not None:
         event_bus.close()
     if mongo_client is not None:
@@ -1762,6 +1877,28 @@ def build_dual_lane_event(
     return event
 
 
+def build_message_lane_meta(
+    *,
+    dual_lane: dict[str, Any] | None,
+    source_lang: str | None = None,
+    agent_lang: str | None = None,
+    customer_lang: str | None = None,
+    customer_voice_lang: str | None = None,
+    extras: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    lane = dual_lane if isinstance(dual_lane, dict) else {}
+    meta: dict[str, Any] = {
+        "source_lang": str(source_lang or lane.get("lang_original") or "").strip().lower() or None,
+        "agent_lang": str(agent_lang or ((lane.get("agent") or {}).get("lang")) or "").strip().lower() or None,
+        "customer_lang": str(customer_lang or ((lane.get("customer") or {}).get("lang")) or "").strip().lower() or None,
+        "customer_voice_lang": str(customer_voice_lang or "").strip().lower() or None,
+        "lanes": lane,
+    }
+    if extras:
+        meta.update(extras)
+    return {k: v for k, v in meta.items() if v not in (None, "", {}, [])}
+
+
 def get_handoff_state(session_doc: dict[str, Any] | None) -> dict[str, Any]:
     meta = (session_doc or {}).get("meta") if isinstance(session_doc, dict) else {}
     if not isinstance(meta, dict):
@@ -1846,6 +1983,12 @@ def log_telemetry(
     translation_used: bool = False,
     error_code: str | None = None,
     error_detail: str | None = None,
+    tts_lang_customer: str | None = None,
+    tts_lang_agent: str | None = None,
+    message_id: str | None = None,
+    correlation_id: str | None = None,
+    error_type: str | None = None,
+    error_message: str | None = None,
 ) -> None:
     ensure_ready()
     settings = get_admin_settings()
@@ -1857,8 +2000,14 @@ def log_telemetry(
         return
     if sample_rate < 1.0 and random.random() > sample_rate:
         return
+    log_text_enabled = bool(settings.get("perf_log_text_enabled", False))
     ts = now_utc()
     m = metrics or {}
+    err_detail = (error_detail or error_message or "")[:512]
+    err_type = (error_type or error_code or "")[:128]
+    stack_hash = hashlib.sha1(err_detail.encode("utf-8")).hexdigest()[:16] if err_detail else None
+    msg_id = (message_id or uuid.uuid4().hex)
+    corr_id = (correlation_id or msg_id)
     doc: dict[str, Any] = {
         "ts": ts,
         "created_at": ts,
@@ -1866,8 +2015,12 @@ def log_telemetry(
         "user_id": user_id,
         "session_id": session_id,
         "direction": direction,
+        "message_id": msg_id,
+        "correlation_id": corr_id,
         "model_backend": backend,
         "model_name": model,
+        "backend": backend,
+        "model": model,
         "metrics": {
             "audio_read_ms": safe_ms(m.get("audio_read_ms")),
             "stt_ms": safe_ms(m.get("stt_ms")),
@@ -1880,11 +2033,11 @@ def log_telemetry(
         "llm_ms": safe_ms(m.get("llm_ms")),
         "tts_ms": safe_ms(m.get("tts_ms")),
         "total_ms": safe_ms(m.get("total_ms")),
-        "lang": lang,
-        "agent_lang_ui": (agent_lang_ui or "")[:8] or None,
-        "customer_lang_ui": (customer_lang_ui or "")[:8] or None,
-        "transcript": (transcript or "")[:MAX_TEXT_CHARS],
-        "answer": (answer or "")[:MAX_TEXT_CHARS],
+        "lang": (lang or "")[:8] or None,
+        "lang_agent_ui": (agent_lang_ui or "")[:8] or None,
+        "lang_customer_ui": (customer_lang_ui or "")[:8] or None,
+        "tts_lang_customer": (tts_lang_customer or "")[:8] or None,
+        "tts_lang_agent": (tts_lang_agent or "")[:8] or None,
         "status": status,
         "flags": {
             "voice": bool(voice),
@@ -1892,10 +2045,18 @@ def log_telemetry(
             "translation_used": bool(translation_used),
         },
         "error_code": (error_code or "")[:128] or None,
-        "error_detail": (error_detail or "")[:512] or None,
+        "error_detail": err_detail or None,
+        "error_type": err_type or None,
+        "error_message": (error_message or err_detail)[:512] or None,
+        "stack_hash": stack_hash,
     }
+    if log_text_enabled:
+        doc["text_preview"] = {
+            "transcript": (transcript or "")[:MAX_TEXT_CHARS],
+            "answer": (answer or "")[:MAX_TEXT_CHARS],
+        }
     try:
-        telemetry_col.insert_one(doc)
+        _perf_enqueue_event(doc)
     except Exception:
         # Telemetry must never break request processing.
         pass
@@ -2227,8 +2388,10 @@ class AdminSettingsUpdateRequest(BaseModel):
     retention_days: int | None = Field(default=None, ge=1, le=365)
     perf_logging_enabled: bool | None = None
     perf_metrics_enabled: bool | None = None
+    perf_log_text_enabled: bool | None = None
     perf_logging_sample_rate: float | None = Field(default=None, ge=0.0, le=1.0)
-    perf_logging_retention_days: int | None = Field(default=None, ge=1, le=365)
+    perf_logging_retention_days: int | None = Field(default=None, ge=1, le=730)
+    perf_export_max_days: int | None = Field(default=None, ge=1, le=31)
     search_max_results: int | None = Field(default=None, ge=1, le=200)
     allow_text_regex_fallback: bool | None = None
     default_backend: str | None = Field(default=None, min_length=3, max_length=32)
@@ -2292,6 +2455,12 @@ class HandoffRequest(BaseModel):
 class HandoffAcceptRequest(BaseModel):
     session_id: str = Field(min_length=8)
     agent_id: str = Field(min_length=4, max_length=128)
+
+
+class PerfDeleteRangeRequest(BaseModel):
+    user_id: str = Field(min_length=8)
+    from_ts: str = Field(alias="from", min_length=10, max_length=64)
+    to_ts: str = Field(alias="to", min_length=10, max_length=64)
 
 
 # ----------------------------
@@ -2782,6 +2951,26 @@ async def ws_session_stream(
         )
         while True:
             event = None
+            try:
+                incoming = await asyncio.wait_for(websocket.receive_text(), timeout=0.05)
+                if incoming:
+                    try:
+                        incoming_event = json.loads(incoming)
+                    except json.JSONDecodeError:
+                        incoming_event = None
+                    if isinstance(incoming_event, dict) and str(incoming_event.get("type") or "").strip().lower() == "ping":
+                        await websocket.send_json(
+                            {
+                                "type": "pong",
+                                "t": incoming_event.get("t"),
+                                "session_id": session_id,
+                                "from": "system",
+                                "ts": now_utc().isoformat(),
+                            }
+                        )
+                        continue
+            except asyncio.TimeoutError:
+                pass
             if pubsub is not None:
                 item = await asyncio.to_thread(pubsub.get_message, timeout=1.0)
                 if item and item.get("type") == "message":
@@ -2940,6 +3129,37 @@ async def ws_session_stream(
                 pubsub.close()
             except Exception:
                 pass
+
+
+@app.websocket("/ws/ping")
+async def ws_ping(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        await websocket.send_json({"type": "ws.connected", "ts": now_utc().isoformat()})
+        while True:
+            try:
+                incoming = await websocket.receive_text()
+            except WebSocketDisconnect:
+                return
+            try:
+                payload = json.loads(incoming)
+            except json.JSONDecodeError:
+                payload = {}
+            if str(payload.get("type") or "").strip().lower() == "ping":
+                await websocket.send_json(
+                    {
+                        "type": "pong",
+                        "t": payload.get("t"),
+                        "ts": now_utc().isoformat(),
+                    }
+                )
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 @app.get("/config")
@@ -3126,9 +3346,12 @@ def admin_settings(
     admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
     assert_admin_access(user_id, admin_token)
+    doc = admin_settings_col.find_one({"_id": "global"}, {"updated_at": 1, "created_at": 1}) if admin_settings_col is not None else {}
     return {
         "ok": True,
         "settings": get_admin_settings(),
+        "last_updated_ts": dt_iso((doc or {}).get("updated_at")),
+        "created_at": dt_iso((doc or {}).get("created_at")),
     }
 
 
@@ -3145,10 +3368,14 @@ def admin_settings_update(
         patch["perf_logging_enabled"] = bool(req.perf_logging_enabled)
     if req.perf_metrics_enabled is not None:
         patch["perf_metrics_enabled"] = bool(req.perf_metrics_enabled)
+    if req.perf_log_text_enabled is not None:
+        patch["perf_log_text_enabled"] = bool(req.perf_log_text_enabled)
     if req.perf_logging_sample_rate is not None:
         patch["perf_logging_sample_rate"] = float(req.perf_logging_sample_rate)
     if req.perf_logging_retention_days is not None:
         patch["perf_logging_retention_days"] = int(req.perf_logging_retention_days)
+    if req.perf_export_max_days is not None:
+        patch["perf_export_max_days"] = int(req.perf_export_max_days)
     if req.search_max_results is not None:
         patch["search_max_results"] = int(req.search_max_results)
     if req.allow_text_regex_fallback is not None:
@@ -3282,8 +3509,13 @@ def get_session(
     session_id: str,
     user_id: str = Query(..., min_length=8),
     limit: int = Query(20, ge=1, le=200),
+    agent_lang: str | None = Query(None),
 ):
     session = assert_session_owned_by_user(session_id, user_id)
+    session_customer_lang, session_agent_lang = get_session_lane_langs(session, agent_lang_hint=agent_lang or "")
+    session_meta = session.get("meta") if isinstance(session.get("meta"), dict) else {}
+    session_backend = str(session_meta.get("backend_last") or "ollama").strip().lower()
+    session_model = str(session_meta.get("model_last") or OLLAMA_MODEL).strip() or OLLAMA_MODEL
 
     docs = list(
         messages_col.find({"session_id": session_id, "user_id": user_id})
@@ -3315,6 +3547,36 @@ def get_session(
         lang_original = str(meta.get("source_lang") or msg.get("lang") or "").strip().lower()
         lang_for_agent = str(lane_agent.get("lang") or meta.get("agent_lang") or lang_original).strip().lower()
         lang_for_customer = str(lane_customer.get("lang") or meta.get("customer_lang") or lang_original).strip().lower()
+        role = str(msg.get("role") or "").strip().lower()
+        needs_customer_rebuild = (
+            role == "customer"
+            and bool(text_original)
+            and (
+                not lane_agent.get("text")
+                or not lane_agent.get("lang")
+                or lang_for_agent != session_agent_lang
+                or (
+                    lang_original
+                    and session_agent_lang
+                    and lang_original != session_agent_lang
+                    and text_for_agent == text_original
+                )
+            )
+        )
+        if needs_customer_rebuild:
+            rebuilt = build_dual_lane_event(
+                from_role="customer",
+                text_original=text_original,
+                lang_original_hint=lang_original or str(msg.get("lang") or "").strip().lower(),
+                customer_lang_ui=session_customer_lang,
+                agent_lang_ui=session_agent_lang,
+                backend=str(msg.get("backend") or session_backend or "ollama").strip().lower(),
+                model_override=str(msg.get("model") or session_model or "").strip() or None,
+            )
+            text_for_agent = str(((rebuilt.get("agent") or {}).get("text")) or text_for_agent or text_original)
+            lang_for_agent = str(((rebuilt.get("agent") or {}).get("lang")) or lang_for_agent or session_agent_lang).strip().lower()
+            text_for_customer = str(((rebuilt.get("customer") or {}).get("text")) or text_for_customer or text_original)
+            lang_for_customer = str(((rebuilt.get("customer") or {}).get("lang")) or lang_for_customer or session_customer_lang).strip().lower()
         messages.append(
             {
                 "role": msg.get("role"),
@@ -3465,6 +3727,358 @@ def admin_metrics_summary(
         "error_count": err_count,
         "avg_ms": avg,
         "p95_ms": p95,
+    }
+
+
+@app.get("/admin/perf/health")
+def admin_perf_health(
+    user_id: str = Query(..., min_length=8),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    ensure_ready()
+    assert_admin_access(user_id, admin_token)
+    settings = get_admin_settings()
+    index_info = telemetry_col.index_information() if telemetry_col is not None else {}
+    return {
+        "ok": True,
+        "perf_logging_enabled": bool(settings.get("perf_logging_enabled", False)),
+        "queue_depth": _perf_queue_depth(),
+        "queue_max": int(perf_log_queue.maxlen),
+        "dropped_events_count": int(perf_dropped_events_count),
+        "writer_alive": bool(perf_worker_thread.is_alive()) if perf_worker_thread is not None else False,
+        "log_db": MONGO_LOG_DB,
+        "log_collection": "perf_events",
+        "retention_days": int(settings.get("perf_logging_retention_days", PERF_RETENTION_DAYS)),
+        "export_max_days": int(settings.get("perf_export_max_days", PERF_EXPORT_MAX_DAYS)),
+        "index_names": sorted(index_info.keys()),
+        "has_ttl_index": any(v.get("expireAfterSeconds") == 0 for v in index_info.values()),
+    }
+
+
+def _parse_perf_iso(value: str) -> datetime:
+    raw = (value or "").strip()
+    if not raw:
+        raise ValueError("empty datetime")
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    dt = datetime.fromisoformat(raw)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _perf_range_or_window(*, from_ts: str | None = None, to_ts: str | None = None, window: str | None = None) -> tuple[datetime, datetime, str]:
+    now = now_utc()
+    if from_ts or to_ts:
+        dt_from = _parse_perf_iso(from_ts or "")
+        dt_to = _parse_perf_iso(to_ts or "")
+        if dt_to <= dt_from:
+            raise HTTPException(status_code=400, detail="'to' must be later than 'from'")
+        label = f"{dt_from.isoformat()}..{dt_to.isoformat()}"
+        return dt_from, dt_to, label
+    normalized = (window or "24h").strip().lower()
+    mapping = {
+        "1h": timedelta(hours=1),
+        "24h": timedelta(hours=24),
+        "7d": timedelta(days=7),
+        "30d": timedelta(days=30),
+    }
+    if normalized not in mapping:
+        raise HTTPException(status_code=400, detail="Invalid window")
+    return now - mapping[normalized], now, normalized
+
+
+def _perf_base_query(*, dt_from: datetime, dt_to: datetime, q: str | None = None, error_code: str | None = None) -> dict[str, Any]:
+    query: dict[str, Any] = {"ts": {"$gte": dt_from, "$lte": dt_to}}
+    search = (q or "").strip()
+    exact_error = (error_code or "").strip()
+    if exact_error:
+        query["error_code"] = exact_error
+    if search:
+        if search.endswith("*"):
+            prefix = re.escape(search[:-1])
+            query["$or"] = [
+                {"user_id": {"$regex": f"^{prefix}", "$options": "i"}},
+                {"session_id": {"$regex": f"^{prefix}", "$options": "i"}},
+            ]
+        else:
+            safe = re.escape(search)
+            query["$or"] = [
+                {"user_id": {"$regex": safe, "$options": "i"}},
+                {"session_id": {"$regex": safe, "$options": "i"}},
+                {"error_code": {"$regex": f"^{safe}$", "$options": "i"}},
+            ]
+    return query
+
+
+@app.get("/admin/perf/summary")
+def admin_perf_summary(
+    user_id: str = Query(..., min_length=8),
+    window: str = Query("24h", pattern="^(1h|24h|7d|30d)$"),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    ensure_ready()
+    assert_admin_access(user_id, admin_token)
+    dt_from, dt_to, label = _perf_range_or_window(window=window)
+    docs = list(
+        telemetry_col.find(
+            _perf_base_query(dt_from=dt_from, dt_to=dt_to),
+            {"_id": 0},
+        )
+    )
+    count = len(docs)
+    ok_count = sum(1 for d in docs if bool((d.get("status") or "") == "ok"))
+    error_count = count - ok_count
+    keys = ["audio_read_ms", "stt_ms", "llm_ms", "tts_ms", "total_ms"]
+    translate_values: list[int] = []
+    buckets: dict[str, list[int]] = {k: [] for k in keys}
+    spikes: list[dict[str, Any]] = []
+    for d in docs:
+        metrics = d.get("metrics") if isinstance(d.get("metrics"), dict) else {}
+        stage_pairs = {k: safe_ms(metrics.get(k)) for k in keys}
+        for key, val in stage_pairs.items():
+            buckets[key].append(val)
+        translate_ms = safe_ms(d.get("translate_ms_total") or metrics.get("translate_ms_total"))
+        translate_values.append(translate_ms)
+        stage_with_max = max(stage_pairs.items(), key=lambda item: item[1])[0] if stage_pairs else "total_ms"
+        spikes.append(
+            {
+                "ts": d.get("ts"),
+                "user_id": d.get("user_id"),
+                "session_id": d.get("session_id"),
+                "total_ms": safe_ms(metrics.get("total_ms")),
+                "stage_max": stage_with_max,
+                "stage_max_ms": stage_pairs.get(stage_with_max, 0),
+                "backend": d.get("backend") or d.get("model_backend"),
+                "model": d.get("model") or d.get("model_name"),
+                "error_code": d.get("error_code"),
+            }
+        )
+    spikes.sort(key=lambda row: row.get("total_ms", 0), reverse=True)
+    avg_ms = {k: int(round(sum(v) / len(v))) if v else 0 for k, v in buckets.items()}
+    p95_ms = {k: percentile_ms(v, 0.95) for k, v in buckets.items()}
+    max_ms = {k: max(v) if v else 0 for k, v in buckets.items()}
+    avg_ms["translate_ms_total"] = int(round(sum(translate_values) / len(translate_values))) if translate_values else 0
+    p95_ms["translate_ms_total"] = percentile_ms(translate_values, 0.95)
+    max_ms["translate_ms_total"] = max(translate_values) if translate_values else 0
+    return {
+        "window": label,
+        "from": dt_from.isoformat(),
+        "to": dt_to.isoformat(),
+        "count": count,
+        "ok_count": ok_count,
+        "error_count": error_count,
+        "error_rate": round((error_count / count), 4) if count else 0.0,
+        "dropped_events_count": int(perf_dropped_events_count),
+        "avg_ms": avg_ms,
+        "p95_ms": p95_ms,
+        "max_ms": max_ms,
+        "worst_spikes": spikes[:10],
+    }
+
+
+@app.get("/admin/perf/search")
+def admin_perf_search(
+    user_id: str = Query(..., min_length=8),
+    q: str | None = Query(None),
+    from_ts: str | None = Query(None, alias="from"),
+    to_ts: str | None = Query(None, alias="to"),
+    limit: int = Query(50, ge=1, le=200),
+    error_code: str | None = Query(None),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    ensure_ready()
+    assert_admin_access(user_id, admin_token)
+    dt_from, dt_to, label = _perf_range_or_window(
+        from_ts=from_ts or (now_utc() - timedelta(days=7)).isoformat(),
+        to_ts=to_ts or now_utc().isoformat(),
+    )
+    query = _perf_base_query(dt_from=dt_from, dt_to=dt_to, q=q, error_code=error_code)
+    docs = list(
+        telemetry_col.find(query, {"_id": 0})
+        .sort("ts", DESCENDING)
+        .limit(limit)
+    )
+    return {
+        "window": label,
+        "count": len(docs),
+        "items": docs,
+    }
+
+
+@app.get("/admin/perf/export")
+def admin_perf_export(
+    user_id: str = Query(..., min_length=8),
+    from_ts: str = Query(..., alias="from"),
+    to_ts: str = Query(..., alias="to"),
+    format: str = Query("jsonl", pattern="^(jsonl|csv|md)$"),
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    ensure_ready()
+    assert_admin_access(user_id, admin_token)
+    settings = get_admin_settings()
+    max_days = int(settings.get("perf_export_max_days", PERF_EXPORT_MAX_DAYS))
+    max_days = max(1, min(31, max_days))
+    try:
+        dt_from, dt_to, _ = _perf_range_or_window(from_ts=from_ts, to_ts=to_ts)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ISO timestamp range")
+    if (dt_to - dt_from) > timedelta(days=max_days):
+        raise HTTPException(status_code=400, detail=f"Export window exceeds max {max_days} days")
+
+    rows = list(
+        telemetry_col.find(
+            {"ts": {"$gte": dt_from, "$lte": dt_to}},
+            {"_id": 0},
+        ).sort("ts", ASCENDING)
+    )
+
+    stats_keys = ["audio_read_ms", "stt_ms", "llm_ms", "tts_ms", "total_ms"]
+    stats_values: dict[str, list[int]] = {k: [] for k in stats_keys}
+    for row in rows:
+        metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
+        for key in stats_keys:
+            stats_values[key].append(safe_ms(metrics.get(key)))
+    summary = {
+        "count": len(rows),
+        "from": dt_from.isoformat(),
+        "to": dt_to.isoformat(),
+        "avg_ms": {k: int(round(sum(v) / len(v))) if v else 0 for k, v in stats_values.items()},
+        "p95_ms": {k: percentile_ms(v, 0.95) for k, v in stats_values.items()},
+    }
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="perf-export-"))
+    from_label = dt_from.strftime("%Y%m%dT%H%M%SZ")
+    to_label = dt_to.strftime("%Y%m%dT%H%M%SZ")
+    data_file = tmp_dir / f"perf_events_{from_label}_{to_label}.{format}"
+    readme_file = tmp_dir / "README.md"
+    summary_file = tmp_dir / "stats_summary.json"
+    zip_file = tmp_dir / f"perf_export_{from_label}_{to_label}.zip"
+
+    if format == "jsonl":
+        with data_file.open("w", encoding="utf-8") as f:
+            for row in rows:
+                f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+    elif format == "csv":
+        columns = [
+            "ts", "user_id", "session_id", "direction", "backend", "model",
+            "audio_read_ms", "stt_ms", "llm_ms", "tts_ms", "total_ms",
+            "lang_customer_ui", "lang_agent_ui", "tts_lang_customer", "tts_lang_agent",
+            "message_id", "correlation_id", "status", "error_type", "error_message",
+        ]
+        with data_file.open("w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=columns)
+            writer.writeheader()
+            for row in rows:
+                metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
+                writer.writerow(
+                    {
+                        "ts": row.get("ts"),
+                        "user_id": row.get("user_id"),
+                        "session_id": row.get("session_id"),
+                        "direction": row.get("direction"),
+                        "backend": row.get("backend") or row.get("model_backend"),
+                        "model": row.get("model") or row.get("model_name"),
+                        "audio_read_ms": safe_ms(metrics.get("audio_read_ms")),
+                        "stt_ms": safe_ms(metrics.get("stt_ms")),
+                        "llm_ms": safe_ms(metrics.get("llm_ms")),
+                        "tts_ms": safe_ms(metrics.get("tts_ms")),
+                        "total_ms": safe_ms(metrics.get("total_ms")),
+                        "lang_customer_ui": row.get("lang_customer_ui"),
+                        "lang_agent_ui": row.get("lang_agent_ui"),
+                        "tts_lang_customer": row.get("tts_lang_customer"),
+                        "tts_lang_agent": row.get("tts_lang_agent"),
+                        "message_id": row.get("message_id"),
+                        "correlation_id": row.get("correlation_id"),
+                        "status": row.get("status"),
+                        "error_type": row.get("error_type"),
+                        "error_message": row.get("error_message"),
+                    }
+                )
+    else:
+        with data_file.open("w", encoding="utf-8") as f:
+            f.write("# Perf Events Export\n\n")
+            f.write(f"- from: `{dt_from.isoformat()}`\n")
+            f.write(f"- to: `{dt_to.isoformat()}`\n")
+            f.write(f"- count: `{len(rows)}`\n\n")
+            for idx, row in enumerate(rows, start=1):
+                metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
+                f.write(f"## {idx}. {row.get('ts')}\n")
+                f.write(f"- user: `{row.get('user_id')}` session: `{row.get('session_id')}`\n")
+                f.write(f"- direction: `{row.get('direction')}` backend/model: `{row.get('backend') or row.get('model_backend')}` / `{row.get('model') or row.get('model_name')}`\n")
+                f.write(
+                    "- metrics (ms): "
+                    f"audio={safe_ms(metrics.get('audio_read_ms'))}, "
+                    f"stt={safe_ms(metrics.get('stt_ms'))}, "
+                    f"llm={safe_ms(metrics.get('llm_ms'))}, "
+                    f"tts={safe_ms(metrics.get('tts_ms'))}, "
+                    f"total={safe_ms(metrics.get('total_ms'))}\n\n"
+                )
+
+    readme_file.write_text(
+        "\n".join(
+            [
+                "# Performance Export README",
+                "",
+                "This archive contains performance events from `voice_agent_logs.perf_events`.",
+                "Fields include timestamps, session/user IDs, timings, lane languages, backend/model, and error metadata.",
+                "Text payloads are omitted by default unless perf_log_text_enabled=true.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    summary_file.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    with zipfile.ZipFile(zip_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.write(data_file, arcname=data_file.name)
+        zf.write(readme_file, arcname=readme_file.name)
+        zf.write(summary_file, arcname=summary_file.name)
+
+    def _cleanup_export(path: Path) -> None:
+        try:
+            if path.exists():
+                path.unlink()
+            parent = path.parent
+            for child in parent.iterdir():
+                child.unlink(missing_ok=True)
+            parent.rmdir()
+        except Exception:
+            pass
+
+    return FileResponse(
+        str(zip_file),
+        media_type="application/zip",
+        filename=zip_file.name,
+        background=BackgroundTask(_cleanup_export, zip_file),
+    )
+
+
+@app.post("/admin/perf/export/delete")
+def admin_perf_delete_range(
+    req: PerfDeleteRangeRequest,
+    admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    ensure_ready()
+    assert_admin_access(req.user_id, admin_token)
+    settings = get_admin_settings()
+    max_days = int(settings.get("perf_export_max_days", PERF_EXPORT_MAX_DAYS))
+    max_days = max(1, min(31, max_days))
+    try:
+        dt_from, dt_to, _ = _perf_range_or_window(from_ts=req.from_ts, to_ts=req.to_ts)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ISO timestamp range")
+    if (dt_to - dt_from) > timedelta(days=max_days):
+        raise HTTPException(status_code=400, detail=f"Delete window exceeds max {max_days} days")
+    res = telemetry_col.delete_many({"ts": {"$gte": dt_from, "$lte": dt_to}})
+    return {
+        "ok": True,
+        "deleted_count": int(res.deleted_count),
+        "from": dt_from.isoformat(),
+        "to": dt_to.isoformat(),
     }
 
 
@@ -3879,7 +4493,6 @@ def chat_text(req: TextChatRequest):
     user_lang_pref = get_user_ui_lang(uid)
     requested_lang = (req.lang or "").strip().lower()
     explicit_customer_lang = requested_lang if requested_lang in set(SUPPORTED_UI_LANGS) else ""
-    detected_customer_lang = detect_lang_from_text(text) or user_lang_pref or DEFAULT_UI_LANG
     session_lang_doc = sessions_col.find_one({"_id": sid}, {"meta": 1})
     has_persisted_customer_lang = has_persisted_customer_ui_lang(session_lang_doc)
     if explicit_customer_lang:
@@ -3889,24 +4502,22 @@ def chat_text(req: TextChatRequest):
         )
     else:
         customer_lang_ui, agent_lang_ui = get_session_lane_langs(session_lang_doc)
-        if not has_persisted_customer_lang and detected_customer_lang:
-            customer_lang_ui = _normalize_lang(detected_customer_lang, set(SUPPORTED_TTS_LANGS), DEFAULT_UI_LANG)
+    persisted_customer_lang = get_session_customer_lang(session_lang_doc)
+    detected_customer_lang = resolve_customer_chat_source_lang(
+        text=text,
+        explicit_customer_lang=explicit_customer_lang,
+        customer_lang_ui=customer_lang_ui,
+        persisted_customer_lang=persisted_customer_lang,
+        user_lang_pref=user_lang_pref,
+    )
+    if not explicit_customer_lang and not has_persisted_customer_lang and detected_customer_lang:
+        customer_lang_ui = _normalize_lang(detected_customer_lang, set(SUPPORTED_TTS_LANGS), DEFAULT_UI_LANG)
     persist_session_lane_langs(sid, customer_lang_ui=customer_lang_ui, agent_lang_ui=agent_lang_ui)
 
     customer_voice_lang = ((req.tts_lang or "").strip().lower() or customer_lang_ui)
     if customer_voice_lang not in set(SUPPORTED_TTS_LANGS):
         customer_voice_lang = customer_lang_ui
 
-    append_message(uid, sid, role="customer", content=text, lang=detected_customer_lang, backend=backend, model=selected_model)
-    sessions_col.update_one(
-        {"_id": sid, "user_id": uid},
-        {
-            "$set": {
-                "meta.customer_lang_last": detected_customer_lang,
-                "meta.customer_voice_lang_last": customer_voice_lang,
-            }
-        },
-    )
     customer_dual_lane = build_dual_lane_event(
         from_role="customer",
         text_original=text,
@@ -3915,6 +4526,31 @@ def chat_text(req: TextChatRequest):
         agent_lang_ui=agent_lang_ui,
         backend=backend,
         model_override=selected_model,
+    )
+    append_message(
+        uid,
+        sid,
+        role="customer",
+        content=text,
+        lang=detected_customer_lang,
+        backend=backend,
+        model=selected_model,
+        meta=build_message_lane_meta(
+            dual_lane=customer_dual_lane,
+            source_lang=detected_customer_lang,
+            agent_lang=agent_lang_ui,
+            customer_lang=customer_lang_ui,
+            customer_voice_lang=customer_voice_lang,
+        ),
+    )
+    sessions_col.update_one(
+        {"_id": sid, "user_id": uid},
+        {
+            "$set": {
+                "meta.customer_lang_last": detected_customer_lang,
+                "meta.customer_voice_lang_last": customer_voice_lang,
+            }
+        },
     )
     publish_session_event(
         event_type="message.created",
@@ -3956,17 +4592,6 @@ def chat_text(req: TextChatRequest):
         "tts_ms": 0,
         "total_ms": max(0, int((time.perf_counter() - t0) * 1000)),
     }
-    append_message(
-        uid,
-        sid,
-        role="agent",
-        content=answer,
-        lang=detected_lang,
-        backend=backend,
-        model=selected_model,
-        metrics=metrics,
-    )
-    mark_session_activity(sid, backend=backend, model=selected_model, lang=customer_lang_ui)
     agent_dual_lane = build_dual_lane_event(
         from_role="agent",
         text_original=answer,
@@ -3976,6 +4601,27 @@ def chat_text(req: TextChatRequest):
         backend=backend,
         model_override=selected_model,
     )
+    append_message(
+        uid,
+        sid,
+        role="agent",
+        content=answer,
+        lang=detected_lang,
+        backend=backend,
+        model=selected_model,
+        metrics=metrics,
+        meta=build_message_lane_meta(
+            dual_lane=agent_dual_lane,
+            source_lang=detected_lang,
+            agent_lang=agent_lang_ui,
+            customer_lang=customer_lang_ui,
+            customer_voice_lang=selected_tts_lang,
+        ),
+        answer_original=answer,
+        answer_translated=(agent_dual_lane.get("customer") or {}).get("text"),
+        answer_tts_lang=selected_tts_lang,
+    )
+    mark_session_activity(sid, backend=backend, model=selected_model, lang=customer_lang_ui)
     publish_session_event(
         event_type="message.created",
         session_id=sid,
@@ -4258,15 +4904,6 @@ async def voice(
             )
 
         prompt = build_prompt_with_history(sid, transcript, SYSTEM_PROMPT)
-        append_message(
-            uid,
-            sid,
-            role="customer",
-            content=transcript,
-            lang=effective_source_lang or lang,
-            backend=backend,
-            model=selected_model,
-        )
         customer_dual_lane = build_dual_lane_event(
             from_role="customer",
             text_original=transcript,
@@ -4275,6 +4912,22 @@ async def voice(
             agent_lang_ui=agent_lang_ui,
             backend=backend,
             model_override=selected_model,
+        )
+        append_message(
+            uid,
+            sid,
+            role="customer",
+            content=transcript,
+            lang=effective_source_lang or lang,
+            backend=backend,
+            model=selected_model,
+            meta=build_message_lane_meta(
+                dual_lane=customer_dual_lane,
+                source_lang=effective_source_lang or lang,
+                agent_lang=agent_lang_ui,
+                customer_lang=customer_lang_ui,
+                customer_voice_lang=customer_voice_lang,
+            ),
         )
         publish_session_event(
             event_type="message.created",
@@ -4379,6 +5032,16 @@ async def voice(
                     backend=backend,
                     model=selected_model,
                     metrics=metrics,
+                    meta=build_message_lane_meta(
+                        dual_lane=agent_dual_lane,
+                        source_lang=answer_lang,
+                        agent_lang=agent_lang_ui,
+                        customer_lang=customer_lang_ui,
+                        customer_voice_lang=(tts_lang_selected or customer_voice_lang or customer_lang_ui or lang),
+                    ),
+                    answer_original=answer,
+                    answer_translated=(agent_dual_lane.get("customer") or {}).get("text"),
+                    answer_tts_lang=(tts_lang_selected or customer_voice_lang or customer_lang_ui or lang),
                 )
                 mark_session_activity(sid, backend=backend, model=selected_model, lang=answer_lang)
                 publish_session_event(
@@ -4424,6 +5087,16 @@ async def voice(
                 backend=backend,
                 model=selected_model,
                 metrics=metrics,
+                meta=build_message_lane_meta(
+                    dual_lane=agent_dual_lane,
+                    source_lang=answer_lang,
+                    agent_lang=agent_lang_ui,
+                    customer_lang=customer_lang_ui,
+                    customer_voice_lang=(tts_lang_selected or customer_voice_lang or customer_lang_ui or lang),
+                ),
+                answer_original=answer,
+                answer_translated=(agent_dual_lane.get("customer") or {}).get("text"),
+                answer_tts_lang=(tts_lang_selected or customer_voice_lang or customer_lang_ui or lang),
             )
             mark_session_activity(sid, backend=backend, model=selected_model, lang=answer_lang)
             publish_session_event(
@@ -4504,6 +5177,16 @@ async def voice(
             backend=backend,
             model=selected_model,
             metrics=metrics,
+            meta=build_message_lane_meta(
+                dual_lane=agent_dual_lane,
+                source_lang=answer_lang,
+                agent_lang=agent_lang_ui,
+                customer_lang=customer_lang_ui,
+                customer_voice_lang=(tts_lang_selected or customer_voice_lang or customer_lang_ui or lang),
+            ),
+            answer_original=answer,
+            answer_translated=(agent_dual_lane.get("customer") or {}).get("text"),
+            answer_tts_lang=(tts_lang_selected or customer_voice_lang or customer_lang_ui or lang),
         )
         mark_session_activity(sid, backend=backend, model=selected_model, lang=answer_lang)
         publish_session_event(
