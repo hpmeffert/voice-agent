@@ -51,7 +51,7 @@
           <b id="headerTitle">Voice Agent Customer</b>
           <div class="status" id="headerWsState">WS: disconnected</div>
           <div class="status" id="headerWsRtt">WS RTT: -</div>
-          <div class="status" id="headerVersion">Version: v9.1.16</div>
+          <div class="status" id="headerVersion">Version: v9.1.17</div>
           <div class="status" id="status">idle</div>
         </div>
         <div class="row">
@@ -97,7 +97,7 @@
 
   <div id="helpModal" class="helpModal">
     <div class="helpCard">
-      <div class="helpHd"><b id="helpTitleText">Kunden-Hilfe</b><span id="helpVersion" class="status">Version: v9.1.16</span><button id="helpCloseBtn">Schliessen</button></div>
+      <div class="helpHd"><b id="helpTitleText">Kunden-Hilfe</b><span id="helpVersion" class="status">Version: v9.1.17</span><button id="helpCloseBtn">Schliessen</button></div>
       <div id="helpBody" class="helpBd">Lade Hilfe...</div>
     </div>
   </div>
@@ -276,7 +276,7 @@ function stopWsPingLoop(){
   wsPingTimer = null;
 }
 function setVersion(v){
-  const ver = v || "v9.1.16";
+  const ver = v || "v9.1.17";
   document.title = `${t("customer.title", "Voice Agent Customer")} ${ver}`;
   headerTitleEl.textContent = `${t("customer.title", "Voice Agent Customer")} ${ver}`;
   headerVersionEl.textContent = `Version: ${ver}`;
@@ -374,7 +374,7 @@ async function loadUiI18n(lang) {
     }
   } catch (_) {}
   applyUiStrings();
-  setVersion(headerVersionEl.textContent.replace(/^Version:\s*/, "") || "v9.1.16");
+  setVersion(headerVersionEl.textContent.replace(/^Version:\s*/, "") || "v9.1.17");
   setStatus(loopActive ? "listening" : "idle");
   setHandoff(handoffState, handoffRequested);
 }
@@ -683,9 +683,9 @@ connectSessionWs();
   try {
     const cfg = await fetch('/api/config', { cache: 'no-store' }).then(r => r.json());
     cfgDefaultLang = resolveUiLang((cfg && cfg.ui_lang_default) || "en");
-    setVersion((cfg?.ui?.version) || "v9.1.16");
+    setVersion((cfg?.ui?.version) || "v9.1.17");
   } catch (_) {
-    setVersion("v9.1.16");
+    setVersion("v9.1.17");
   }
   const dbLang = await loadUiLangPreferenceFromDb();
   const preferred = resolveUiLang(dbLang || localStorage.getItem(CUSTOMER_UI_LANG_KEY) || cfgDefaultLang || "en");
