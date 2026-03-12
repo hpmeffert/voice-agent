@@ -4,6 +4,10 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
+api_app = ROOT / "v9/docker/api/app.py"
+api_text = api_app.read_text(encoding="utf-8", errors="ignore")
+version_match = re.search(r'APP_VERSION = "([^"]+)"', api_text)
+APP_VERSION = version_match.group(1) if version_match else "v9.1.15"
 
 web = ROOT / "v9/web/index.html"
 web_agent = ROOT / "v9/web-agent/index.html"
@@ -77,7 +81,7 @@ for label in ["Admin Token speichern", "Benutzer Handbuch", "Demo Guide", "Admin
 
 checks = [
     (r'id="silenceMs"[^\n]*value="1300"', "silence default must be 1300"),
-    (r"Voice Agent Admin Client v9\.1\.15", "header/title must show v9.1.15"),
+    (rf"Voice Agent Admin Client {re.escape(APP_VERSION)}", f"header/title must show {APP_VERSION}"),
     (r'id="adminWsState"', "admin must expose WS state pill"),
     (r'id="adminWsRtt"', "admin must expose WS RTT pill"),
     (r'id="adminConversationPanel"', "admin must expose conversation session history panel"),

@@ -1,4 +1,4 @@
-# Demo Guide (EN) - V9.0.0
+# Demo Guide (EN) - V9.1.16
 
 ## Demo goal
 Show how international support works when customers and agents keep their own language while the platform handles translation and voice routing.
@@ -191,3 +191,24 @@ Have you ever had a conversation suddenly feel slow and nobody could say whether
 5. Show:
    - `Original (de)`
    - `Translation (en)`
+
+## New demo story in V9.1.16: Finding the wallbox case fast
+Have you ever had a customer call back and nobody could immediately find the right session?
+
+### Flow
+1. The customer reports: "My wallbox keeps turning off."
+2. Admin opens search and enters `*wallbox*`.
+3. The result list shows session id, timestamp, and matching snippets.
+4. One click on `Open Session` shows the full conversation with `Original + Translation`.
+5. The agent can continue exactly where the last contact ended.
+
+## Patch demo V9.1.16: Voice and chat are equal again
+1. Customer speaks German.
+2. Show in Customer UI:
+   - transcript visible
+   - answer visible
+3. Show in Agent UI:
+   - customer text as `Original (de) + Translation (en)`
+   - generated answer also as `Original + Translation`
+4. Reload the conversation history.
+5. Show that the same result stays visible.

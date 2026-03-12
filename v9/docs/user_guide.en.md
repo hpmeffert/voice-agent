@@ -1,4 +1,4 @@
-# User Guide (EN, Agent View) - V9.1.11
+# User Guide (EN, Agent View) - V9.1.16
 
 ## What does Voice Agent do?
 Voice Agent keeps customer and agent conversations in sync across languages:
@@ -217,3 +217,33 @@ If customer language is detected, the response language and customer voice profi
    - `WS RTT` shows a millisecond value within a few seconds.
 4. Agent replies in English.
 5. Customer sees/hears the German output.
+
+## New in V9.1.16: Wildcard search and reliable session open
+- Agent search now understands wildcards like `fe77*`, `*wallbox*`, and `*c8e9`.
+- `auto` detects identifier-like queries first; otherwise it searches as text.
+- Results now show multiple context snippets instead of a single short preview.
+- Clicking a result opens the full session with `Original + Translation`.
+
+### Example
+1. Enter `*wallbox*` in search.
+2. Choose `text` or leave `auto`.
+3. Review the result list with session id, timestamp, and snippet context.
+4. Click a result to open the full conversation in the agent client.
+
+## Patch V9.1.16: Voice and chat stay equally visible
+- When the customer speaks, the customer now again sees:
+  - their own transcript entry
+  - the answer in the same chat history
+- In the Agent client you now again see this for the generated answer:
+  - `Original`
+  - `Translation`
+
+### 2-minute proof
+1. Set customer to `de`, agent to `en`.
+2. Let the customer speak German.
+3. Check:
+   - Customer sees transcript + answer.
+   - Agent sees the customer text as `Original (de) + Translation (en)`.
+   - Agent also sees the generated answer as `Original + Translation`.
+4. Reload the conversation history.
+5. The same result must still be visible.

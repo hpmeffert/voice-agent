@@ -1,4 +1,4 @@
-# Release Notes (DE) - V7.0.0 bis V9.1.15
+# Release Notes (DE) - V7.0.0 bis V9.1.16
 
 ## Historie
 - V7.0.0: V7-Scaffold isoliert, eigene Ports, Admin-Demo-Defaults.
@@ -29,6 +29,8 @@
 - V9.1.11: Klare Rollentrennung: Agent-Client nur mit agentenspezifischen Settings, Admin-Client mit globalem Admin-Panel + Header-Perf-Badges + zentraler Admin-Suche; Agent-Suche ueber `/api/agent/search`.
 - V9.1.14: Togglebares Performance-Logging in separater Log-DB (`voice_agent_logs.perf_events`) mit TTL, Queue-Health und ZIP-Export.
 - V9.1.15: Admin Performance Dashboard mit Summary Cards, Worst-Spikes-Tabelle, Prefix-Suche und Export-/Delete-Workflow.
+- V9.1.16: Search Fixes + Better Tests mit zuverlaessiger Wildcard-Suche, Kontext-Snippets und eigenem Search-Regressionstest.
+- V9.1.16 Patch: Voice/Chat-Paritaet in der UI wiederhergestellt: Customer sieht nach Voice Transcript + Antwort, Agent sieht fuer generierte Antworten wieder `Original + Uebersetzung`, auch nach Reload.
 
 ## Nutzen von V9.1.0
 - Keine falsche Sprache mehr im Agenten- und Kunden-TTS-Pfad.
@@ -126,3 +128,8 @@
 - Admin, Agent und Customer zeigen jetzt einen einfachen `WS RTT`-Wert im Header und machen Leitungslatenz sichtbar.
 - Die Agent-Ansicht haelt die Dual-Lane-Invariante strenger ein: Kundennachrichten sollen bei Sprachunterschied immer `Original + Uebersetzung` zeigen.
 - Der Smoke-Test prueft jetzt Health, WS-Ping/Pong, nicht-leere Help-Dokumente und einen Chat-Dual-Lane-Nachweis in einem Lauf.
+
+## Nutzen von V9.1.16
+- Suche ist jetzt deterministischer: exakte IDs, Prefix/Suffix/Contains-Wildcards und Textfragmente verhalten sich klarer.
+- Treffer liefern mehrere Snippets und lassen sich im Admin- und Agent-Client direkt in den kompletten Verlauf oeffnen.
+- Der neue Suchtest erzeugt eigene Seed-Daten und faengt leere oder instabile Suchergebnisse frueher ab.

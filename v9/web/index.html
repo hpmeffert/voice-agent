@@ -425,13 +425,13 @@
   <div class="wrap">
     <div class="row adminTopRow" style="justify-content:space-between;">
       <div>
-        <h1 id="appTitle">Voice Agent Admin Client v9.1.15</h1>
+        <h1 id="appTitle">Voice Agent Admin Client v9.1.16</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
         <div class="row" style="margin-top:6px;">
           <span id="adminApiStatus" class="pill">API: checking...</span>
           <span id="adminWsState" class="pill">WS: disconnected</span>
           <span id="adminWsRtt" class="pill">WS RTT: -</span>
-          <span id="menuVersionHeader" class="pill">Version: v9.1.15</span>
+          <span id="menuVersionHeader" class="pill">Version: v9.1.16</span>
         </div>
       </div>
       <div class="topRight">
@@ -459,7 +459,7 @@
           <button id="menuDemoGuide" class="menuItem" data-help-doc="/api/docs?type=demo" data-help-title="Demo Guide" data-i18n="menu.demo_guide">Demo Guide</button>
           <button id="adminGuideItem" class="menuItem" data-help-doc="/api/docs?type=admin" data-help-title="Admin Docs" data-i18n="menu.admin_docs">Admin Docs</button>
           <button id="adminSettingsMenuItem" class="menuItem" data-i18n="menu.admin_settings">Admin Settings</button>
-          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/api/docs?type=release" data-help-title="Release Notes V9.1.11" data-i18n="menu.release_notes">Release Notes</button>
+          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/api/docs?type=release" data-help-title="Release Notes V9.1.16" data-i18n="menu.release_notes">Release Notes</button>
         </div>
       </div>
     </div>
@@ -479,6 +479,7 @@
       <span class="pill">TTS <b id="adminHdrTts">- / -</b></span>
       <span class="pill">Total <b id="adminHdrTotal">- / -</b></span>
     </div>
+    <div class="muted" style="margin:-4px 0 10px 0;">Search examples: <code>fe77*</code>, <code>*wallbox*</code>, <code>*c8e9</code>. Mode <code>auto</code> treats id-like queries as identifiers, otherwise as text.</div>
 
     <div class="grid">
       <div class="card">
@@ -998,7 +999,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v9.1.15";
+let uiVersionText = "v9.1.16";
 let adminDrawerInitialized = false;
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
@@ -1992,6 +1993,7 @@ async function runAdminConversationSearch() {
     qs.set("mode", mode || "auto");
     qs.set("since_days", String(sinceDays));
     qs.set("limit", String(limit));
+    qs.set("include_snippets", "true");
     const r = await fetch(`/api/admin/search?${qs.toString()}`, {
       headers: authHeaders(),
       cache: "no-store",
@@ -2013,12 +2015,17 @@ async function runAdminConversationSearch() {
       const sid = String(m.session_id || "");
       const uid = String(m.user_id || "");
       const ts = String(m.last_ts || "-");
-      const snippet = String(m.snippet || "-")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+      const hitType = String(m.hit_type || m.match_type || "-");
+      const snippets = Array.isArray(m.snippets) && m.snippets.length ? m.snippets : [String(m.snippet || "-")];
+      const snippetHtml = snippets.map((snippet) => {
+        const safeSnippet = String(snippet || "-")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+        return `<div class=\"muted\" style=\"margin-top:3px;\">• ${safeSnippet}</div>`;
+      }).join("");
       const button = sid ? `<button type=\"button\" data-open-session=\"${sid}\" data-open-user=\"${uid}\">Open Session</button>` : "";
-      return `<div style=\"border-bottom:1px solid #d9e1ee; padding:8px 0;\"><div><b>${idx + 1}.</b> session=<code>${sid || "-"}</code> user=<code>${uid || "-"}</code> ts=${ts}</div><div class=\"muted\" style=\"margin-top:3px;\">${snippet}</div><div style=\"margin-top:6px;\">${button}</div></div>`;
+      return `<div style=\"border-bottom:1px solid #d9e1ee; padding:8px 0;\"><div><b>${idx + 1}.</b> session=<code>${sid || "-"}</code> user=<code>${uid || "-"}</code> ts=${ts}</div><div class=\"muted\" style=\"margin-top:3px;\">Hit: ${hitType}</div>${snippetHtml}<div style=\"margin-top:6px;\">${button}</div></div>`;
     }).join("");
     for (const btn of adminSearchResult.querySelectorAll("button[data-open-session]")) {
       btn.addEventListener("click", () => {
@@ -2071,7 +2078,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v9.1.15";
+    const ver = cfg?.ui?.version || "v9.1.16";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
     applyAdminSettingsForm(cfg?.admin_settings || {});
@@ -2080,7 +2087,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v9.1.15";
+    uiVersionText = "v9.1.16";
     applyAdminSettingsForm({});
   }
   await loadWhoAmI();

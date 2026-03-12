@@ -1,4 +1,4 @@
-# Release Notes (EN) - V7.0.0 through V9.1.15
+# Release Notes (EN) - V7.0.0 through V9.1.16
 
 ## History
 - V7.0.0: isolated V7 scaffold, dedicated ports, admin demo defaults.
@@ -29,6 +29,8 @@
 - V9.1.11: Strict role separation: Agent client now has agent-scoped settings only, while Admin client keeps global admin settings + header perf badges + unified admin search; agent search uses `/api/agent/search`.
 - V9.1.14: Toggleable performance logging in a dedicated log DB (`voice_agent_logs.perf_events`) with TTL, queue health, and ZIP export.
 - V9.1.15: Admin performance dashboard with summary cards, worst-spikes table, prefix search, and export/delete workflow.
+- V9.1.16: Search fixes + better tests with reliable wildcard search, context snippets, and a dedicated seeded search regression test.
+- V9.1.16 Patch: UI voice/chat parity restored: customer sees transcript + answer again after voice, and agent sees `Original + Translation` again for generated answers, including reload.
 
 ## Why V9.1.0 matters
 - Prevents wrong-language speech on both Agent and Customer clients.
@@ -126,3 +128,8 @@
 - Admin, Agent, and Customer now show a simple `WS RTT` value in the header, so line latency becomes visible.
 - The agent view enforces the dual-lane invariant more strictly: customer messages should show `Original + Translation` whenever languages differ.
 - The smoke test now validates health, WS ping/pong, non-empty Help docs, and a chat dual-lane proof in one run.
+
+## Why V9.1.16 matters
+- Search is now more deterministic for exact ids, prefix/suffix/contains wildcards, and text fragments.
+- Results provide multiple snippets and can open the full conversation directly in Admin and Agent clients.
+- The new search regression test seeds its own data, so empty or flaky search results are caught earlier.

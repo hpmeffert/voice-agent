@@ -8,7 +8,7 @@ FAST_SEC="${FAST_SEC:-2}"
 EVENTUAL_SEC="${EVENTUAL_SEC:-20}"
 ANSWER_EVENTUAL_SEC="${ANSWER_EVENTUAL_SEC:-45}"
 PROBE_DURATION_SEC="${PROBE_DURATION_SEC:-120}"
-PATCH_LABEL="${PATCH_LABEL:-V9.1.5-fix-voice-duallane}"
+PATCH_LABEL="${PATCH_LABEL:-V9.1.16-voice-chat-parity}"
 RETAIN_RUNS="${RETAIN_RUNS:-10}"
 
 while [[ $# -gt 0 ]]; do
@@ -24,7 +24,7 @@ TS="$(date -u +%Y%m%d-%H%M%S)"
 OUT_ROOT="${OUT_ROOT%/}"
 OUT_RUNS_DIR="${OUT_ROOT}/runs"
 OUT_LATEST_DIR="${OUT_ROOT}/latest"
-RUN_ID="${RUN_ID:-v9.1.5-${TS}}"
+RUN_ID="${RUN_ID:-v9.1.16-${TS}}"
 ART_DIR="${OUT_RUNS_DIR}/${RUN_ID}"
 RUN_ZIP="${OUT_RUNS_DIR}/artifacts-${RUN_ID}.zip"
 mkdir -p "$ART_DIR" "$OUT_LATEST_DIR"
@@ -51,7 +51,7 @@ fi
 
 COMMIT_SHA="$(git rev-parse --short HEAD)"
 
-LOG_FILE="$ART_DIR/test-log-v9.1.15-p1-ws.txt"
+LOG_FILE="$ART_DIR/test-log-v9.1.16-ws.txt"
 EVENT_AGENT_WS="$ART_DIR/ws_agent_events.jsonl"
 EVENT_CUSTOMER_WS="$ART_DIR/ws_customer_events.jsonl"
 EVENT_AGENT="$ART_DIR/events-agent.jsonl"
@@ -499,6 +499,44 @@ else:
         fails.append("scenario5_text_for_agent_equals_original_when_langs_differ")
     s5_status = ("PASS" if not [f for f in fails if f.startswith("scenario5_")] else "FAIL", "history_dual_lane_persisted")
 
+# Scenario6: session/history voice transcript + agent answer visible for customer, and agent answer has agent lane
+s6_status = ("PASS", "voice_history_customer_and_agent_present")
+voice_customer_msg = None
+voice_agent_msg = None
+session_messages = list(session_dump.get("messages") or [])
+if session_messages:
+    voice_customer_candidates = [m for m in session_messages if str(m.get("role") or "").lower() == "customer"]
+    voice_agent_candidates = [m for m in session_messages if str(m.get("role") or "").lower() == "agent"]
+    if voice_customer_candidates:
+        voice_customer_msg = voice_customer_candidates[-1]
+    if voice_agent_candidates:
+        voice_agent_msg = voice_agent_candidates[-1]
+
+if VOICE_STATUS != "PASS":
+    s6_status = ("SKIP", "voice automation request failed")
+elif voice_customer_msg is None:
+    fails.append("scenario6_missing_voice_customer_history")
+    s6_status = ("FAIL", "missing customer transcript in session history after voice")
+elif voice_agent_msg is None:
+    fails.append("scenario6_missing_voice_agent_history")
+    s6_status = ("FAIL", "missing agent answer in session history after voice")
+else:
+    voice_customer_text = strv(voice_customer_msg.get("text_for_customer") or voice_customer_msg.get("text_original") or voice_customer_msg.get("content"))
+    voice_agent_original = strv(voice_agent_msg.get("text_original") or voice_agent_msg.get("content"))
+    voice_agent_lane = strv(voice_agent_msg.get("text_for_agent"))
+    voice_agent_lang = strv(voice_agent_msg.get("lang_for_agent")).lower()
+    if not voice_customer_text:
+        fails.append("scenario6_empty_voice_customer_text")
+    if not voice_agent_original:
+        fails.append("scenario6_empty_voice_agent_original")
+    if not voice_agent_lane:
+        fails.append("scenario6_missing_voice_agent_lane")
+    if voice_agent_lang != "en":
+        fails.append(f"scenario6_voice_agent_lang_not_en:{voice_agent_lang}")
+    if voice_agent_original and voice_agent_lane and voice_agent_original == voice_agent_lane:
+        warns.append("scenario6_voice_agent_lane_equals_original")
+    s6_status = ("PASS" if not [f for f in fails if f.startswith("scenario6_")] else "FAIL", "voice_history_customer_and_agent_present")
+
 result="PASS" if not fails else "FAIL"
 
 six_lines=[
@@ -517,6 +555,7 @@ with log_path.open("a", encoding="utf-8") as fh:
     fh.write("\n".join(six_lines)+"\n")
     fh.write(f"VOICE_SCENARIO: {s4_status[0]} ({s4_status[1]})\n")
     fh.write(f"HISTORY_SCENARIO: {s5_status[0]} ({s5_status[1]})\n")
+    fh.write(f"VOICE_HISTORY_SCENARIO: {s6_status[0]} ({s6_status[1]})\n")
     if warns:
         fh.write("WARNINGS:\n")
         for w in warns: fh.write(f"- {w}\n")

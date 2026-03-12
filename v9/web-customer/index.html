@@ -51,7 +51,7 @@
           <b id="headerTitle">Voice Agent Customer</b>
           <div class="status" id="headerWsState">WS: disconnected</div>
           <div class="status" id="headerWsRtt">WS RTT: -</div>
-          <div class="status" id="headerVersion">Version: v9.1.15</div>
+          <div class="status" id="headerVersion">Version: v9.1.16</div>
           <div class="status" id="status">idle</div>
         </div>
         <div class="row">
@@ -97,7 +97,7 @@
 
   <div id="helpModal" class="helpModal">
     <div class="helpCard">
-      <div class="helpHd"><b id="helpTitleText">Kunden-Hilfe</b><span id="helpVersion" class="status">Version: v9.1.15</span><button id="helpCloseBtn">Schliessen</button></div>
+      <div class="helpHd"><b id="helpTitleText">Kunden-Hilfe</b><span id="helpVersion" class="status">Version: v9.1.16</span><button id="helpCloseBtn">Schliessen</button></div>
       <div id="helpBody" class="helpBd">Lade Hilfe...</div>
     </div>
   </div>
@@ -171,6 +171,7 @@ let handoffState = "none";
 let uiStrings = {};
 let uiLangCurrent = "en";
 let wsRttSamples = [];
+let loadedHistorySessionId = '';
 
 const WS_RTT_INTERVAL_MS = 5000;
 const WS_RTT_SAMPLE_LIMIT = 10;
@@ -275,7 +276,7 @@ function stopWsPingLoop(){
   wsPingTimer = null;
 }
 function setVersion(v){
-  const ver = v || "v9.1.15";
+  const ver = v || "v9.1.16";
   document.title = `${t("customer.title", "Voice Agent Customer")} ${ver}`;
   headerTitleEl.textContent = `${t("customer.title", "Voice Agent Customer")} ${ver}`;
   headerVersionEl.textContent = `Version: ${ver}`;
@@ -285,6 +286,42 @@ function makeId(){ return crypto.randomUUID ? crypto.randomUUID() : String(Date.
 function refreshIds(){ idsEl.textContent = `User: ${userIdEl.value} | Session: ${sessionIdEl.value || "-"}`; }
 function persistIds(){ localStorage.setItem(USER_KEY, userIdEl.value); localStorage.setItem(SESSION_KEY, sessionIdEl.value); refreshIds(); }
 function addMsg(cls, title, text){ const d = document.createElement('div'); d.className = `msg ${cls}`; d.textContent = `${title}:\n${text}`; chatEl.appendChild(d); chatEl.scrollTop = chatEl.scrollHeight; }
+function clearChat(){ chatEl.innerHTML = ''; }
+function renderHistoryMessages(messages){
+  clearChat();
+  for (const m of (messages || [])) {
+    const role = String(m.role || '').toLowerCase();
+    if (role === 'customer') {
+      const ownText = String(m.text_for_customer || m.text_original || m.content || '').trim();
+      if (ownText) addMsg('me', t("chat.customer", "Kunde"), ownText);
+      continue;
+    }
+    if (role === 'agent') {
+      const answerText = String(m.text_for_customer || m.content || m.text_original || '').trim();
+      if (answerText) addMsg('bot', t("chat.agent", "Agent"), answerText);
+      continue;
+    }
+    const systemText = String(m.content || m.text_original || '').trim();
+    if (systemText) addMsg('bot', t("chat.system", "System"), systemText);
+  }
+}
+async function loadRecentMessages() {
+  const sid = (sessionIdEl.value || '').trim();
+  const uid = (userIdEl.value || '').trim();
+  if (!sid || !uid) {
+    loadedHistorySessionId = '';
+    clearChat();
+    return;
+  }
+  try {
+    const q = new URLSearchParams({ user_id: uid, limit: '50' });
+    const r = await fetch(`/api/session/${encodeURIComponent(sid)}?${q.toString()}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const data = await r.json();
+    renderHistoryMessages(data.messages || []);
+    loadedHistorySessionId = sid;
+  } catch (_) {}
+}
 function selectedCustomerLang(){
   const v = (customerLangEl.value || '').toLowerCase();
   if (v && v !== 'auto') return v;
@@ -337,7 +374,7 @@ async function loadUiI18n(lang) {
     }
   } catch (_) {}
   applyUiStrings();
-  setVersion(headerVersionEl.textContent.replace(/^Version:\s*/, "") || "v9.1.15");
+  setVersion(headerVersionEl.textContent.replace(/^Version:\s*/, "") || "v9.1.16");
   setStatus(loopActive ? "listening" : "idle");
   setHandoff(handoffState, handoffRequested);
 }
@@ -441,6 +478,9 @@ function connectSessionWs(){
   const uid = (userIdEl.value || '').trim();
   const selectedLang = selectedCustomerLang();
   const laneQuery = selectedLang ? `&customer_lang=${encodeURIComponent(selectedLang)}` : '';
+  if (loadedHistorySessionId !== sid) {
+    loadRecentMessages().catch(() => {});
+  }
   ws = new WebSocket(wsUrl(`/api/ws/session/${encodeURIComponent(sid)}?client=customer&user_id=${encodeURIComponent(uid)}${laneQuery}`));
   ws.onopen = () => { setWsState(true); startWsPingLoop(); stateIdle(); };
   ws.onclose = () => { stopWsPingLoop(); setWsState(false); stateIdle(); };
@@ -605,6 +645,8 @@ async function sendAudio({ fromLoop = false } = {}){
     }
 
     if (transcript) addMsg('me', t("chat.customer", "Kunde"), decodeURIComponent(transcript));
+    if (answer) addMsg('bot', t("chat.agent", "Agent"), decodeURIComponent(answer));
+    await loadRecentMessages();
 
     audioEl.src = URL.createObjectURL(blob);
     setStatus('speaking');
@@ -641,9 +683,9 @@ connectSessionWs();
   try {
     const cfg = await fetch('/api/config', { cache: 'no-store' }).then(r => r.json());
     cfgDefaultLang = resolveUiLang((cfg && cfg.ui_lang_default) || "en");
-    setVersion((cfg?.ui?.version) || "v9.1.15");
+    setVersion((cfg?.ui?.version) || "v9.1.16");
   } catch (_) {
-    setVersion("v9.1.15");
+    setVersion("v9.1.16");
   }
   const dbLang = await loadUiLangPreferenceFromDb();
   const preferred = resolveUiLang(dbLang || localStorage.getItem(CUSTOMER_UI_LANG_KEY) || cfgDefaultLang || "en");
@@ -692,6 +734,8 @@ uiLangEl.addEventListener('change', async () => {
 btnNewSession.onclick = () => {
   sessionIdEl.value = '';
   persistIds();
+  loadedHistorySessionId = '';
+  clearChat();
   connectSessionWs();
   setHandoff('none', false);
   addMsg('me', t("chat.system", "System"), 'Neue Session gestartet');
