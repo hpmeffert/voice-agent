@@ -33,7 +33,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v9.1.15"
+APP_VERSION = "v9.1.16"
 
 app = FastAPI(
     title=f"Voice Agent API {APP_VERSION}",
@@ -398,17 +398,112 @@ def dt_iso(v: Any) -> str | None:
     return None
 
 
+SEARCH_MODE_VALUES = {"auto", "session_id", "user_id", "text"}
+SEARCH_TEXT_MIN_CHARS = 3
+SEARCH_ID_MIN_CHARS = 3
+SEARCH_RESULT_MAX = 100
+MESSAGE_SEARCH_TEXT_FIELDS = [
+    ("content", "content"),
+    ("answer_original", "answer_original"),
+    ("answer_translated", "answer_translated"),
+    ("meta.text_for_agent", "text_for_agent"),
+    ("meta.text_for_customer", "text_for_customer"),
+    ("meta.lanes.agent.text", "lane_agent"),
+    ("meta.lanes.customer.text", "lane_customer"),
+]
+
+
 def first_words(text: str, n: int = 8) -> str:
     words = (text or "").strip().split()
     return " ".join(words[:n]).strip()
 
 
-def wildcard_to_safe_regex(value: str) -> re.Pattern[str]:
+def wildcard_to_safe_regex(value: str, *, exact_without_wildcard: bool = True) -> re.Pattern[str]:
     cleaned = (value or "").strip()
+    if not cleaned or set(cleaned) <= {"*"}:
+        raise ValueError("Query must contain at least one non-* character")
+    has_wildcard = "*" in cleaned
     escaped = re.escape(cleaned).replace(r"\*", ".*")
-    if not escaped:
-        escaped = ".*"
+    if not has_wildcard and not exact_without_wildcard:
+        escaped = f".*{escaped}.*"
+    elif has_wildcard:
+        if not cleaned.startswith("*"):
+            escaped = f"^{escaped}"
+        if not cleaned.endswith("*"):
+            escaped = f"{escaped}$"
+    else:
+        escaped = f"^{escaped}$"
     return re.compile(escaped, re.IGNORECASE)
+
+
+def normalize_search_query(q: str, *, mode: str) -> tuple[str, str]:
+    cleaned = (q or "").strip()
+    literal = cleaned.replace("*", "").strip()
+    if not literal:
+        raise HTTPException(status_code=400, detail="Query must contain letters or numbers, not only *")
+    min_chars = SEARCH_TEXT_MIN_CHARS if mode == "text" else SEARCH_ID_MIN_CHARS
+    if len(literal) < min_chars:
+        raise HTTPException(status_code=400, detail=f"Query must contain at least {min_chars} non-* characters")
+    return cleaned, literal
+
+
+def looks_like_identifier_query(q: str) -> bool:
+    probe = (q or "").replace("*", "").strip().lower()
+    if len(probe) < SEARCH_ID_MIN_CHARS:
+        return False
+    if probe.startswith(("user", "agent", "customer", "admin", "demo")):
+        return True
+    return bool(re.fullmatch(r"[a-z0-9][a-z0-9\-_:]{2,}", probe))
+
+
+def dotted_get(doc: dict[str, Any], dotted_key: str) -> Any:
+    cur: Any = doc
+    for part in dotted_key.split("."):
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(part)
+    return cur
+
+
+def build_context_snippet(text: str, literal: str, *, width: int = 140) -> str:
+    sample = str(text or "").strip()
+    needle = (literal or "").strip()
+    if not sample:
+        return ""
+    if not needle:
+        return first_words(sample, 24)
+    idx = sample.lower().find(needle.lower())
+    if idx < 0:
+        return first_words(sample, 24)
+    start = max(0, idx - (width // 2))
+    end = min(len(sample), idx + len(needle) + (width // 2))
+    snippet = sample[start:end].strip()
+    if start > 0:
+        snippet = f"...{snippet}"
+    if end < len(sample):
+        snippet = f"{snippet}..."
+    return snippet
+
+
+def message_search_snippets(doc: dict[str, Any], literal: str) -> list[str]:
+    snippets: list[str] = []
+    for field_name, _label in MESSAGE_SEARCH_TEXT_FIELDS:
+        value = dotted_get(doc, field_name)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if literal.lower() not in value.lower():
+            continue
+        snippet = build_context_snippet(value, literal)
+        if snippet and snippet not in snippets:
+            snippets.append(snippet)
+        if len(snippets) >= 3:
+            break
+    if not snippets:
+        fallback = str(doc.get("content") or "")
+        snippet = build_context_snippet(fallback, literal)
+        if snippet:
+            snippets.append(snippet)
+    return snippets[:3]
 
 
 def extract_json_object(text: str) -> dict[str, Any] | None:
@@ -973,7 +1068,25 @@ def on_startup() -> None:
     messages_col.create_index([("session_id", ASCENDING), ("t", ASCENDING)])
     messages_col.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
     try:
-        messages_col.create_index([("content", "text")], name="content_text_idx")
+        existing_indexes = {idx.get("name"): idx for idx in messages_col.list_indexes()}
+        if "content_text_idx" in existing_indexes:
+            try:
+                messages_col.drop_index("content_text_idx")
+            except Exception:
+                pass
+        messages_col.create_index(
+            [
+                ("content", "text"),
+                ("answer_original", "text"),
+                ("answer_translated", "text"),
+                ("meta.text_for_agent", "text"),
+                ("meta.text_for_customer", "text"),
+                ("meta.lanes.agent.text", "text"),
+                ("meta.lanes.customer.text", "text"),
+            ],
+            name="message_search_text_idx",
+            default_language="none",
+        )
     except Exception:
         pass
 
@@ -1840,8 +1953,19 @@ def build_dual_lane_event(
         event["tts"]["agent_lang"] = event["agent"]["lang"]
     else:
         agent_source_lang = lang_original if lang_original != "und" else agent_lang_ui
-        event["agent"]["lang"] = agent_source_lang
-        event["agent"]["text"] = source_text
+        if agent_source_lang and agent_source_lang != agent_lang_ui:
+            translated_for_agent = translate_answer_text(
+                backend=backend,
+                model_override=model_override,
+                text=source_text,
+                target_lang=agent_lang_ui,
+                source_lang_hint=agent_source_lang,
+            )
+            event["agent"]["text"] = translated_for_agent or source_text
+            event["agent"]["lang"] = agent_lang_ui
+        else:
+            event["agent"]["lang"] = agent_source_lang
+            event["agent"]["text"] = source_text
         if agent_source_lang and agent_source_lang != customer_lang_ui:
             translated = translate_answer_text(
                 backend=backend,
@@ -3563,9 +3687,24 @@ def get_session(
                 )
             )
         )
-        if needs_customer_rebuild:
+        needs_agent_rebuild = (
+            role == "agent"
+            and bool(text_original)
+            and (
+                not lane_agent.get("text")
+                or not lane_agent.get("lang")
+                or lang_for_agent != session_agent_lang
+                or (
+                    lang_original
+                    and session_agent_lang
+                    and lang_original != session_agent_lang
+                    and text_for_agent == text_original
+                )
+            )
+        )
+        if needs_customer_rebuild or needs_agent_rebuild:
             rebuilt = build_dual_lane_event(
-                from_role="customer",
+                from_role="customer" if role == "customer" else "agent",
                 text_original=text_original,
                 lang_original_hint=lang_original or str(msg.get("lang") or "").strip().lower(),
                 customer_lang_ui=session_customer_lang,
@@ -4178,14 +4317,15 @@ def admin_search(
     q: str = Query(..., min_length=1, max_length=200),
     mode: str = Query("auto"),
     since_days: int = Query(7, ge=1, le=365),
-    limit: int | None = Query(None, ge=1, le=200),
+    limit: int | None = Query(None, ge=1, le=SEARCH_RESULT_MAX),
+    include_snippets: bool = Query(True),
     admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ):
     ensure_ready()
     assert_admin_access(user_id, admin_token)
     settings = get_admin_settings()
-    default_limit = max(1, min(200, int(settings.get("search_max_results", 50) or 50)))
-    use_limit = max(1, min(200, int(limit or default_limit)))
+    default_limit = max(1, min(SEARCH_RESULT_MAX, int(settings.get("search_max_results", 50) or 50)))
+    use_limit = max(1, min(SEARCH_RESULT_MAX, int(limit or default_limit)))
     allow_regex_fallback = bool(settings.get("allow_text_regex_fallback", True))
     matches, mode_used, used_text_fallback, took_ms = run_conversation_search(
         q=q,
@@ -4193,6 +4333,7 @@ def admin_search(
         since_days=since_days,
         limit=use_limit,
         allow_text_regex_fallback=allow_regex_fallback,
+        include_snippets=include_snippets,
     )
     return {
         "matches": matches,
@@ -4203,6 +4344,8 @@ def admin_search(
             "used_text_regex_fallback": used_text_fallback,
             "took_ms": took_ms,
             "count": len(matches),
+            "include_snippets": include_snippets,
+            "total_estimate": len(matches),
         },
     }
 
@@ -4214,42 +4357,49 @@ def run_conversation_search(
     since_days: int,
     limit: int,
     allow_text_regex_fallback: bool,
+    include_snippets: bool,
 ) -> tuple[list[dict[str, Any]], str, bool, int]:
     t0 = time.perf_counter()
     qv = (q or "").strip()
     mode_norm = (mode or "auto").strip().lower()
-    if mode_norm not in {"auto", "session_id", "user_id", "text"}:
+    if mode_norm not in SEARCH_MODE_VALUES:
         mode_norm = "auto"
     if mode_norm == "auto":
-        if "-" in qv and len(qv.replace("*", "")) >= 6:
-            mode_norm = "session_id"
-        elif qv.startswith("agent") or qv.startswith("user") or qv.startswith("customer"):
-            mode_norm = "user_id"
-        else:
-            mode_norm = "text"
+        mode_norm = "id" if looks_like_identifier_query(qv) else "text"
+    normalized_mode = "text" if mode_norm == "text" else "id"
+    qv, literal = normalize_search_query(qv, mode=("text" if normalized_mode == "text" else "session_id"))
     cutoff = now_utc() - timedelta(days=since_days)
     docs: list[dict[str, Any]] = []
     used_text_fallback = False
 
-    if mode_norm in {"session_id", "user_id"}:
-        field = "session_id" if mode_norm == "session_id" else "user_id"
-        pattern = wildcard_to_safe_regex(qv)
-        docs = list(
-            messages_col.find(
-                {
-                    field: {"$regex": pattern.pattern, "$options": "i"},
-                    "created_at": {"$gte": cutoff},
-                },
-                {"_id": 0, "session_id": 1, "user_id": 1, "content": 1, "role": 1, "created_at": 1, "t": 1},
+    if normalized_mode == "id":
+        search_fields: list[str]
+        if mode_norm == "session_id":
+            search_fields = ["_id"]
+        elif mode_norm == "user_id":
+            search_fields = ["user_id"]
+        else:
+            search_fields = ["_id", "user_id"]
+        pattern = wildcard_to_safe_regex(qv, exact_without_wildcard=True)
+        session_query = (
+            {search_fields[0]: {"$regex": pattern.pattern, "$options": "i"}}
+            if len(search_fields) == 1
+            else {"$or": [{field: {"$regex": pattern.pattern, "$options": "i"}} for field in search_fields]}
+        )
+        session_docs = list(
+            sessions_col.find(
+                session_query,
+                {"_id": 1, "user_id": 1, "updated_at": 1, "last_activity_at": 1},
             )
-            .sort("t", DESCENDING)
+            .sort("updated_at", DESCENDING)
             .limit(limit)
         )
-    else:
-        try:
-            docs = list(
+        session_ids = [str(doc.get("_id") or "") for doc in session_docs if doc.get("_id")]
+        latest_by_session: dict[str, dict[str, Any]] = {}
+        if session_ids:
+            latest_docs = list(
                 messages_col.find(
-                    {"$text": {"$search": qv}, "created_at": {"$gte": cutoff}},
+                    {"session_id": {"$in": session_ids}},
                     {
                         "_id": 0,
                         "session_id": 1,
@@ -4258,8 +4408,64 @@ def run_conversation_search(
                         "role": 1,
                         "created_at": 1,
                         "t": 1,
-                        "score": {"$meta": "textScore"},
+                        "answer_original": 1,
+                        "answer_translated": 1,
+                        "meta.text_for_agent": 1,
+                        "meta.text_for_customer": 1,
+                        "meta.lanes.agent.text": 1,
+                        "meta.lanes.customer.text": 1,
                     },
+                )
+                .sort("t", DESCENDING)
+            )
+            for doc in latest_docs:
+                sid = str(doc.get("session_id") or "")
+                if sid and sid not in latest_by_session:
+                    latest_by_session[sid] = doc
+        for session_doc in session_docs:
+            sid = str(session_doc.get("_id") or "")
+            if not sid:
+                continue
+            latest = latest_by_session.get(sid) or {}
+            docs.append(
+                {
+                    "session_id": sid,
+                    "user_id": str(session_doc.get("user_id") or ""),
+                    "updated_at": session_doc.get("updated_at"),
+                    "last_activity_at": session_doc.get("last_activity_at"),
+                    "content": str(latest.get("content") or ""),
+                    "search_hit_type": ("session_id" if mode_norm == "session_id" else "user_id") if mode_norm in {"session_id", "user_id"} else "id",
+                    "snippets": (
+                        [build_context_snippet(str(latest.get("content") or ""), literal)]
+                        if include_snippets and str(latest.get("content") or "").strip()
+                        else []
+                    ),
+                }
+            )
+    else:
+        text_projection = {
+            "_id": 0,
+            "session_id": 1,
+            "user_id": 1,
+            "content": 1,
+            "role": 1,
+            "created_at": 1,
+            "t": 1,
+            "answer_original": 1,
+            "answer_translated": 1,
+            "meta.text_for_agent": 1,
+            "meta.text_for_customer": 1,
+            "meta.lanes.agent.text": 1,
+            "meta.lanes.customer.text": 1,
+        }
+        use_regex_text = "*" in qv
+        try:
+            if use_regex_text:
+                raise RuntimeError("regex-wildcard-search")
+            docs = list(
+                messages_col.find(
+                    {"$text": {"$search": literal}, "created_at": {"$gte": cutoff}},
+                    {**text_projection, "score": {"$meta": "textScore"}},
                 )
                 .sort([("score", {"$meta": "textScore"}), ("t", DESCENDING)])
                 .limit(limit)
@@ -4268,41 +4474,61 @@ def run_conversation_search(
             docs = []
         if not docs and allow_text_regex_fallback:
             used_text_fallback = True
+            pattern = wildcard_to_safe_regex(qv, exact_without_wildcard=False)
             docs = list(
                 messages_col.find(
                     {
-                        "content": {"$regex": re.escape(qv), "$options": "i"},
+                        "$or": [{field_name: {"$regex": pattern.pattern, "$options": "i"}} for field_name, _ in MESSAGE_SEARCH_TEXT_FIELDS],
                         "created_at": {"$gte": cutoff},
                     },
-                    {"_id": 0, "session_id": 1, "user_id": 1, "content": 1, "role": 1, "created_at": 1, "t": 1},
+                    text_projection,
                 )
                 .sort("t", DESCENDING)
                 .limit(limit)
             )
 
-    matches: list[dict[str, Any]] = []
+    matches_by_session: dict[str, dict[str, Any]] = {}
     for d in docs:
         sid = str(d.get("session_id") or "")
         uid = str(d.get("user_id") or "")
-        ts = dt_iso(d.get("t") or d.get("created_at"))
-        snippet = first_words(str(d.get("content") or ""), 24)
+        if not sid:
+            continue
+        ts = dt_iso(d.get("t") or d.get("last_activity_at") or d.get("updated_at") or d.get("created_at"))
         score = d.get("score")
-        match = {
-            "session_id": sid,
-            "user_id": uid,
-            "last_ts": ts,
-            "snippet": snippet,
-            "match_type": mode_norm,
-        }
+        match = matches_by_session.get(sid)
+        if match is None:
+            match = {
+                "session_id": sid,
+                "user_id": uid,
+                "updated_at": dt_iso(d.get("updated_at") or d.get("last_activity_at") or d.get("created_at")),
+                "last_ts": ts,
+                "match_type": str(d.get("search_hit_type") or mode_norm),
+                "hit_type": str(d.get("search_hit_type") or mode_norm),
+                "snippets": [],
+            }
+            matches_by_session[sid] = match
+        snippets = d.get("snippets") if isinstance(d.get("snippets"), list) else []
+        if include_snippets and not snippets:
+            snippets = message_search_snippets(d, literal)
+        for snippet in snippets:
+            if snippet and snippet not in match["snippets"]:
+                match["snippets"].append(snippet)
         if score is not None:
             try:
-                match["score"] = float(score)
+                match["score"] = max(float(score), float(match.get("score", 0.0)))
             except Exception:
                 pass
-        matches.append(match)
+        if ts and (not match.get("last_ts") or ts > match["last_ts"]):
+            match["last_ts"] = ts
 
+    matches = list(matches_by_session.values())
+    for match in matches:
+        snippets = [s for s in (match.get("snippets") or []) if s]
+        match["snippets"] = snippets[:3]
+        match["snippet"] = snippets[0] if snippets else ""
     took_ms = max(0, int((time.perf_counter() - t0) * 1000))
-    return matches, mode_norm, used_text_fallback, took_ms
+    matches.sort(key=lambda item: (item.get("last_ts") or "", item.get("session_id") or ""), reverse=True)
+    return matches[:limit], ("auto-id" if mode == "auto" and normalized_mode == "id" else mode_norm), used_text_fallback, took_ms
 
 
 @app.get("/agent/search")
@@ -4311,7 +4537,8 @@ def agent_search(
     q: str = Query(..., min_length=1, max_length=200),
     mode: str = Query("auto"),
     since_days: int = Query(7, ge=1, le=365),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=SEARCH_RESULT_MAX),
+    include_snippets: bool = Query(True),
 ):
     ensure_ready()
     # Agent search intentionally avoids admin-only controls. It uses conservative fallback defaults.
@@ -4319,19 +4546,22 @@ def agent_search(
         q=q,
         mode=mode,
         since_days=since_days,
-        limit=max(1, min(200, int(limit))),
+        limit=max(1, min(SEARCH_RESULT_MAX, int(limit))),
         allow_text_regex_fallback=True,
+        include_snippets=include_snippets,
     )
     return {
         "matches": matches,
         "meta": {
             "mode_used": mode_used,
-            "limit": max(1, min(200, int(limit))),
+            "limit": max(1, min(SEARCH_RESULT_MAX, int(limit))),
             "since_days": since_days,
             "used_text_regex_fallback": used_text_fallback,
             "took_ms": took_ms,
             "count": len(matches),
             "scope": "agent",
+            "include_snippets": include_snippets,
+            "total_estimate": len(matches),
         },
     }
 
