@@ -1,4 +1,4 @@
-# Admin Docs (DE) - V9.0.0
+# Admin Docs (DE) - V9.1.16
 
 ## Ziel
 Diese Admin-Doku zeigt Ihnen Schritt fuer Schritt:
@@ -389,7 +389,7 @@ bash scripts/run_v9_1_9_ui_smoke.sh
 5. Export fuer die letzten 24h starten und bei Bedarf den exportierten Zeitraum gezielt loeschen.
 
 ### Hinweis
-- Der Header muss jetzt `Voice Agent Admin Client v9.1.15` zeigen.
+- Der Header muss jetzt `Voice Agent Admin Client v9.1.16` zeigen.
 - Wenn noch eine alte Version sichtbar ist: Hard Reload (`Cmd+Shift+R`).
 
 ## Patch V9.1.15-p1: Chat Dual-Lane + Agent Runtime Scope
@@ -433,3 +433,50 @@ bash scripts/run_v9_1_9_ui_smoke.sh
 - Das gilt fuer:
   - Live-WebSocket
   - Reload / Session-History
+
+## Neu in V9.1.16: Suchmodi, Wildcards und Test-Nachweis
+### Suchmodi im Admin-Client
+- `auto`: erkennt id-aehnliche Suchbegriffe und faellt sonst auf Textsuche zurueck.
+- `session_id`: sucht exakt oder mit Wildcards in Session-IDs.
+- `user_id`: sucht exakt oder mit Wildcards in User-IDs.
+- `text`: durchsucht Konversationstexte, Lane-Texte und Antwortfelder.
+
+### Wildcard-Regeln
+- `fe77*` = Prefix
+- `*wallbox*` = Contains
+- `*c8e9` = Suffix
+- `*` alleine ist absichtlich verboten, damit keine Volltabellensuche startet.
+
+### Index- und Troubleshooting-Hinweise
+- Die API legt Suchindizes beim Start idempotent an.
+- Wenn Suche unerwartet leer bleibt:
+  1. `curl -s http://localhost:8085/api/health` pruefen
+  2. `python3 v9/scripts/check_docs.py` pruefen
+  3. `bash v9/scripts/run_v9_1_16_search_tests.sh` ausfuehren
+  4. `v9/artifacts/runs/v9.1.16-search-.../SUMMARY.md` lesen
+
+### 2-Minuten-Proof fuer Suche
+1. Admin-Client oeffnen.
+2. `*wallbox*` suchen.
+3. Treffer mit Snippets pruefen.
+4. `Open Session` klicken.
+5. Verlauf mit `Original + Uebersetzung` pruefen.
+
+## Patch V9.1.16: Voice/Chat-Paritaet in der UI
+- Customer-Client:
+  - zeigt nach Voice wieder den eigenen Transcript-Eintrag
+  - zeigt die Antwort im selben Chatverlauf
+- Agent-Client:
+  - zeigt fuer Customer-Voice weiterhin `Original + Uebersetzung`
+  - zeigt jetzt auch fuer generierte Antworten wieder die Agent-Lane, auch nach Reload
+
+### Pflicht-Test
+1. Kunde `de`, Agent `en`.
+2. Einmal Voice senden.
+3. Erwartung Customer:
+   - Transcript sichtbar
+   - Antwort sichtbar
+4. Erwartung Agent:
+   - Kundentext: `Original (de) + Uebersetzung (en)`
+   - generierte Antwort: `Original + Uebersetzung (en)`
+5. Verlauf neu laden und nochmals pruefen.

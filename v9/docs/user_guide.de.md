@@ -1,4 +1,4 @@
-# Benutzer Handbuch (DE, Agent View) - V9.1.11
+# Benutzer Handbuch (DE, Agent View) - V9.1.16
 
 ## Was macht der Voice Agent?
 Der Voice Agent verbindet Sprache und Text in einem durchgehenden Ablauf:
@@ -217,3 +217,33 @@ Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-
    - `WS RTT` zeigt nach wenigen Sekunden einen ms-Wert.
 4. Agent antwortet auf Englisch.
 5. Kunde sieht/hoert die deutsche Ausgabe.
+
+## Neu in V9.1.16: Suche mit Wildcards und sicherem Oeffnen
+- Die Suche im Agent-Client versteht jetzt Wildcards wie `fe77*`, `*wallbox*` und `*c8e9`.
+- `auto` erkennt id-aehnliche Suchbegriffe selbst, sonst wird als Text gesucht.
+- Treffer zeigen jetzt mehrere Kontext-Snippets statt nur einer einzelnen Zeile.
+- Ein Klick auf einen Treffer laedt die komplette Session mit `Original + Uebersetzung`.
+
+### Beispiel
+1. Geben Sie `*wallbox*` in die Suche ein.
+2. Waehlen Sie `text` oder lassen Sie `auto`.
+3. In der Trefferliste sehen Sie Session-ID, Zeit und Textausschnitte.
+4. Klicken Sie auf einen Treffer, um den kompletten Verlauf im Agent-Client zu oeffnen.
+
+## Patch V9.1.16: Voice und Chat wieder gleich sichtbar
+- Wenn der Kunde spricht, sieht der Kunde jetzt wieder:
+  - den eigenen Transcript-Eintrag
+  - die Antwort im selben Chatverlauf
+- Im Agent-Client sehen Sie jetzt auch fuer die generierte Antwort wieder:
+  - `Original`
+  - `Uebersetzung`
+
+### 2-Minuten-Proof
+1. Kunde auf `de`, Agent auf `en`.
+2. Kunde spricht Deutsch.
+3. Pruefen:
+   - Kunde sieht Transcript + Antwort.
+   - Agent sieht fuer den Kundentext `Original (de) + Uebersetzung (en)`.
+   - Agent sieht fuer die generierte Antwort ebenfalls `Original + Uebersetzung`.
+4. Verlauf neu laden.
+5. Dasselbe Bild muss erhalten bleiben.

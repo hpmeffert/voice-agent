@@ -1,4 +1,4 @@
-# Demo Guide (DE) - V9.0.0
+# Demo Guide (DE) - V9.1.16
 
 ## Ziel der Demo
 Diese Demo zeigt, wie ein internationales Team Kunden in deren Sprache bedienen kann, ohne dass Agenten ihre Muttersprache verlassen muessen.
@@ -196,3 +196,24 @@ Haben Sie das auch schon erlebt, dass ein Gespraech ploetzlich langsam wird und 
 5. Zeigen:
    - `Original (de)`
    - `Uebersetzung (en)`
+
+## Neue Demo-Story in V9.1.16: Wallbox-Fall schnell wiederfinden
+Kennen Sie das auch? Ein Kunde meldet sich spaeter noch einmal und niemand weiss sofort, welche Session gemeint war.
+
+### Ablauf
+1. Kunde berichtet: "Meine Wallbox geht immer aus."
+2. Admin oeffnet die Suche und gibt `*wallbox*` ein.
+3. Die Trefferliste zeigt Session-ID, Zeit und passende Snippets.
+4. Ein Klick auf `Open Session` zeigt den kompletten Verlauf mit `Original + Uebersetzung`.
+5. Der Agent kann sofort an genau dieser Stelle weiterarbeiten.
+
+## Patch-Demo V9.1.16: Voice und Chat sind wieder gleich
+1. Kunde spricht Deutsch.
+2. Zeigen Sie im Customer-Client:
+   - Transcript sichtbar
+   - Antwort sichtbar
+3. Zeigen Sie im Agent-Client:
+   - Kundentext `Original (de) + Uebersetzung (en)`
+   - generierte Antwort ebenfalls als `Original + Uebersetzung`
+4. Laden Sie den Verlauf neu.
+5. Beweisen Sie, dass dieselbe Darstellung erhalten bleibt.

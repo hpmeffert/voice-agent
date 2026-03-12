@@ -1,4 +1,4 @@
-# Admin Docs (EN) - V9.0.0
+# Admin Docs (EN) - V9.1.16
 
 ## Purpose
 This admin guide explains:
@@ -389,7 +389,7 @@ bash scripts/run_v9_1_9_ui_smoke.sh
 5. Export the last 24h and optionally delete the exported range afterward.
 
 ### Note
-- The header must now show `Voice Agent Admin Client v9.1.15`.
+- The header must now show `Voice Agent Admin Client v9.1.16`.
 - If an older version is still visible: do a hard reload (`Cmd+Shift+R`).
 
 ## Patch V9.1.15-p1: Chat dual-lane + agent runtime scope
@@ -434,3 +434,50 @@ bash scripts/run_v9_1_9_ui_smoke.sh
 - This applies to:
   - live WebSocket events
   - reload / session history
+
+## New in V9.1.16: Search modes, wildcards, and repeatable proof
+### Search modes in the Admin client
+- `auto`: detects identifier-like queries, otherwise falls back to text search.
+- `session_id`: exact or wildcard search on session ids.
+- `user_id`: exact or wildcard search on user ids.
+- `text`: searches conversation text, lane text, and answer fields.
+
+### Wildcard rules
+- `fe77*` = prefix
+- `*wallbox*` = contains
+- `*c8e9` = suffix
+- `*` alone is rejected on purpose to avoid full collection scans.
+
+### Index and troubleshooting notes
+- The API creates search indexes idempotently at startup.
+- If search unexpectedly returns nothing:
+  1. check `curl -s http://localhost:8085/api/health`
+  2. run `python3 v9/scripts/check_docs.py`
+  3. run `bash v9/scripts/run_v9_1_16_search_tests.sh`
+  4. inspect `v9/artifacts/runs/v9.1.16-search-.../SUMMARY.md`
+
+### 2-minute proof for search
+1. Open the Admin client.
+2. Search for `*wallbox*`.
+3. Review the result snippets.
+4. Click `Open Session`.
+5. Verify the full history shows `Original + Translation`.
+
+## Patch V9.1.16: Voice/chat parity in the UI
+- Customer client:
+  - shows the customer's own transcript again after voice input
+  - shows the answer in the same chat history
+- Agent client:
+  - still shows `Original + Translation` for customer voice input
+  - now also shows the agent lane again for generated answers, including reload
+
+### Required proof
+1. Customer `de`, Agent `en`.
+2. Send one voice interaction.
+3. Expected in Customer:
+   - transcript visible
+   - answer visible
+4. Expected in Agent:
+   - customer text: `Original (de) + Translation (en)`
+   - generated answer: `Original + Translation (en)`
+5. Reload the history and verify again.
