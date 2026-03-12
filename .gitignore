@@ -32,6 +32,7 @@ build/
 
 # Artifacts / logs / exports
 artifacts/
+**/artifacts/
 output/
 tmp/
 test_artifacts/

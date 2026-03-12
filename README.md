@@ -25,4 +25,10 @@ Voice STT -> LLM -> TTS platform with isolated version trees.
 - `bash scripts/check_no_artifacts_tracked.sh`
 - `python3 v9/scripts/check_docs.py`
 - `PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v9/docker/api/app.py`
+- `bash scripts/run_full_regression.sh`
 - `bash scripts/run_v9_1_10_smoke.sh`
+
+## Codex structure
+- `docs/codex/workorders/` stores preserved Codex workorders and historical task files.
+- `docs/codex/templates/` stores the reusable workorder, DoD, and standard runbook templates.
+- `docs/codex/README.md` explains how to use the templates and where the stable/dev branches live.
