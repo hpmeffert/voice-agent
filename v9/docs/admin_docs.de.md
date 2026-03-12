@@ -310,7 +310,7 @@ bash scripts/run_v9_1_9_ui_smoke.sh
 
 ### Admin-Kurztest V9.1.11
 1. Admin-Client oeffnen und pruefen:
-   - Header zeigt Version `v9.1.11`
+   - Header zeigt die damalige Release-Version korrekt
    - Perf-Badges werden geladen
 2. Suche im Header:
    - `fe774f*` (Session/User Fragment)
@@ -340,3 +340,96 @@ bash scripts/run_v9_1_9_ui_smoke.sh
    - `GET /api/i18n?scope=customer&lang=<neu>`
 3. Im Kunden-Client die UI-Sprache waehlen.
 4. Falls kein Satz gefunden wird, faellt das System auf Englisch (`en`) zurueck.
+
+## Neu in V9.1.14: Performance Logging + Export ZIP
+- Performance-Logs sind jetzt getrennt in der Log-DB:
+  - DB: `voice_agent_logs` (ENV: `MONGO_LOG_DB`)
+  - Collection: `perf_events`
+- Logging ist zur Laufzeit schaltbar:
+  - `perf_logging_enabled` (an/aus)
+  - `perf_logging_retention_days` (TTL, z. B. 30/365/730)
+  - `perf_export_max_days` (max Export-Zeitfenster)
+  - `perf_logging_sample_rate` (0..1)
+  - `perf_log_text_enabled` (Standard AUS)
+
+### Wichtige Admin-Endpoints
+- `GET /api/admin/settings?user_id=...`
+- `POST /api/admin/settings`
+- `GET /api/admin/perf/health?user_id=...`
+- `GET /api/admin/perf/export?user_id=...&from=<iso>&to=<iso>&format=jsonl|csv|md`
+
+### 2-Minuten Admin-Test
+1. Admin-Settings: `perf_logging_enabled=ON`.
+2. Eine kurze Chat-Interaktion ausfuehren (Kunde -> Agent -> Antwort).
+3. `GET /api/admin/perf/health` pruefen:
+   - `log_db=voice_agent_logs`
+   - `has_ttl_index=true`
+4. Export starten (`/api/admin/perf/export`), ZIP herunterladen.
+5. ZIP pruefen:
+   - `perf_events_*.jsonl` oder `.csv`/`.md`
+   - `README.md`
+   - `stats_summary.json`
+
+## Neu in V9.1.15: Admin Performance Dashboard
+- Admin sieht jetzt oben im Performance-Bereich direkt:
+  - Summary Cards
+  - `avg/p95` fuer STT, LLM, Translate, TTS, Total
+  - `Worst Spikes`
+  - Perf-Suche mit Prefix-Wildcard `*`
+- Neue Endpoints:
+  - `GET /api/admin/perf/summary?user_id=...&window=1h|24h|7d|30d`
+  - `GET /api/admin/perf/search?user_id=...&q=fe77*&from=<iso>&to=<iso>&limit=50`
+  - `POST /api/admin/perf/export/delete`
+
+### 2-Minuten Admin-Test V9.1.15
+1. Admin-Client (`8085`) oeffnen.
+2. `Window` zwischen `1h`, `24h`, `7d`, `30d` wechseln.
+3. In `Worst Spikes` pruefen, welche Session am langsamsten war.
+4. Im Perf-Suchfeld z. B. `fe77*` oder eine Session-ID suchen.
+5. Export fuer die letzten 24h starten und bei Bedarf den exportierten Zeitraum gezielt loeschen.
+
+### Hinweis
+- Der Header muss jetzt `Voice Agent Admin Client v9.1.15` zeigen.
+- Wenn noch eine alte Version sichtbar ist: Hard Reload (`Cmd+Shift+R`).
+
+## Patch V9.1.15-p1: Chat Dual-Lane + Agent Runtime Scope
+- Customer-Chat wird jetzt wie Voice mit Lane-Meta gespeichert.
+- Dadurch sieht der Agent auch nach Reload und im Verlauf wieder:
+  - `Original`
+  - `Uebersetzung`
+- Agent Runtime `Backend/Model` ist im Agent-Client jetzt nur noch read-only mit Hinweis `Admin-controlled`.
+
+### 2-Minuten Proof
+1. Agent-Client: `Agent Sprache = en`, `Incoming speak = ON`.
+2. Customer-Client: Chat auf Deutsch senden: `Meine Wallbox blinkt rot. Was kann ich tun?`
+3. Erwartung im Agent:
+   - `Original (de)`
+   - `Uebersetzung (en)`
+   - Audio nur EN
+4. Agent antwortet EN.
+5. Erwartung im Customer:
+   - Text/Ausgabe in DE.
+
+## Patch V9.1.15-p3: WebSocket RTT + Guardrails
+- Admin, Agent und Customer zeigen jetzt im Header:
+  - `WS: connected/disconnected`
+  - `WS RTT: <ms>`
+- Der RTT-Wert kommt aus einem leichten Ping/Pong ueber dieselbe WebSocket-Verbindung.
+- Vorteil:
+  - kurze Leitungsprobleme sind sofort sichtbar
+  - Demo-Besucher sehen nicht nur "verbunden", sondern auch ob die Leitung traege ist
+
+### Admin-Schnelltest
+1. `http://localhost:8085`, `8086`, `8087` oeffnen.
+2. Warten Sie 5-10 Sekunden.
+3. Pruefen:
+   - alle drei Header zeigen einen RTT-Wert
+   - bei getrenntem Socket steht `WS RTT: -`
+
+### Guardrail fuer Agent-Dual-Lane
+- Bei `customer -> agent` mit unterschiedlicher Sprache muss die Agent-Ansicht zeigen:
+  - `Original`
+  - `Uebersetzung`
+- Das gilt fuer:
+  - Live-WebSocket
+  - Reload / Session-History

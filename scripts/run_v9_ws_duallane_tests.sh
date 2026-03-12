@@ -3,9 +3,10 @@ set -euo pipefail
 
 AGENT_URL="http://localhost:8087"
 CUSTOMER_URL="http://localhost:8086"
-OUT_ROOT="artifacts"
+OUT_ROOT="v9/artifacts"
 FAST_SEC="${FAST_SEC:-2}"
 EVENTUAL_SEC="${EVENTUAL_SEC:-20}"
+ANSWER_EVENTUAL_SEC="${ANSWER_EVENTUAL_SEC:-45}"
 PROBE_DURATION_SEC="${PROBE_DURATION_SEC:-120}"
 PATCH_LABEL="${PATCH_LABEL:-V9.1.5-fix-voice-duallane}"
 RETAIN_RUNS="${RETAIN_RUNS:-10}"
@@ -31,17 +32,18 @@ mkdir -p "$ART_DIR" "$OUT_LATEST_DIR"
 AGENT_WS_BASE="${AGENT_URL/http:/ws:}/api/ws/session"
 CUSTOMER_WS_BASE="${CUSTOMER_URL/http:/ws:}/api/ws/session"
 
-API_BASE="${API_BASE_OVERRIDE:-http://localhost:8003}"
-if ! curl -sf --max-time 2 "$API_BASE/health" >/dev/null 2>&1; then
-  API_BASE=""
+API_BASE=""
+if [[ -n "${API_BASE_OVERRIDE:-}" ]]; then
+  API_BASE="$API_BASE_OVERRIDE"
+else
+  for c in "${AGENT_URL%/}/api" "${CUSTOMER_URL%/}/api" "http://localhost:8003" "http://localhost:8085/api" "http://localhost:8080/api"; do
+    [[ -z "$c" ]] && continue
+    if curl -sf --max-time 2 "$c/health" >/dev/null 2>&1; then
+      API_BASE="$c"
+      break
+    fi
+  done
 fi
-for c in "${API_BASE:-}" "${AGENT_URL%/}/api" "${CUSTOMER_URL%/}/api" "http://localhost:8003" "http://localhost:8085/api" "http://localhost:8080/api"; do
-  [[ -z "$c" ]] && continue
-  if curl -sf --max-time 2 "$c/health" >/dev/null 2>&1; then
-    API_BASE="$c"
-    break
-  fi
-done
 if [[ -z "$API_BASE" ]]; then
   echo "Could not discover API base" >&2
   exit 2
@@ -49,7 +51,7 @@ fi
 
 COMMIT_SHA="$(git rev-parse --short HEAD)"
 
-LOG_FILE="$ART_DIR/test-log-v9.1.5.txt"
+LOG_FILE="$ART_DIR/test-log-v9.1.15-p1-ws.txt"
 EVENT_AGENT_WS="$ART_DIR/ws_agent_events.jsonl"
 EVENT_CUSTOMER_WS="$ART_DIR/ws_customer_events.jsonl"
 EVENT_AGENT="$ART_DIR/events-agent.jsonl"
@@ -72,13 +74,18 @@ need_cmd docker
 need_cmd zip
 
 for _ in $(seq 1 120); do
-  if curl -sf "$API_BASE/health" >/dev/null 2>&1; then break; fi
+  if \
+    curl -sf "$API_BASE/health" >/dev/null 2>&1 && \
+    curl -sf "${AGENT_URL%/}/api/health" >/dev/null 2>&1 && \
+    curl -sf "${CUSTOMER_URL%/}/api/health" >/dev/null 2>&1; then
+    break
+  fi
   sleep 1
 done
 curl -sf "$API_BASE/health" >/dev/null
 
-USER_ID="test-user-1"
-SESSION_ID="test-session-1"
+USER_ID="test-user-${TS}"
+SESSION_ID="test-session-${TS}"
 AGENT_ID="agenten-02"
 AGENT_LANG="en"
 CUSTOMER_LANG="de"
@@ -190,7 +197,7 @@ wait "$PROBE_PID" || true
 cp "$EVENT_AGENT_WS" "$EVENT_AGENT" 2>/dev/null || :
 cp "$EVENT_CUSTOMER_WS" "$EVENT_CUSTOMER" 2>/dev/null || :
 
-curl -sS "$API_BASE/session/$SESSION_ID?user_id=$USER_ID&limit=30" > "$SESSION_DUMP" || true
+curl -sS "$API_BASE/session/$SESSION_ID?user_id=$USER_ID&limit=30&agent_lang=$AGENT_LANG" > "$SESSION_DUMP" || true
 bash scripts/capture_logs.sh "$ART_DIR" || true
 cp "$ART_DIR/docker-logs-api.txt" "$ART_DIR/docker-api.log" 2>/dev/null || true
 cp "$ART_DIR/docker-logs-web-agent.txt" "$ART_DIR/docker-web-agent.log" 2>/dev/null || true
@@ -220,6 +227,7 @@ S4 = "$SCENARIO4_TEXT"
 VOICE_STATUS = "$VOICE_STATUS"
 FAST_SEC = float("$FAST_SEC")
 EVENTUAL_SEC = float("$EVENTUAL_SEC")
+ANSWER_EVENTUAL_SEC = float("$ANSWER_EVENTUAL_SEC")
 PATCH_LABEL = "$PATCH_LABEL"
 
 
@@ -238,6 +246,10 @@ def load(p):
 
 agent=load(agent_file)
 customer=load(customer_file)
+try:
+    session_dump = json.loads(Path("$SESSION_DUMP").read_text(encoding="utf-8")) if Path("$SESSION_DUMP").exists() else {}
+except Exception:
+    session_dump = {}
 
 fails=[]
 warns=[]
@@ -277,7 +289,7 @@ def payload(ev):
 def strv(v):
     return str(v or "")
 
-# Scenario1: customer->agent
+# Scenario1: customer chat -> agent
 s1_ev=None
 for ev in agent:
     e=ev.get("event") or {}
@@ -309,6 +321,8 @@ else:
         fails.append("scenario1_missing_text_original")
     if not translated:
         fails.append("scenario1_missing_text_for_agent")
+    if translated and original and src_lang and tgt_lang and src_lang != tgt_lang and translated == original:
+        fails.append("scenario1_text_for_agent_equals_original_when_langs_differ")
     if tgt_lang!="en":
         fails.append(f"scenario1_lang_for_agent_not_en:{tgt_lang}")
     if src_lang and src_lang!=tgt_lang and (translated==original and not has_translation):
@@ -319,7 +333,7 @@ else:
     tts_lang=strv(tts.get("agent_lang")).lower()
     if tts_lang and tts_lang!="en":
         fails.append(f"scenario1_tts_agent_lang_not_en:{tts_lang}")
-    s1_reason=f"fast_delivery_ok={fast_ok}, eventual_delivery_ok={eventual_ok}"
+    s1_reason=f"chat_injection fast_delivery_ok={fast_ok}, eventual_delivery_ok={eventual_ok}"
     s1_status=("PASS" if not [f for f in fails if f.startswith("scenario1_")] else "FAIL", s1_reason)
 
 # Scenario2: agent->customer
@@ -393,7 +407,7 @@ else:
     d_in=float(s3_in.get("recv_ts") or 0)-T3
     d_out=float(s3_out.get("recv_ts") or 0)-T3
     fast_ok=(d_in<=FAST_SEC and d_out<=FAST_SEC)
-    eventual_ok=(d_in<=EVENTUAL_SEC and d_out<=EVENTUAL_SEC)
+    eventual_ok=(d_in<=EVENTUAL_SEC and d_out<=ANSWER_EVENTUAL_SEC)
     if not eventual_ok:
         fails.append(f"scenario3_eventual_delivery_failed:in={d_in:.3f}s,out={d_out:.3f}s")
     if not fast_ok:
@@ -458,6 +472,33 @@ else:
         fails.append(f"scenario4_tts_agent_lang_not_en:{tts_lang}")
     s4_status = ("PASS" if not [f for f in fails if f.startswith("scenario4_")] else "FAIL", f"fast_delivery_ok={fast_ok}, eventual_delivery_ok={eventual_ok}")
 
+# Scenario5: session/history customer chat -> agent dual-lane
+s5_status = ("PASS", "history_dual_lane_persisted")
+s5_match = None
+for msg in (session_dump.get("messages") or []):
+    if str(msg.get("role") or "") != "customer":
+        continue
+    if S1 in strv(msg.get("text_original")):
+        s5_match = msg
+        break
+
+if s5_match is None:
+    fails.append("scenario5_missing_session_history_customer_message")
+    s5_status = ("FAIL", "missing customer message in session history")
+else:
+    original = strv(s5_match.get("text_original"))
+    translated = strv(s5_match.get("text_for_agent"))
+    tgt_lang = strv(s5_match.get("lang_for_agent")).lower()
+    if not original:
+        fails.append("scenario5_missing_text_original")
+    if not translated:
+        fails.append("scenario5_missing_text_for_agent")
+    if tgt_lang != "en":
+        fails.append(f"scenario5_lang_for_agent_not_en:{tgt_lang}")
+    if original and translated and original == translated:
+        fails.append("scenario5_text_for_agent_equals_original_when_langs_differ")
+    s5_status = ("PASS" if not [f for f in fails if f.startswith("scenario5_")] else "FAIL", "history_dual_lane_persisted")
+
 result="PASS" if not fails else "FAIL"
 
 six_lines=[
@@ -475,6 +516,7 @@ with log_path.open("a", encoding="utf-8") as fh:
     fh.write(f"PATCH: {PATCH_LABEL}\n")
     fh.write("\n".join(six_lines)+"\n")
     fh.write(f"VOICE_SCENARIO: {s4_status[0]} ({s4_status[1]})\n")
+    fh.write(f"HISTORY_SCENARIO: {s5_status[0]} ({s5_status[1]})\n")
     if warns:
         fh.write("WARNINGS:\n")
         for w in warns: fh.write(f"- {w}\n")

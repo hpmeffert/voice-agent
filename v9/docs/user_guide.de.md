@@ -178,3 +178,42 @@ Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-
 2. Trefferliste zeigt Session-ID, Kontext-Snippet und Zeit.
 3. Klick auf Treffer oeffnet direkt die Session.
 4. Bei Bedarf `Agent Settings ⚙︎` oeffnen und Einstellungen speichern.
+
+## Neu in V9.1.14: Stabilere Performance-Beobachtung (Admin-seitig)
+- Fuer Agent/Kunde bleibt die Bedienung gleich.
+- Admin kann jetzt Performance-Logging gezielt ein-/ausschalten.
+- Vorteil fuer Benutzer:
+  - Stoerungen werden schneller analysiert
+  - weniger Trial-and-Error im Live-Betrieb
+  - klare Export-Datei fuer Team-Analyse
+
+## Neu in V9.1.15: Performance Dashboard (nur Admin)
+- Admin kann jetzt direkt im Admin-Client sehen:
+  - Summary Cards
+  - Worst Spikes
+  - Perf-Suche
+- Fuer Kunde und Agent aendert sich dadurch nichts an der normalen Bedienung.
+
+## Patch V9.1.15-p1: Stabilerer Chat fuer den Agenten
+- Wenn ein Kunde jetzt schreibt, bekommt der Agent dieselbe klare Dual-Lane wie bei Voice:
+  - `Original`
+  - `Uebersetzung`
+- Das gilt auch nach einem Reload des Agent-Clients.
+- `Backend/Model` sind im Agent-Client nicht mehr veraenderbar, damit Agent und Admin nicht gegeneinander arbeiten.
+
+## Patch V9.1.15-p3: WS RTT + Anzeige-Sicherheit
+- Oben im Header von Admin, Agent und Kunde sehen Sie jetzt zusaetzlich `WS RTT: <ms>`.
+- Diese Zahl zeigt die ungefaehre Hin-und-zurueck-Laufzeit der WebSocket-Verbindung.
+- Wenn die Verbindung getrennt ist, steht dort `WS RTT: -`.
+- Fuer den Agenten gilt jetzt noch strenger:
+  - Bei Kundennachrichten mit anderer Sprache muessen `Original` und `Uebersetzung` sichtbar sein.
+  - Wenn `Empfang auf Agent sprechen` AN ist, wird nur die Agent-Sprache gesprochen.
+
+### 2-Minuten-Proof
+1. Agent auf `en` stellen.
+2. Kunde auf `de` stellen und einen deutschen Chat- oder Voice-Text senden.
+3. Pruefen:
+   - Agent sieht `Original (de)` + `Uebersetzung (en)`.
+   - `WS RTT` zeigt nach wenigen Sekunden einen ms-Wert.
+4. Agent antwortet auf Englisch.
+5. Kunde sieht/hoert die deutsche Ausgabe.

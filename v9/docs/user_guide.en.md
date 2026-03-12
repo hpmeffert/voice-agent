@@ -178,3 +178,42 @@ If customer language is detected, the response language and customer voice profi
 2. Result list shows session id, snippet, and timestamp.
 3. Clicking a result opens that session directly.
 4. Agent opens `Agent Settings ⚙︎` to adjust and save settings.
+
+## New in V9.1.14: Better performance observability (admin-side)
+- Agent/Customer workflow stays the same.
+- Admin can now enable/disable performance logging on demand.
+- User-facing value:
+  - faster incident analysis
+  - less trial-and-error during live support
+  - exportable evidence package for team debugging
+
+## New in V9.1.15: Performance dashboard (admin only)
+- Admin can now see directly in the Admin client:
+  - summary cards
+  - worst spikes
+  - perf search
+- This does not change normal customer or agent workflows.
+
+## Patch V9.1.15-p1: More stable chat view for the agent
+- When a customer types a chat message, the agent now gets the same clear dual-lane view as with voice:
+  - `Original`
+  - `Translation`
+- This also remains correct after reloading the Agent client.
+- `Backend/Model` are no longer editable in Agent UI, so agent and admin settings do not drift apart.
+
+## Patch V9.1.15-p3: WS RTT + display invariants
+- The header in Admin, Agent, and Customer now also shows `WS RTT: <ms>`.
+- This number shows the approximate WebSocket round-trip time.
+- If the connection is down, it shows `WS RTT: -`.
+- The agent view is now stricter about customer messages:
+  - If languages differ, `Original` and `Translation` must both be visible.
+  - If incoming speak is ON, only the agent-language lane is spoken.
+
+### 2-minute proof
+1. Set Agent language to `en`.
+2. Set Customer language to `de` and send a German chat or voice message.
+3. Check:
+   - Agent sees `Original (de)` + `Translation (en)`.
+   - `WS RTT` shows a millisecond value within a few seconds.
+4. Agent replies in English.
+5. Customer sees/hears the German output.

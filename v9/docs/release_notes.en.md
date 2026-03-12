@@ -1,4 +1,4 @@
-# Release Notes (EN) - V7.0.0 through V9.1.11
+# Release Notes (EN) - V7.0.0 through V9.1.15
 
 ## History
 - V7.0.0: isolated V7 scaffold, dedicated ports, admin demo defaults.
@@ -27,6 +27,8 @@
 - V9.1.8: Admin performance toggle + new search endpoint (`/api/admin/search`) with `auto|session_id|user_id|text` modes, ID wildcard `*`, and clickable session open in Admin UI.
 - V9.1.9: Cleaned Agent UI (sticky header), unified always-visible search (`q` + `mode`), admin settings moved into a safe Drawer panel, and header performance summary (`avg/p95`) via `window=10m`.
 - V9.1.11: Strict role separation: Agent client now has agent-scoped settings only, while Admin client keeps global admin settings + header perf badges + unified admin search; agent search uses `/api/agent/search`.
+- V9.1.14: Toggleable performance logging in a dedicated log DB (`voice_agent_logs.perf_events`) with TTL, queue health, and ZIP export.
+- V9.1.15: Admin performance dashboard with summary cards, worst-spikes table, prefix search, and export/delete workflow.
 
 ## Why V9.1.0 matters
 - Prevents wrong-language speech on both Agent and Customer clients.
@@ -104,3 +106,23 @@
 - Customers can switch UI label language (DE/EN) directly in the header.
 - UI strings are DB-backed in `ui_i18n_strings`, enabling future language expansion without frontend rewrites.
 - UI language preference is persisted per user in `user_prefs` and restored on load.
+
+## Why V9.1.14 matters
+- Performance logs are now isolated from conversation data in `voice_agent_logs.perf_events`.
+- Logging can be controlled at runtime (ON/OFF, sample rate, retention, export max days).
+- Admin can export bounded ZIP archives (`jsonl|csv|md` + `README.md` + `stats_summary.json`).
+- Perf health exposes queue depth and dropped-event counters to spot overload early.
+
+## Why V9.1.15 matters
+- Admin can immediately see whether STT, LLM, translation, or TTS caused the slowdown.
+- `Worst Spikes` exposes slow sessions before anyone has to read raw logs.
+- Prefix search with `*` speeds up analysis by `user_id`, `session_id`, or `error_code`.
+
+## Why V9.1.15-p1 matters
+- Customer chat now behaves as reliably as voice for the agent: original + translation remain available in live view and history.
+- Agent Runtime `Backend/Model` is clearly admin-controlled, avoiding config drift in the Agent client.
+
+## Why V9.1.15-p3 matters
+- Admin, Agent, and Customer now show a simple `WS RTT` value in the header, so line latency becomes visible.
+- The agent view enforces the dual-lane invariant more strictly: customer messages should show `Original + Translation` whenever languages differ.
+- The smoke test now validates health, WS ping/pong, non-empty Help docs, and a chat dual-lane proof in one run.

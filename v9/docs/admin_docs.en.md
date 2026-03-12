@@ -310,7 +310,7 @@ bash scripts/run_v9_1_9_ui_smoke.sh
 
 ### Admin quick test V9.1.11
 1. Open Admin client and verify:
-   - header shows version `v9.1.11`
+   - header shows the correct release version for that build
    - perf badges are populated
 2. Header search:
    - `fe774f*` (session/user fragment)
@@ -340,3 +340,97 @@ bash scripts/run_v9_1_9_ui_smoke.sh
    - `GET /api/i18n?scope=customer&lang=<new>`
 3. Select that UI language in customer client.
 4. If a key is missing, UI falls back to English (`en`).
+
+## New in V9.1.14: Performance logging + ZIP export
+- Performance logs are now separated in a dedicated log database:
+  - DB: `voice_agent_logs` (ENV: `MONGO_LOG_DB`)
+  - Collection: `perf_events`
+- Runtime-toggle settings:
+  - `perf_logging_enabled` (on/off)
+  - `perf_logging_retention_days` (TTL, e.g. 30/365/730)
+  - `perf_export_max_days` (max export window)
+  - `perf_logging_sample_rate` (0..1)
+  - `perf_log_text_enabled` (default OFF)
+
+### Key admin endpoints
+- `GET /api/admin/settings?user_id=...`
+- `POST /api/admin/settings`
+- `GET /api/admin/perf/health?user_id=...`
+- `GET /api/admin/perf/export?user_id=...&from=<iso>&to=<iso>&format=jsonl|csv|md`
+
+### 2-minute admin test
+1. In admin settings, set `perf_logging_enabled=ON`.
+2. Run one short chat interaction (customer -> agent -> response).
+3. Check `GET /api/admin/perf/health`:
+   - `log_db=voice_agent_logs`
+   - `has_ttl_index=true`
+4. Trigger export via `/api/admin/perf/export`, download ZIP.
+5. Verify ZIP contains:
+   - `perf_events_*.jsonl` or `.csv`/`.md`
+   - `README.md`
+   - `stats_summary.json`
+
+## New in V9.1.15: Admin Performance Dashboard
+- Admin can now see directly in the performance area:
+  - summary cards
+  - `avg/p95` for STT, LLM, Translate, TTS, Total
+  - `Worst Spikes`
+  - perf search with prefix wildcard `*`
+- New endpoints:
+  - `GET /api/admin/perf/summary?user_id=...&window=1h|24h|7d|30d`
+  - `GET /api/admin/perf/search?user_id=...&q=fe77*&from=<iso>&to=<iso>&limit=50`
+  - `POST /api/admin/perf/export/delete`
+
+### 2-minute admin test V9.1.15
+1. Open Admin client (`8085`).
+2. Switch `Window` between `1h`, `24h`, `7d`, `30d`.
+3. In `Worst Spikes`, check which session was slowest.
+4. Search in the perf field with `fe77*` or a session id.
+5. Export the last 24h and optionally delete the exported range afterward.
+
+### Note
+- The header must now show `Voice Agent Admin Client v9.1.15`.
+- If an older version is still visible: do a hard reload (`Cmd+Shift+R`).
+
+## Patch V9.1.15-p1: Chat dual-lane + agent runtime scope
+- Customer chat now persists the same lane metadata as voice.
+- This means the agent keeps seeing both:
+  - `Original`
+  - `Translation`
+  even after reload and in session history.
+- Agent Runtime `Backend/Model` in Agent UI is now read-only and clearly marked `Admin-controlled`.
+
+### 2-minute proof
+1. Agent client: `Agent language = en`, `Incoming speak = ON`.
+2. Customer client: send German chat text: `Meine Wallbox blinkt rot. Was kann ich tun?`
+3. Expected in Agent:
+   - `Original (de)`
+   - `Translation (en)`
+   - audio only in EN
+4. Agent replies in EN.
+5. Expected in Customer:
+   - text/audio in DE.
+
+## Patch V9.1.15-p3: WebSocket RTT + guardrails
+- Admin, Agent, and Customer now show in the header:
+  - `WS: connected/disconnected`
+  - `WS RTT: <ms>`
+- The RTT value comes from a lightweight ping/pong over the existing WebSocket connection.
+- Benefit:
+  - short network slowdowns become visible immediately
+  - demos show not only "connected", but also whether the socket is responsive
+
+### Admin quick check
+1. Open `http://localhost:8085`, `8086`, and `8087`.
+2. Wait 5-10 seconds.
+3. Verify:
+   - all three headers show an RTT value
+   - on disconnect, the UI falls back to `WS RTT: -`
+
+### Guardrail for agent dual-lane
+- For `customer -> agent` with different languages, the agent view must show:
+  - `Original`
+  - `Translation`
+- This applies to:
+  - live WebSocket events
+  - reload / session history

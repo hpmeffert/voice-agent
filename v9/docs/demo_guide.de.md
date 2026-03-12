@@ -143,3 +143,56 @@ Stellen Sie sich vor: Sie wollen bewusst eine andere Kundensprache ausliefern (z
 3. Dual-Lane kurz live pruefen:
    - Kunde DE Voice -> Agent EN (Original + Uebersetzung sichtbar)
    - Agent EN -> Kunde DE
+
+## V9.1.14 Demo Fokus: Performance-Spitze finden und exportieren
+Kennst du das auch? Ein Demo-Lauf war langsam, aber keiner weiss, ob STT, LLM oder TTS der Engpass war.
+
+1. Admin aktiviert `Perf logging enabled`.
+2. Fuehre 2-3 kurze Kundenanfragen aus.
+3. Admin oeffnet `Admin Metrics` und zeigt:
+   - STT/LLM/TTS/Total
+   - Queue/Drop-Werte aus `perf/health`
+4. Admin startet `Perf Export (ZIP)` fuer die letzten 5 Minuten.
+5. Ergebnis zeigen:
+   - `perf_events_...`
+   - `stats_summary.json`
+   - klare Basis fuer Team-Analyse.
+
+## V9.1.15 Demo Fokus: Engpass in 30 Sekunden sichtbar machen
+Haben Sie das auch schon erlebt, dass ein Gespraech ploetzlich langsam wird und keiner sofort weiss, ob STT, Uebersetzung, LLM oder TTS schuld war?
+
+1. Admin-Client oeffnen und `Performance` zeigen.
+2. `Window=24h` waehlen.
+3. Summary Cards kurz erklaeren:
+   - Anzahl Interaktionen
+   - Fehlerquote
+   - `avg/p95` je Stage
+4. `Worst Spikes` zeigen:
+   - welche Session war am langsamsten
+   - welches Stage war der groesste Engpass
+5. Mit `fe77*` oder Session-ID im Perf-Suchfeld direkt den Fall suchen.
+6. Danach ZIP Export starten und den Unterschied erklaeren:
+   - Dashboard = schneller Live-Blick
+   - ZIP = tieferer Analysebeleg.
+
+## V9.1.15-p1 Demo Fokus: Chat ist genauso sauber wie Voice
+1. Agent auf Englisch einstellen.
+2. Kunde schreibt auf Deutsch.
+3. Zeigen:
+  - Agent sieht `Original (de)` + `Uebersetzung (en)`.
+  - Agent hoert nur EN, wenn `Incoming speak` aktiv ist.
+4. Agent antwortet EN.
+5. Kunde sieht/hoert weiter DE.
+
+## V9.1.15-p3 Demo Fokus: Verbindung ist nicht nur online, sondern messbar
+1. Admin, Agent und Customer gleichzeitig oeffnen.
+2. In allen drei Headern zeigen:
+   - `WS: connected`
+   - `WS RTT: <ms>`
+3. Kurz erklaeren:
+   - `connected` sagt nur, dass der Socket lebt.
+   - `WS RTT` zeigt, wie schnell die Verbindung wirklich antwortet.
+4. Danach Kunde DE -> Agent EN testen.
+5. Zeigen:
+   - `Original (de)`
+   - `Uebersetzung (en)`

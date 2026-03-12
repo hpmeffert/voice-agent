@@ -138,3 +138,56 @@ Imagine: supervisor wants to force a specific output language for verification.
 3. Quick dual-lane proof:
    - Customer DE voice -> Agent EN (Original + Translation visible)
    - Agent EN -> Customer DE
+
+## V9.1.14 Demo Focus: Investigate a performance spike
+Have you ever seen a slow demo and nobody knew whether STT, LLM, or TTS caused it?
+
+1. Admin enables `Perf logging enabled`.
+2. Run 2-3 short customer interactions.
+3. Open `Admin Metrics` and show:
+   - STT/LLM/TTS/Total
+   - queue/drop counters from `perf/health`
+4. Run `Perf Export (ZIP)` for the last 5 minutes.
+5. Show output:
+   - `perf_events_...`
+   - `stats_summary.json`
+   - clear evidence for team debugging.
+
+## V9.1.15 Demo Focus: Make the bottleneck visible in 30 seconds
+Have you ever had a conversation suddenly feel slow and nobody could say whether STT, translation, LLM, or TTS caused it?
+
+1. Open the Admin client and show `Performance`.
+2. Set `Window=24h`.
+3. Explain the summary cards:
+   - interaction count
+   - error rate
+   - `avg/p95` per stage
+4. Show `Worst Spikes`:
+   - which session was slowest
+   - which stage caused the biggest delay
+5. Use `fe77*` or a session id in the perf search field.
+6. Then run ZIP export and explain:
+   - dashboard = quick live view
+   - ZIP = deeper follow-up evidence.
+
+## V9.1.15-p1 Demo Focus: Chat is now as clean as voice
+1. Set the agent to English.
+2. Customer types in German.
+3. Show:
+  - Agent sees `Original (de)` + `Translation (en)`.
+  - Agent hears EN only when `Incoming speak` is enabled.
+4. Agent replies in EN.
+5. Customer still sees/hears DE.
+
+## V9.1.15-p3 Demo Focus: The connection is measurable, not only online
+1. Open Admin, Agent, and Customer at the same time.
+2. Show in all three headers:
+   - `WS: connected`
+   - `WS RTT: <ms>`
+3. Explain:
+   - `connected` only says the socket exists.
+   - `WS RTT` shows how quickly the connection actually responds.
+4. Then test Customer DE -> Agent EN.
+5. Show:
+   - `Original (de)`
+   - `Translation (en)`

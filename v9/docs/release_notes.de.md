@@ -1,4 +1,4 @@
-# Release Notes (DE) - V7.0.0 bis V9.1.11
+# Release Notes (DE) - V7.0.0 bis V9.1.15
 
 ## Historie
 - V7.0.0: V7-Scaffold isoliert, eigene Ports, Admin-Demo-Defaults.
@@ -27,6 +27,8 @@
 - V9.1.8: Admin-Performance-Toggle + neue Suche (`/api/admin/search`) mit Mode `auto|session_id|user_id|text`, Wildcard `*` fuer IDs und klickbarem Session-Open im Admin-UI.
 - V9.1.9: Agent-UI aufgeraeumt (sticky Header), einheitliche Suche (`q` + `mode`) immer sichtbar, Admin-Einstellungen in Drawer mit sicheren Controls, und Performance-Header mit `avg/p95` aus `window=10m`.
 - V9.1.11: Klare Rollentrennung: Agent-Client nur mit agentenspezifischen Settings, Admin-Client mit globalem Admin-Panel + Header-Perf-Badges + zentraler Admin-Suche; Agent-Suche ueber `/api/agent/search`.
+- V9.1.14: Togglebares Performance-Logging in separater Log-DB (`voice_agent_logs.perf_events`) mit TTL, Queue-Health und ZIP-Export.
+- V9.1.15: Admin Performance Dashboard mit Summary Cards, Worst-Spikes-Tabelle, Prefix-Suche und Export-/Delete-Workflow.
 
 ## Nutzen von V9.1.0
 - Keine falsche Sprache mehr im Agenten- und Kunden-TTS-Pfad.
@@ -104,3 +106,23 @@
 - Kunden koennen die Oberflaechensprache (`UI`) direkt im Header zwischen DE/EN umstellen.
 - UI-Strings kommen DB-basiert aus `ui_i18n_strings`, damit neue Sprachen spaeter ohne Frontend-Code eingefuegt werden koennen.
 - Die UI-Sprachpraeferenz wird pro Benutzer in `user_prefs` gespeichert und beim Laden wiederhergestellt.
+
+## Nutzen von V9.1.14
+- Performance-Logs sind jetzt getrennt von den Konversationsdaten in `voice_agent_logs.perf_events`.
+- Logging ist kontrollierbar (ON/OFF, Sample-Rate, Retention, Export-Max-Tage).
+- Admin kann ZIP-Archive fuer ein Zeitfenster exportieren (`jsonl|csv|md` + `README.md` + `stats_summary.json`).
+- Perf-Health zeigt Queue-Tiefe und verworfene Events, damit Lastspitzen sichtbar werden.
+
+## Nutzen von V9.1.15
+- Admin sieht sofort, ob STT, LLM, Translate oder TTS den Engpass verursacht.
+- `Worst Spikes` macht langsame Sessions sichtbar, bevor jemand in Rohlogs suchen muss.
+- Prefix-Suche mit `*` beschleunigt die Analyse nach `user_id`, `session_id` oder `error_code`.
+
+## Nutzen von V9.1.15-p1
+- Customer-Chat verhaelt sich fuer den Agenten jetzt genauso stabil wie Voice: Original + Uebersetzung bleiben auch im Verlauf erhalten.
+- Agent Runtime `Backend/Model` ist klar an Admin gebunden, damit kein Konfigurationsdrift im Agent-Client entsteht.
+
+## Nutzen von V9.1.15-p3
+- Admin, Agent und Customer zeigen jetzt einen einfachen `WS RTT`-Wert im Header und machen Leitungslatenz sichtbar.
+- Die Agent-Ansicht haelt die Dual-Lane-Invariante strenger ein: Kundennachrichten sollen bei Sprachunterschied immer `Original + Uebersetzung` zeigen.
+- Der Smoke-Test prueft jetzt Health, WS-Ping/Pong, nicht-leere Help-Dokumente und einen Chat-Dual-Lane-Nachweis in einem Lauf.

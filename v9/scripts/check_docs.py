@@ -77,8 +77,13 @@ for label in ["Admin Token speichern", "Benutzer Handbuch", "Demo Guide", "Admin
 
 checks = [
     (r'id="silenceMs"[^\n]*value="1300"', "silence default must be 1300"),
-    (r"Voice Agent Admin Client v9\.1\.11", "header/title must show v9.1.11"),
+    (r"Voice Agent Admin Client v9\.1\.15", "header/title must show v9.1.15"),
+    (r'id="adminWsState"', "admin must expose WS state pill"),
+    (r'id="adminWsRtt"', "admin must expose WS RTT pill"),
     (r'id="adminConversationPanel"', "admin must expose conversation session history panel"),
+    (r'id="adminPerfExportRun"', "admin must expose perf export action"),
+    (r'id="adminPerfCards"', "admin must expose perf summary cards"),
+    (r'id="adminPerfSpikesTable"', "admin must expose worst spikes table"),
 ]
 for pattern, msg in checks:
     if re.search(pattern, html) is None:
@@ -89,6 +94,7 @@ agent_checks = [
     (r"Agent Sprache", "agent UI must expose agent language selector"),
     (r"Customer output lang", "agent UI must expose customer output language selector"),
     (r"auto \(detected customer profile\)", "agent UI must provide auto customer profile option"),
+    (r'id="wsRtt"', "agent UI must expose WS RTT pill"),
 ]
 for pattern, msg in agent_checks:
     if re.search(pattern, agent_html, flags=re.IGNORECASE) is None:
@@ -96,6 +102,8 @@ for pattern, msg in agent_checks:
         sys.exit(1)
 
 customer_checks = [
+    (r'id="headerWsState"', "customer UI must expose WS state line"),
+    (r'id="headerWsRtt"', "customer UI must expose WS RTT line"),
     (r'id="helpBtn"', "customer UI must expose help button"),
     (r"\?<\/button>", "customer UI help button should use ? icon"),
     (r"/api/docs\?type=customer", "customer UI must load dedicated customer guide"),
