@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent Agent UI V8.9.0</title>
+  <title>Voice Agent Agent UI V8.10.2</title>
   <style>
     body { font-family: ui-sans-serif, system-ui; margin:0; background:#f5f7fb; color:#111827; }
     .wrap { max-width: 1200px; margin: 18px auto; padding: 0 14px; }
@@ -40,7 +40,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:10px;">
       <div>
-        <h2 style="margin:0;">Voice Agent Agent UI V8.9.0</h2>
+        <h2 style="margin:0;">Voice Agent Agent UI V8.10.2</h2>
         <div class="muted">Inbox + Live Chat (Call-Center Handoff MVP)</div>
       </div>
       <div class="row">
@@ -83,7 +83,7 @@
             <textarea id="msgInput" placeholder="Agent-Antwort schreiben..."></textarea>
             <div class="row" style="margin-top:8px;">
               <label><input id="speak" type="checkbox" /> Speak to customer</label>
-              <label>TTS <select id="ttsLang"><option value="de">de</option><option value="en">en</option><option value="fr">fr</option><option value="it">it</option><option value="es">es</option></select></label>
+              <label>Customer output lang <select id="ttsLang"><option value="de">de</option><option value="en">en</option><option value="fr">fr</option><option value="it">it</option><option value="es">es</option></select></label>
               <button id="btnAcceptHandoff">Handoff annehmen</button>
               <button id="sendBtn" class="primary">Send Agent Message</button>
             </div>
@@ -273,7 +273,7 @@ function connectWs(){
         chatMetaEl.textContent = `User ${activeSessionUserId || '-'} | handoff=accepted`;
       }
       const role = e.from || 'system';
-      const text = (e.payload && e.payload.text) || JSON.stringify(e.payload || {});
+      const text = (e.payload && (e.payload.text_original || e.payload.text)) || JSON.stringify(e.payload || {});
       addMsg(role, text, e.ts);
     } catch(_) {}
   };

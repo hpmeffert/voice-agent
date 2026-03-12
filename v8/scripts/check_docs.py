@@ -18,6 +18,14 @@ required = [
     ROOT / "v8/docs/SECURITY_BASELINE_MAC.md",
     ROOT / "v8/docs/MIGRATION_V7_TO_V8.md",
     ROOT / "v8/docs/RELEASE_NOTES_TEMPLATE_V8.md",
+    ROOT / "v8/docs/ui/HELP_USER_DE.md",
+    ROOT / "v8/docs/ui/HELP_USER_EN.md",
+    ROOT / "v8/docs/ui/DEMO_GUIDE_DE.md",
+    ROOT / "v8/docs/ui/DEMO_GUIDE_EN.md",
+    ROOT / "v8/docs/admin/HELP_ADMIN_DE.md",
+    ROOT / "v8/docs/admin/HELP_ADMIN_EN.md",
+    ROOT / "v8/docs/RELEASE_DE.md",
+    ROOT / "v8/docs/RELEASE_EN.md",
 ]
 
 for p in required:
@@ -81,7 +89,10 @@ for label in ["Admin Token speichern", "Benutzer Handbuch", "Demo Guide", "Admin
 
 checks = [
     (r"id=\"silenceMs\"[^\n]*value=\"1300\"", "silence default must be 1300"),
-    (r"Voice Agent V8\.9\.0", "header/title must show V8.9.0 version"),
+    (r"Voice Agent V8\.10\.2", "header/title must show V8.10.2 version"),
+    (r"id=\"answerTranslatedText\"", "UI must expose translated answer pane"),
+    (r"id=\"latTranslation\"", "UI must expose translation latency"),
+    (r"resolveHelpDocPath\(", "UI must resolve bilingual help docs"),
 ]
 for pattern, msg in checks:
     if re.search(pattern, html) is None:
@@ -92,7 +103,7 @@ doc_rules = [
     (ROOT / "v8/docs/ui/HELP_USER.md", [r"^# Benutzer Handbuch", r"Beispiel", r"Funktion:"], "help user"),
     (ROOT / "v8/docs/ui/DEMO_GUIDE.md", [r"Story-Flow 1", r"Story-Flow 2"], "demo guide"),
     (ROOT / "v8/docs/admin/HELP_ADMIN.md", [r"Admin-Funktionen", r"Wofuer gut", r"Parameter", r"Release-Verweis"], "admin docs"),
-    (ROOT / "v8/docs/RELEASE.md", [r"V7\.0\.0", r"V8\.9\.0"], "release notes"),
+    (ROOT / "v8/docs/RELEASE.md", [r"V7\.0\.0", r"V8\.10\.2"], "release notes"),
     (ROOT / "v8/docs/transport_channels.md", [r"session\.<session_id>", r"handoff\.request", r"handoff\.accept"], "transport channels"),
     (
         ROOT / "v8/docs/SECURITY_BASELINE_MAC.md",
@@ -104,6 +115,10 @@ doc_rules = [
         [r"Migration V7 -> V8", r"Services in V8", r"Relevante ENV-Parameter"],
         "migration notes",
     ),
+    (ROOT / "v8/docs/ui/HELP_USER_DE.md", [r"Benutzer Handbuch", r"TTS Output Language"], "help user de"),
+    (ROOT / "v8/docs/ui/HELP_USER_EN.md", [r"User Guide", r"TTS Output Language"], "help user en"),
+    (ROOT / "v8/docs/ui/DEMO_GUIDE_DE.md", [r"Story-Flow 1", r"Story-Flow 2", r"Story-Flow 3"], "demo de"),
+    (ROOT / "v8/docs/ui/DEMO_GUIDE_EN.md", [r"Story-Flow 1", r"Story-Flow 2", r"Story-Flow 3"], "demo en"),
 ]
 for path, patterns, label in doc_rules:
     text = path.read_text(encoding="utf-8", errors="ignore")
@@ -134,9 +149,15 @@ if "/docs/admin/" in agent_html or "/docs/RELEASE" in agent_html or "/docs/ui/DE
     sys.exit(1)
 
 release = (ROOT / "v8/docs/RELEASE.md").read_text(encoding="utf-8", errors="ignore")
-for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0", "V8.3.0", "V8.4.0", "V8.5.0", "V8.6.0", "V8.7.0", "V8.8.0", "V8.9.0"]:
+for tag in ["V7.0.0", "V8.0.0", "V8.1.0", "V8.2.0", "V8.3.0", "V8.4.0", "V8.5.0", "V8.6.0", "V8.7.0", "V8.8.0", "V8.9.0", "V8.10.2"]:
     if tag not in release:
         print(f"[V8-DOC-CHECK][FAIL] release history missing {tag}")
+        sys.exit(1)
+
+api_src = (ROOT / "v8/docker/api/app.py").read_text(encoding="utf-8", errors="ignore")
+for required_token in ["answer_translated", "answer_tts_lang", "translation_ms", "translate_answer_text", "tts_lang: str = Form"]:
+    if required_token not in api_src:
+        print(f"[V8-DOC-CHECK][FAIL] API missing token: {required_token}")
         sys.exit(1)
 
 print("[V8-DOC-CHECK][OK] docs + help menu contract passed")

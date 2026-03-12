@@ -1,4 +1,4 @@
-# TEAM QUICKSTART - V8.9.0 (macOS)
+# TEAM QUICKSTART - V8.10.2 (macOS)
 
 ## Ports
 - Admin UI: `http://localhost:8082`
@@ -24,6 +24,23 @@ curl -s http://localhost:8082/api/models
 curl -s http://localhost:8082/api/eventbus/health
 python3 v8/scripts/check_docs.py
 ```
+
+## TTS Translation Test (V8.10.2)
+1. Admin UI `http://localhost:8082` oeffnen.
+2. `TTS output language` auf `en` stellen.
+3. Deutsch sprechen und senden.
+4. Erwartung:
+   - `Answer (original)` ist DE
+   - `Answer (translated)` ist EN
+   - Audio wird in EN gesprochen
+   - Metrics zeigen `translation_ms`
+
+## Required Voice Files (host-mounted)
+- `de_DE-thorsten-medium.onnx` + `.json`
+- `en_GB-northern_english_male-medium.onnx` + `.json`
+- `fr_FR-upmc-medium.onnx` + `.json`
+- `it_IT-riccardo-x_low.onnx` + `.json`
+- `es_ES-carlfm-x_low.onnx` + `.json`
 
 ## V8.8 Security Smoke Tests
 ```bash

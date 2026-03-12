@@ -1,4 +1,4 @@
-# Admin Handbuch - V8.9.0
+# Admin Handbuch - V8.10.2
 
 ## Ziel dieses Handbuchs
 Dieses Dokument erklaert alle admin-relevanten Funktionen in V8: wofuer sie gut sind, welche Parameter gesetzt werden koennen, wie du die Installation startest und wie du die Betriebsfaehigkeit Schritt fuer Schritt testest.
@@ -138,6 +138,38 @@ docker compose --project-directory "$PWD" -f v8/docker/compose.dev.yml up -d --b
 curl -s http://localhost:8082/api/health
 ```
 - Release-Verweis: V8.9.0.
+
+### Funktion: Agent -> Kunde Translation (neu)
+- Wofuer gut: Agent schreibt in eigener Sprache, Kunde bekommt Nachricht in Ziel-/Kundensprache.
+- Endpoint: `POST /api/agent/message`
+- Parameter:
+  - `session_id` (Pflicht)
+  - `agent_id` (Pflicht)
+  - `text` (Pflicht, Agent-Originaltext)
+  - `tts_lang` (optional, Zielsprache fuer Kunden-Ausgabe)
+  - `speak` (optional, Text per TTS ausgeben)
+- Response:
+  - `source_lang`
+  - `answer_original`
+  - `answer_translated`
+  - `translation_ms`
+- Test:
+```bash
+# 1) Session erzeugen
+curl -s -X POST http://localhost:8082/api/chat/text \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":"admin-test-agent-translate","text":"Hallo, ich spreche Deutsch.","tts_lang":"de"}'
+
+# 2) Agent schreibt EN, Kunde bekommt DE
+curl -s -X POST http://localhost:8082/api/agent/message \
+  -H 'Content-Type: application/json' \
+  -d '{"session_id":"<SID>","agent_id":"agent-01","text":"Hello, I can help you now.","tts_lang":"de","speak":true}'
+```
+- Erwartung:
+  - `answer_original` ist Englisch
+  - `answer_translated` ist Deutsch
+  - `translation_ms` > 0 bei echter Uebersetzung
+- Release-Verweis: V8.10.2.
 
 ## 5) Alle admin-einstellbaren Parameter (Compose/API)
 - Plattform/Betrieb:

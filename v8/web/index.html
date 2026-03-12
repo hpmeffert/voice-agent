@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Voice Agent V8.9.0</title>
+  <title>Voice Agent V8.10.2</title>
   <style>
     :root {
       --bg:#f4f7fb;
@@ -296,7 +296,7 @@
   <div class="wrap">
     <div class="row" style="justify-content:space-between; margin-bottom:8px;">
       <div>
-        <h1>Voice Agent V8.9.0</h1>
+        <h1>Voice Agent V8.10.2</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
       </div>
       <div class="topRight">
@@ -323,7 +323,7 @@
           <button id="menuDemoGuide" class="menuItem" data-help-doc="/docs/ui/DEMO_GUIDE.md" data-help-title="Demo Guide" data-i18n="menu.demo_guide">Demo Guide</button>
           <button id="adminGuideItem" class="menuItem" data-help-doc="/docs/admin/HELP_ADMIN.md" data-help-title="Admin Docs" data-i18n="menu.admin_docs">Admin Docs</button>
           <button id="adminSettingsMenuItem" class="menuItem" data-i18n="menu.admin_settings">Admin Settings</button>
-          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V8.9.0" data-i18n="menu.release_notes">Release Notes</button>
+          <button id="menuReleaseNotes" class="menuItem" data-help-doc="/docs/RELEASE.md" data-help-title="Release Notes V8.10.2" data-i18n="menu.release_notes">Release Notes</button>
         </div>
       </div>
     </div>
@@ -387,7 +387,7 @@
               <input id="maxRecordSec" type="number" min="5" max="120" step="1" value="45" />
             </label>
 
-            <label class="muted">TTS language
+            <label class="muted">TTS output language
               <select id="ttsLang">
                 <option value="auto" selected>Auto (detected)</option>
                 <option value="de">de</option>
@@ -492,8 +492,12 @@
           <div class="muted" style="margin-bottom:6px;">Transcript</div>
           <div id="transcriptText" class="textBlock">-</div>
 
-          <div class="muted" style="margin:10px 0 6px 0;">Answer</div>
-          <div id="answerText" class="textBlock">-</div>
+          <div class="muted" style="margin:10px 0 6px 0;">Answer (original)</div>
+          <div id="answerOriginalText" class="textBlock">-</div>
+          <div id="answerTranslatedWrap" style="display:none;">
+            <div class="muted" style="margin:10px 0 6px 0;">Answer (translated)</div>
+            <div id="answerTranslatedText" class="textBlock">-</div>
+          </div>
 
           <div class="metaGrid">
             <div class="metaCell"><div class="metaLabel">Session</div><div id="metaSession" class="metaValue">-</div></div>
@@ -505,10 +509,11 @@
 
           <div id="latencyBox" class="latencyBox">
             <div class="muted">Latency breakdown (ms)</div>
-            <div class="latencyRow">
+            <div class="latencyRow" style="grid-template-columns: repeat(6, minmax(0, 1fr));">
               <div class="latencyCell"><div class="latencyLabel">Audio Read</div><div id="latAudioRead" class="latencyValue">-</div></div>
               <div class="latencyCell"><div class="latencyLabel">STT</div><div id="latStt" class="latencyValue">-</div></div>
               <div class="latencyCell"><div class="latencyLabel">LLM</div><div id="latLlm" class="latencyValue">-</div></div>
+              <div class="latencyCell"><div class="latencyLabel">Translation</div><div id="latTranslation" class="latencyValue">-</div></div>
               <div class="latencyCell"><div class="latencyLabel">TTS</div><div id="latTts" class="latencyValue">-</div></div>
               <div class="latencyCell"><div class="latencyLabel">Total</div><div id="latTotal" class="latencyValue">-</div></div>
             </div>
@@ -597,7 +602,9 @@ const statusEl = el("status");
 const badgeEl = el("statusBadge");
 const errorBox = el("errorBox");
 const transcriptTextEl = el("transcriptText");
-const answerTextEl = el("answerText");
+const answerOriginalTextEl = el("answerOriginalText");
+const answerTranslatedWrapEl = el("answerTranslatedWrap");
+const answerTranslatedTextEl = el("answerTranslatedText");
 const debugJsonEl = el("debugJson");
 const metaSessionEl = el("metaSession");
 const metaUserEl = el("metaUser");
@@ -607,6 +614,7 @@ const metaModelEl = el("metaModel");
 const latAudioReadEl = el("latAudioRead");
 const latSttEl = el("latStt");
 const latLlmEl = el("latLlm");
+const latTranslationEl = el("latTranslation");
 const latTtsEl = el("latTts");
 const latTotalEl = el("latTotal");
 const previewAudio = el("audioPreview");
@@ -703,7 +711,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v8.9.0";
+let uiVersionText = "v8.10.2";
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
 let appState = "idle";
@@ -787,19 +795,22 @@ function setAppState(nextState) {
   setBadge("", "Idle");
   setStatus("Listening");
 }
-function setLatency(audioRead, stt, llm, tts, total) {
+function setLatency(audioRead, stt, llm, translation, tts, total) {
   latAudioReadEl.textContent = Number.isFinite(audioRead) ? String(Math.max(0, Math.round(audioRead))) : "-";
   latSttEl.textContent = Number.isFinite(stt) ? String(Math.max(0, Math.round(stt))) : "-";
   latLlmEl.textContent = Number.isFinite(llm) ? String(Math.max(0, Math.round(llm))) : "-";
+  latTranslationEl.textContent = Number.isFinite(translation) ? String(Math.max(0, Math.round(translation))) : "-";
   latTtsEl.textContent = Number.isFinite(tts) ? String(Math.max(0, Math.round(tts))) : "-";
   latTotalEl.textContent = Number.isFinite(total) ? String(Math.max(0, Math.round(total))) : "-";
 }
 function clearLatency() {
-  setLatency(NaN, NaN, NaN, NaN, NaN);
+  setLatency(NaN, NaN, NaN, NaN, NaN, NaN);
 }
 function resetOutputView() {
   transcriptTextEl.textContent = "-";
-  answerTextEl.textContent = "-";
+  answerOriginalTextEl.textContent = "-";
+  answerTranslatedTextEl.textContent = "-";
+  answerTranslatedWrapEl.style.display = "none";
   debugJsonEl.textContent = "-";
   metaSessionEl.textContent = "-";
   metaUserEl.textContent = "-";
@@ -810,7 +821,15 @@ function resetOutputView() {
 }
 function renderVoiceResult(data) {
   transcriptTextEl.textContent = data?.transcript || "";
-  answerTextEl.textContent = data?.answer || "";
+  answerOriginalTextEl.textContent = data?.answer || "";
+  const translated = (data?.answer_translated || "").trim();
+  if (translated) {
+    answerTranslatedTextEl.textContent = translated;
+    answerTranslatedWrapEl.style.display = "block";
+  } else {
+    answerTranslatedTextEl.textContent = "-";
+    answerTranslatedWrapEl.style.display = "none";
+  }
   metaSessionEl.textContent = data?.session_id || sessionId || "-";
   metaUserEl.textContent = data?.user_id || userId || "-";
   metaLangEl.textContent = data?.lang || "-";
@@ -821,6 +840,7 @@ function renderVoiceResult(data) {
     data?.audio_read_ms ?? m.audio_read_ms,
     data?.stt_ms ?? m.stt_ms,
     data?.llm_ms ?? m.llm_ms,
+    data?.translation_ms ?? m.translation_ms,
     data?.tts_ms ?? m.tts_ms,
     data?.total_ms ?? m.total_ms,
   );
@@ -956,7 +976,7 @@ for (const item of document.querySelectorAll("[data-help-doc], [data-help-endpoi
   item.addEventListener("click", async () => {
     const docPath = item.getAttribute("data-help-doc");
     const endpoint = item.getAttribute("data-help-endpoint");
-    const source = endpoint || docPath;
+    const source = endpoint || resolveHelpDocPath(docPath);
     const title = item.getAttribute("data-help-title") || "Benutzer Handbuch";
     menuPanel.classList.remove("show");
     openHelpModal(title);
@@ -1190,6 +1210,19 @@ async function loadHelpDoc(path) {
   return text;
 }
 
+function resolveHelpDocPath(path) {
+  const inPath = (path || "").trim();
+  if (!inPath) return inPath;
+  const useDe = currentUiLang === "de";
+  const map = {
+    "/docs/ui/HELP_USER.md": useDe ? "/docs/ui/HELP_USER_DE.md" : "/docs/ui/HELP_USER_EN.md",
+    "/docs/ui/DEMO_GUIDE.md": useDe ? "/docs/ui/DEMO_GUIDE_DE.md" : "/docs/ui/DEMO_GUIDE_EN.md",
+    "/docs/admin/HELP_ADMIN.md": useDe ? "/docs/admin/HELP_ADMIN_DE.md" : "/docs/admin/HELP_ADMIN_EN.md",
+    "/docs/RELEASE.md": useDe ? "/docs/RELEASE_DE.md" : "/docs/RELEASE_EN.md",
+  };
+  return map[inPath] || inPath;
+}
+
 function openHelpModal(title) {
   helpModalTitle.textContent = "Benutzer Handbuch";
   helpDocTitle.textContent = title || "Benutzer Handbuch";
@@ -1302,7 +1335,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v8.9.0";
+    const ver = cfg?.ui?.version || "v8.10.2";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
     applyAdminSettingsForm(cfg?.admin_settings || {});
@@ -1311,7 +1344,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v8.9.0";
+    uiVersionText = "v8.10.2";
     applyAdminSettingsForm({});
   }
   await loadWhoAmI();
@@ -1980,9 +2013,7 @@ async function sendRecording() {
       fd.append("user_id", userId);
       fd.append("backend", backendSel.value);
       fd.append("model", modelSel.value);
-      if (ttsLangSel.value && ttsLangSel.value !== "auto") {
-        fd.append("tts_lang", ttsLangSel.value);
-      }
+      fd.append("tts_lang", ttsLangSel.value || "auto");
       return fd;
     }
 
@@ -2034,8 +2065,8 @@ async function sendRecording() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: data.answer,
-          lang: ttsLangSel.value !== "auto" ? ttsLangSel.value : (data.tts_lang_selected || data.lang),
+          text: data.answer_translated || data.answer,
+          lang: data.answer_tts_lang || data.tts_lang_selected || data.lang,
         }),
       });
       if (!tts.ok) throw new Error(`Piper /tts failed: ${tts.status} ${await tts.text()}`);

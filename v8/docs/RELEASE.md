@@ -1,4 +1,4 @@
-# Release Notes (V7.0.0 -> V8.9.0)
+# Release Notes (V7.0.0 -> V8.10.2)
 
 ## V7-Linie
 - V7.0.0 bis V7.10.0: stabile Basis mit Help-Menue, Listen-Mode, i18n, Metriken, Admin-Gate.
@@ -14,6 +14,7 @@
 - V8.7.0: Valkey Channel-Spec + Handoff Workflow (`handoff.request`, `handoff.accept`) mit persistiertem Session-Status.
 - V8.8.0: Security-Baseline mit Request-Limits, per-IP Rate-Limit und Security-Headern in allen V8-Web-UIs.
 - V8.9.0: Stable Packaging + Migration Notes (V7 -> V8), konsolidierter Quickstart und V8 Release-Template.
+- V8.10.2: TTS Output Translation (Original + Uebersetzung), FR/IT/ES Voices und bilinguale DE/EN Help-Dokumente.
 
 ## V8.8.0 im Detail (Nutzen + Parameter)
 - Schutz bei grossen Requests:
@@ -41,6 +42,18 @@
   - Nutzen: einheitliche, vollstaendige V8-Release-Kommunikation.
   - Dokument: `v8/docs/RELEASE_NOTES_TEMPLATE_V8.md`.
 
+## V8.10.2 im Detail (Nutzen + Parameter)
+- TTS Output Translation:
+  - Nutzen: Antwort kann in abweichender Zielsprache gesprochen werden.
+  - Request-Parameter: `tts_lang` (z. B. `auto`, `de`, `en`, `fr`, `it`, `es`).
+  - Response-Felder: `answer`, `answer_translated`, `answer_tts_lang`, `translation_ms`.
+- Persistenz/Monitoring:
+  - Nutzen: Nachvollziehbarkeit fuer QA/CRM/Admin.
+  - Message/Telemetry-Felder: `answer_original`, `answer_translated`, `answer_tts_lang`, `metrics.translation_ms`.
+- Bilinguale Help-Dokumente:
+  - Nutzen: DE/EN Anzeige passend zur UI-Sprache, EN-Fallback fuer FR/IT/ES.
+  - Dateien: `HELP_USER_DE/EN`, `DEMO_GUIDE_DE/EN`, `HELP_ADMIN_DE/EN`, `RELEASE_DE/EN`.
+
 ## Doku
 - Help: `v8/docs/ui/HELP_USER.md`
 - Demo Guide: `v8/docs/ui/DEMO_GUIDE.md`
@@ -50,3 +63,5 @@
 - Quickstart: `v8/docs/TEAM_QUICKSTART_V8_MAC.md`
 - Migration V7 -> V8: `v8/docs/MIGRATION_V7_TO_V8.md`
 - Release-Template V8: `v8/docs/RELEASE_NOTES_TEMPLATE_V8.md`
+- Release Notes DE: `v8/docs/RELEASE_DE.md`
+- Release Notes EN: `v8/docs/RELEASE_EN.md`
