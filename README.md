@@ -11,9 +11,9 @@ Voice STT -> LLM -> TTS platform with isolated version trees.
 
 ## Release strategy
 - `v9.1.15` is the stable frozen release tag.
-- `release/v9.1.15-stable` is the maintenance branch for release-safe hotfixes only.
-- `develop/v9.1.x` is the development branch for `v9.1.16` to `v9.1.19`.
-- New feature/fix work should branch from `develop/v9.1.x`.
+- `release/v9.1` is the maintenance branch for release-safe hotfixes only.
+- `develop/v9.1` is the development branch for `v9.1.16` to `v9.1.19`.
+- New feature/fix work should branch from `develop/v9.1`.
 - Branching details: `docs/BRANCHING_POLICY.md`
 
 ## Older isolated version trees

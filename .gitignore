@@ -1,40 +1,52 @@
-# local env
-.env
-*.env
-
-# python venv
-.venv/
-venv/
-env/
-
-# caches
-__pycache__/
-*.pyc
-
-# macOS
+# OS / IDE
 .DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# voices / models should never be committed
-voices/
-*.onnx
-*.onnx.json
+# Env / local secrets
+.env
+.env.*
+!.env.example
+!.env.sample
 
-# audio outputs
-*.wav
-/tmp/
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+htmlcov/
 
-# test artifacts / evidence packs
+# Node / web
+node_modules/
+dist/
+build/
+
+# Docker / compose temp
+.docker/
+
+# Artifacts / logs / exports
 artifacts/
 output/
+tmp/
 test_artifacts/
-*.zip
-*.log
-docker-logs*.txt
-ws_*events*.jsonl
-SUMMARY*.md
-test-log-*.txt
-session_dump*.json
-ENV_SNAPSHOT*.txt
 v9/artifacts/**
-v9/.artifacts_work/**
+v8/artifacts/**
+v7/artifacts/**
+v9/.artifacts_work/
+*.log
+*.zip
+ENV_SNAPSHOT*.txt
+SUMMARY*.md
+session_dump*.json
+ws_*events*.jsonl
 artifacts.zip
+
+# Misc
+.venv/
+venv/
