@@ -118,10 +118,10 @@
   <div class="wrap">
     <div class="headerBar">
       <div class="headerLeft">
-        <span id="agentHeaderTitle" class="pill">Voice Agent Agent Client v9.1.16</span>
+        <span id="agentHeaderTitle" class="pill">Voice Agent Agent Client v9.1.17</span>
         <span id="wsState" class="pill off">WS: offline</span>
         <span id="wsRtt" class="pill">WS RTT: -</span>
-        <span id="versionBadge" class="pill">Version: v9.1.16</span>
+        <span id="versionBadge" class="pill">Version: v9.1.17</span>
       </div>
       <div class="headerCenter">
         <input id="searchInput" placeholder="Search q (supports wildcard *)" />
@@ -240,7 +240,7 @@
 
   <div id="helpModal" class="helpModal">
     <div class="helpCard">
-      <div class="helpHd"><b>Benutzer Handbuch</b><span id="helpVersion" class="muted">Version: v9.1.16</span><button id="helpCloseBtn">Schliessen</button></div>
+      <div class="helpHd"><b>Benutzer Handbuch</b><span id="helpVersion" class="muted">Version: v9.1.17</span><button id="helpCloseBtn">Schliessen</button></div>
       <div id="helpBody" class="helpBd">Lade Benutzer Handbuch...</div>
     </div>
   </div>
@@ -374,7 +374,7 @@ function stopWsPingLoop() {
 }
 
 function setVersion(v) {
-  const val = v || 'v9.1.16';
+  const val = v || 'v9.1.17';
   agentHeaderTitleEl.textContent = `Voice Agent Agent Client ${val}`;
   versionBadge.textContent = `Version: ${val}`;
   helpVersion.textContent = `Version: ${val}`;
@@ -969,8 +969,8 @@ async function bootstrap() {
   await loadAgentPrefs();
   try {
     const cfg = await fetch('/api/config', {cache:'no-store'}).then(r => r.json());
-    setVersion((cfg?.ui?.version) || 'v9.1.16');
-  } catch (_) { setVersion('v9.1.16'); }
+    setVersion((cfg?.ui?.version) || 'v9.1.17');
+  } catch (_) { setVersion('v9.1.17'); }
   await loadPerfSummary();
   schedulePerfPolling();
   startAutoRefresh();

@@ -1,4 +1,4 @@
-# Benutzer Handbuch (DE, Agent View) - V9.1.16
+# Benutzer Handbuch (DE, Agent View) - V9.1.17
 
 ## Was macht der Voice Agent?
 Der Voice Agent verbindet Sprache und Text in einem durchgehenden Ablauf:
@@ -208,6 +208,30 @@ Wenn Kundensprache erkannt wurde, wird genau diese als Antwortsprache und Voice-
 - Fuer den Agenten gilt jetzt noch strenger:
   - Bei Kundennachrichten mit anderer Sprache muessen `Original` und `Uebersetzung` sichtbar sein.
   - Wenn `Empfang auf Agent sprechen` AN ist, wird nur die Agent-Sprache gesprochen.
+
+## Neu in V9.1.17: Schnelleres Default-Modell + stabilere Regressionstests
+- Das Standardmodell bleibt jetzt klar auf `qwen2.5:3b`.
+- Vorteil:
+  - kuerzere Antwortzeiten im Demo-Betrieb
+  - weniger Wartezeit bei Search-, Chat- und Voice-Tests
+- Wenn ein Benutzer schon bewusst ein anderes Modell gespeichert hat, bleibt diese Auswahl erhalten.
+- Nur bei leerer oder neuer Auswahl wird automatisch `qwen2.5:3b` gesetzt.
+
+### Was bedeutet das fuer den Agenten?
+1. Sie starten den Agent-Client neu.
+2. Wenn noch keine eigene Modellwahl gespeichert ist, arbeitet das System mit `qwen2.5:3b`.
+3. Admin kann spaeter weiter auf ein anderes Modell umstellen.
+
+### Regressionstest fuer V9.1.17
+- Technischer Gesamtstart:
+  - `bash scripts/run_v9_1_17_full_regression.sh`
+- Enthalten:
+  - Artifact-Guard
+  - Doc-Check
+  - Syntax-Check
+  - Search-Test
+  - WS-Regression
+  - UI-Smoke
 
 ### 2-Minuten-Proof
 1. Agent auf `en` stellen.

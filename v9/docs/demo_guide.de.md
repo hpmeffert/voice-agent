@@ -1,4 +1,4 @@
-# Demo Guide (DE) - V9.1.16
+# Demo Guide (DE) - V9.1.17
 
 ## Ziel der Demo
 Diese Demo zeigt, wie ein internationales Team Kunden in deren Sprache bedienen kann, ohne dass Agenten ihre Muttersprache verlassen muessen.
@@ -118,6 +118,21 @@ Stellen Sie sich vor: Sie wollen bewusst eine andere Kundensprache ausliefern (z
 - Admin aktiviert kurz `Perf logging enabled` fuer ein Demo-Fenster.
 - Fuehren Sie eine kurze Konversation durch.
 - Oeffnen Sie die Admin-Suche:
+
+## V9.1.17 Demo Fokus
+- Zeigen Sie bewusst den Unterschied zwischen Default und Override:
+  1. Browser mit leerem Local Storage starten.
+  2. `/api/models` oder das Modellfeld pruefen.
+  3. Erwartung: Default = `qwen2.5:3b`.
+- Fuehren Sie danach einen kompletten Testlauf aus:
+  - `bash scripts/run_v9_1_17_full_regression.sh`
+- Zeigen Sie dem Publikum die `SUMMARY.md`:
+  - Search = PASS
+  - WS regression = PASS
+  - UI smoke = PASS
+- Erklaeren Sie dazu:
+  - das System ist nicht nur funktional,
+  - sondern auch testbar und reproduzierbar.
   - erst Teil-Session-ID (`*`)
   - dann Textfragment.
 - Oeffnen Sie den Treffer mit `Open Session` und zeigen Sie den direkten Sprung.

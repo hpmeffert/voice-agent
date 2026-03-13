@@ -425,13 +425,13 @@
   <div class="wrap">
     <div class="row adminTopRow" style="justify-content:space-between;">
       <div>
-        <h1 id="appTitle">Voice Agent Admin Client v9.1.16</h1>
+        <h1 id="appTitle">Voice Agent Admin Client v9.1.17</h1>
         <p class="sub">Help menu docs, demo guide flow, and token-gated admin docs.</p>
         <div class="row" style="margin-top:6px;">
           <span id="adminApiStatus" class="pill">API: checking...</span>
           <span id="adminWsState" class="pill">WS: disconnected</span>
           <span id="adminWsRtt" class="pill">WS RTT: -</span>
-          <span id="menuVersionHeader" class="pill">Version: v9.1.16</span>
+          <span id="menuVersionHeader" class="pill">Version: v9.1.17</span>
         </div>
       </div>
       <div class="topRight">
@@ -999,7 +999,7 @@ let crmProtocolEnabled = true;
 let crmProtocolFormat = "md";
 let uiBusy = false;
 let uiAdmin = false;
-let uiVersionText = "v9.1.16";
+let uiVersionText = "v9.1.17";
 let adminDrawerInitialized = false;
 let adminToken = localStorage.getItem(ADMIN_TOKEN_KEY) || "";
 const helpDocCache = {};
@@ -2078,7 +2078,7 @@ async function loadConfig() {
     if (["md", "txt", "json"].includes(crmProtocolFormat)) {
       protocolFormatSel.value = crmProtocolFormat;
     }
-    const ver = cfg?.ui?.version || "v9.1.16";
+    const ver = cfg?.ui?.version || "v9.1.17";
     const build = cfg?.ui?.build ? ` (${cfg.ui.build})` : "";
     uiVersionText = `${ver}${build}`;
     applyAdminSettingsForm(cfg?.admin_settings || {});
@@ -2087,7 +2087,7 @@ async function loadConfig() {
     crmExportFormat = "md";
     crmProtocolEnabled = false;
     crmProtocolFormat = "md";
-    uiVersionText = "v9.1.16";
+    uiVersionText = "v9.1.17";
     applyAdminSettingsForm({});
   }
   await loadWhoAmI();

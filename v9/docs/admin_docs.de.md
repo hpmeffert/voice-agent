@@ -1,4 +1,4 @@
-# Admin Docs (DE) - V9.1.16
+# Admin Docs (DE) - V9.1.17
 
 ## Ziel
 Diese Admin-Doku zeigt Ihnen Schritt fuer Schritt:
@@ -434,7 +434,7 @@ bash scripts/run_v9_1_9_ui_smoke.sh
   - Live-WebSocket
   - Reload / Session-History
 
-## Neu in V9.1.16: Suchmodi, Wildcards und Test-Nachweis
+## Neu in V9.1.17: Suchmodi, Wildcards und Test-Nachweis
 ### Suchmodi im Admin-Client
 - `auto`: erkennt id-aehnliche Suchbegriffe und faellt sonst auf Textsuche zurueck.
 - `session_id`: sucht exakt oder mit Wildcards in Session-IDs.
@@ -452,8 +452,8 @@ bash scripts/run_v9_1_9_ui_smoke.sh
 - Wenn Suche unerwartet leer bleibt:
   1. `curl -s http://localhost:8085/api/health` pruefen
   2. `python3 v9/scripts/check_docs.py` pruefen
-  3. `bash v9/scripts/run_v9_1_16_search_tests.sh` ausfuehren
-  4. `v9/artifacts/runs/v9.1.16-search-.../SUMMARY.md` lesen
+  3. `bash v9/scripts/run_v9_1_17_search_tests.sh` ausfuehren
+  4. `v9/artifacts/runs/v9.1.17-search-.../SUMMARY.md` lesen
 
 ### 2-Minuten-Proof fuer Suche
 1. Admin-Client oeffnen.
@@ -462,7 +462,7 @@ bash scripts/run_v9_1_9_ui_smoke.sh
 4. `Open Session` klicken.
 5. Verlauf mit `Original + Uebersetzung` pruefen.
 
-## Patch V9.1.16: Voice/Chat-Paritaet in der UI
+## Patch V9.1.17: Voice/Chat-Paritaet in der UI
 - Customer-Client:
   - zeigt nach Voice wieder den eigenen Transcript-Eintrag
   - zeigt die Antwort im selben Chatverlauf
@@ -480,3 +480,50 @@ bash scripts/run_v9_1_9_ui_smoke.sh
    - Kundentext: `Original (de) + Uebersetzung (en)`
    - generierte Antwort: `Original + Uebersetzung (en)`
 5. Verlauf neu laden und nochmals pruefen.
+
+## Regression-Suite fuer V9.1.17
+Nutze fuer einen kompletten technischen Lauf diese Reihenfolge:
+1. `bash scripts/check_no_artifacts_tracked.sh`
+2. `python3 v9/scripts/check_docs.py`
+3. `PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v9/docker/api/app.py`
+4. `bash v9/scripts/run_v9_1_17_search_tests.sh`
+5. `API_BASE_OVERRIDE=http://localhost:8003 PROBE_DURATION_SEC=35 bash scripts/run_v9_ws_duallane_tests.sh`
+6. `bash scripts/run_v9_1_17_ui_smoke.sh`
+
+Oder als ein Gesamtkommando:
+- `bash scripts/run_v9_1_17_full_regression.sh`
+
+### Was die WS-Regressionssuite absichert
+- eindeutige `RUN_ID` pro Lauf
+- eindeutige `session_id` und `user_id` pro Szenario
+- Korrelation ueber Marker im Text statt nur ueber Rollen
+- `WARN`, wenn Live-Latenz ueber `2000 ms` liegt
+- `WARN`, wenn ein Event spaeter als `8 s` kommt, aber noch innerhalb des Probe-Fensters ankommt
+- `FAIL`, wenn das erwartete Event ganz fehlt
+
+### Wo liegen die Ergebnisse
+- `v9/artifacts/runs/v9.1.17-ws-hardening-<timestamp>/`
+- `v9/artifacts/runs/v9.1.17-full-regression-<timestamp>/`
+
+Wichtig:
+- Diese Artefakte bleiben lokal.
+- Sie werden nicht in Git committed.
+
+## Neu in V9.1.17: Default-Modell und Gesamt-Regression
+- Default fuer Ollama bleibt `qwen2.5:3b`.
+- Das ist fuer Demos bewusst auf Geschwindigkeit optimiert.
+- Wenn bereits ein anderes Modell gespeichert wurde, bleibt diese Benutzerauswahl erhalten.
+
+### Gesamt-Regression fuer V9.1.17
+1. `bash scripts/check_no_artifacts_tracked.sh`
+2. `python3 v9/scripts/check_docs.py`
+3. `PYTHONPYCACHEPREFIX=/tmp/pycache python3 -m py_compile v9/docker/api/app.py`
+4. `bash v9/scripts/run_v9_1_17_search_tests.sh`
+5. `API_BASE_OVERRIDE=http://localhost:8003 PROBE_DURATION_SEC=35 bash scripts/run_v9_ws_duallane_tests.sh`
+6. `bash scripts/run_v9_1_17_ui_smoke.sh`
+7. Oder direkt: `bash scripts/run_v9_1_17_full_regression.sh`
+
+### Ergebnisordner
+- `v9/artifacts/runs/v9.1.17-search-<timestamp>/`
+- `v9/artifacts/runs/v9.1.17-ws-hardening-<timestamp>/`
+- `v9/artifacts/runs/v9.1.17-full-regression-<timestamp>/`

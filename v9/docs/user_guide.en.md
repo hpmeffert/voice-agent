@@ -1,4 +1,4 @@
-# User Guide (EN, Agent View) - V9.1.16
+# User Guide (EN, Agent View) - V9.1.17
 
 ## What does Voice Agent do?
 Voice Agent keeps customer and agent conversations in sync across languages:
@@ -208,6 +208,30 @@ If customer language is detected, the response language and customer voice profi
 - The agent view is now stricter about customer messages:
   - If languages differ, `Original` and `Translation` must both be visible.
   - If incoming speak is ON, only the agent-language lane is spoken.
+
+## New in V9.1.17: Faster default model + more stable regression runs
+- The default model remains clearly pinned to `qwen2.5:3b`.
+- Benefit:
+  - shorter response times in demo setups
+  - less waiting during search, chat, and voice test runs
+- If a user already saved another model on purpose, that choice stays unchanged.
+- Only empty or fresh selections fall back to `qwen2.5:3b`.
+
+### What this means for the agent
+1. Restart the Agent client.
+2. If no personal model selection is stored yet, the system uses `qwen2.5:3b`.
+3. Admin can still switch the runtime model later if needed.
+
+### Regression suite for V9.1.17
+- Full technical run:
+  - `bash scripts/run_v9_1_17_full_regression.sh`
+- Included:
+  - artifact guard
+  - docs check
+  - syntax check
+  - search test
+  - WS regression
+  - UI smoke
 
 ### 2-minute proof
 1. Set Agent language to `en`.

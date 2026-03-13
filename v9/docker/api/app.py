@@ -33,7 +33,7 @@ from starlette.background import BackgroundTask
 from event_bus import EventBus, EventBusError
 from protocol_renderer import render_protocol
 
-APP_VERSION = "v9.1.16"
+APP_VERSION = "v9.1.17"
 
 app = FastAPI(
     title=f"Voice Agent API {APP_VERSION}",
