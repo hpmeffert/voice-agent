@@ -1,0 +1,99 @@
+# CODEX_TASK_7.8.0.md
+**Version:** 7.8.0  
+**Date:** 2026-03-07 (Europe/Berlin)  
+**Branch name:** `feature/v7-8-0-admin-telemetry-logging-with-ttl-separate-from-conversation-db`  
+**Base branch:** `origin/release/v6.10.0` (golden)  
+**Scope:** V7 is a **major** release isolated under `v7/`.
+
+## Licensing & Commercialization Guardrails (MUST FOLLOW)
+- Prefer **permissive OSS** (MIT / Apache-2.0 / BSD) for all core components.
+- **Avoid GPL/AGPL** dependencies in the **core** runtime. If an essential component is GPL/AGPL (e.g., Piper),
+  it MUST be isolated as an **external sidecar service** (separate container/process) with a clean API boundary.
+- Do **not** copy GPL/AGPL code into this repo’s core services.
+- If any dependency has unclear/changed licensing, **flag it explicitly** in the PR and propose an alternative.
+- All newly created templates/docs/code in this task should be **MIT-licensed** (project default).
+
+
+---
+
+## Goal
+Log performance metrics to a dedicated Mongo collection with TTL retention and expose admin endpoints + UI to inspect recent logs and summaries.
+
+---
+
+## V7 Isolation Rules
+- All new code lives under **`v7/`** (no edits to `v6/` files unless explicitly requested by this task).
+- Compose uses **unique ports** (see below) to avoid “port already allocated” and orphan issues.
+- Use `docker compose --project-directory <repo-root> -f v7/docker/compose.dev.yml ...` in docs to avoid path confusion.
+
+## Standard Ports for V7 Dev (avoid conflicts with V6/V5)
+Use these defaults in `v7/docker/compose.dev.yml` to prevent port clashes:
+
+- Web (nginx): **8081** → container 8080
+- API (FastAPI): **8001** → container 8000
+- Piper sidecar: **5003** → container 5002
+- MongoDB: **27018** → container 27017
+
+
+---
+
+## Deliverables
+- **Performance/Telemetry logging** (admin-managed, separate from conversation store):
+  - Mongo collection: `metrics_logs`
+  - Fields: timestamp, user_id, session_id, audio_read_ms, stt_ms, llm_ms, tts_ms, total_ms, transcript_len, answer_len, backend, model
+  - TTL retention configurable: `METRICS_RETENTION_DAYS`
+- Admin endpoint to query recent metrics and a UI panel (admin-visible for demo).
+
+
+---
+
+## Implementation Tasks
+1. **DB: metrics_logs collection**
+   - Create TTL index on `expires_at`.
+   - Insert one log entry per `/voice` request.
+2. **API endpoints**
+   - `GET /admin/metrics/recent?limit=200`
+   - `GET /admin/metrics/summary?window=24h|7d`
+3. **UI (admin)**
+   - Add “Metrics” menu item showing last N logs and simple aggregates.
+4. **Docs (admin)**
+   - Add testing steps + how to verify TTL.
+
+
+---
+
+## Test Plan
+- Make 3 voice calls → confirm 3 `metrics_logs` entries exist.
+- Confirm TTL index present in Mongo.
+- Admin UI shows recent metrics and summary.
+
+
+---
+
+## Definition of Done
+- `docker compose -f v7/docker/compose.dev.yml up -d --build` succeeds on macOS.
+- Web UI loads at `http://localhost:8081` and can record/stop/send.
+- Session + user persistence works (MongoDB), demo user is admin by default.
+- No changes to V6 runtime paths; V7 is isolated under `v7/`.
+- Release notes drafted under `v7/docs/RELEASE_NOTES_v7.x.y.md` using the shared template.
+
+
+---
+
+## Release Notes Template
+## Release Notes (copy into GitHub Release)
+### Highlights
+- …
+### Breaking changes
+- … (if any)
+### Added
+- …
+### Changed
+- …
+### Fixed
+- …
+### Ops / Deployment notes
+- …
+
+
+
