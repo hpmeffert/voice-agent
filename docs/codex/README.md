@@ -8,6 +8,8 @@ This folder keeps Codex workorders, templates, and project-level runbooks inside
   - stored project workorders and historical Codex task files
 - `docs/codex/templates/`
   - reusable templates for workorders, DoD, and the standard test runbook
+- `docs/codex/runbooks/`
+  - preserved test runbooks, automation runbooks, and standard verification notes
 
 ## How to use
 1. Start new implementation work from `develop/v9.1`.
@@ -25,3 +27,7 @@ This folder keeps Codex workorders, templates, and project-level runbooks inside
 - Artifacts stay under `v9/artifacts/runs/<run-id>/`.
 - Artifacts are runtime-only and must never be committed.
 - Always run `bash scripts/check_no_artifacts_tracked.sh` before commit.
+
+## Local legacy folder
+- Source folder `docs/Codex-voice-agent-Workorder-Files/` may still exist locally if it contains zip archives or malformed non-markdown files.
+- Those files are intentionally left untracked and are not part of the committed repo structure.
